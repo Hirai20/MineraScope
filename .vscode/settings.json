@@ -1,0 +1,36 @@
+{
+  "dotnet.defaultSolution": "MineraScope.sln",
+  "omnisharp.enableEditorConfigSupport": true,
+  "omnisharp.enableRoslynAnalyzers": true,
+  "files.exclude": {
+    "**/.dotnet-cli": true,
+    "**/.vs": true,
+    "**/bin": true,
+    "**/obj": true
+  },
+  "search.exclude": {
+    "**/.dotnet-cli": true,
+    "**/.vs": true,
+    "**/bin": true,
+    "**/obj": true
+  },
+  "files.watcherExclude": {
+    "**/.dotnet-cli/**": true,
+    "**/.vs/**": true,
+    "**/bin/**": true,
+    "**/obj/**": true
+  },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "*.csproj": "*.csproj.user"
+  },
+  "[csharp]": {
+    "editor.defaultFormatter": "ms-dotnettools.csharp",
+    "editor.formatOnSave": true
+  },
+  "[xml]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  }
+}
+

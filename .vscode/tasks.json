@@ -1,0 +1,83 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dotnet: restore solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "restore",
+        "MineraScope.sln"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "dotnet: build solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "MineraScope.sln"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: clean solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "clean",
+        "MineraScope.sln"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: run MineraScope",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "MineraScope\\MineraScope.csproj"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}
+
