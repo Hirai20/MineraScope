@@ -14,3 +14,6 @@ Thumbs.db
 
 .dotnet-cli/.nuget/
 .dotnet-cli/.dotnet/
+
+# 260416Codex: Codex local instructions file should stay untracked.
+agents.md
