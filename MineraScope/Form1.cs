@@ -190,11 +190,55 @@ namespace MineraScope
         }
 
         private static string ToLowerInvariant(string value) => value.ToLowerInvariant();
+        // 260416Codex: 単一組成時の複製と通常分割を1か所に集約
+        private static T[][] CreateSimulationChunks<T>(T[] source, int parallelCount) =>
+            source.Length == 1
+                ? Enumerable.Range(0, parallelCount).Select(_ => new[] { source[0] }).ToArray()
+                : SplitIntoChunks(source, parallelCount);
+
+        // 260416Codex: チャンクからスクリプト生成に必要な配列をまとめて取り出す
+        private static ((string ElementName, double Weight)[][] Elements, string[] OutputFiles) GetChunkData(
+            (string FileName, (string ElementName, double Weight)[] Compositions)[] chunk) =>
+            (
+                chunk.Select(item => item.Compositions).ToArray(),
+                chunk.Select(item => item.FileName).ToArray()
+            );
+
+        // 260416Codex: シミュレーション設定の組み立てを共通化
+        private SimulationPropety CreateSimulationProperty(
+            string mineralGroupName,
+            (string ElementName, double Weight)[][] atoms,
+            string outputFolder,
+            string[] outputFiles,
+            double count,
+            int parallelCount) =>
+            new()
+            {
+                MineralGropName = mineralGroupName,
+                Atoms1 = atoms,
+                DetectorName = textBoxDetectorName.Text,
+                CarbonCoatThickness = (double)numericUpDownCarbonThichness.Value,
+                BeamEnergy = (double)numericUpDownBeamEnergy.Value,
+                Count = count,
+                Division = (int)numericUpDownEndmembers_Resolution.Value,
+                LiveTime = (double)numericUpDownLiveTime.Value,
+                ProbeCurrent = (double)numericUpDownProbeCurrent.Value,
+                ParallelCount = parallelCount,
+                OutPutFolder = outputFolder,
+                OutputFile = outputFiles
+            };
+
+        // 260416Codex: 出力先の分岐をイベントハンドラから切り出す
+        private string GetSimulationOutputFolder(SolidSolution solution, double resolution) =>
+            solution.Members.Length == 1
+                ? Path.Combine(textBoxPathEDX.Text, solution.Name)
+                : Path.Combine(textBoxPathEDX.Text, $"{solution.Name}_{resolution * 100}mol%");
+
+        // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
         private async void buttonSpectrumGenerationRun_Click(object sender, EventArgs e)
         {
-
-            // 260416Codex: チェック済み項目の取得をコレクション式で明示
-            SolidSolution[] checkedSolutions = [.. checkedListBoxMineral.CheckedItems.Cast<SolidSolution>()];
+            // 260416Codex: 選択済み鉱物の取得を共通ヘルパーに寄せる
+            var checkedSolutions = GetCheckedItems<SolidSolution>(checkedListBoxMineral);
 
             string PythonPath = textBoxPathPython.Text.Trim().Trim('"');
             var DTSAPath = textBoxPathDTSA.Text;
@@ -209,46 +253,23 @@ namespace MineraScope
             int parallelCount = (int)numericUpDownExecution_Parallel.Value;
             var firstCompositions = checkedSolutions[0].Divide(resolution, targetCount);//表示用
 
-
-            var firstChunks = firstCompositions.Length == 1
-                ? Enumerable.Range(0, parallelCount).Select(_ => new[] { firstCompositions[0] }).ToArray()
-                : SplitIntoChunks(firstCompositions, parallelCount);
-
-            var firstChunk = firstChunks[0];
-            var firstElementsList = firstChunk.Select(c => c.Compositions).ToArray();
-            var firstOutputFile = firstChunk.Select(c => c.FileName).ToArray();
-
-            var previewProp = new SimulationPropety
-            {
-                MineralGropName = checkedSolutions[0].Name,
-                Atoms1 = firstElementsList,
-                DetectorName = textBoxDetectorName.Text,
-                CarbonCoatThickness = (double)numericUpDownCarbonThichness.Value,
-                BeamEnergy = (double)numericUpDownBeamEnergy.Value,
-                Count = count,
-                Division = (int)numericUpDownEndmembers_Resolution.Value,
-                LiveTime = (double)numericUpDownLiveTime.Value,
-                ProbeCurrent = (double)numericUpDownProbeCurrent.Value,
-                ParallelCount = parallelCount,
-                OutPutFolder = textBoxPathEDX.Text,
-                OutputFile = firstOutputFile
-            };
+            // 260416Codex: プレビュー用データ生成の重複をなくす
+            var firstChunk = CreateSimulationChunks(firstCompositions, parallelCount)[0];
+            var (firstElements, firstOutputFiles) = GetChunkData(firstChunk);
+            var previewProp = CreateSimulationProperty(
+                checkedSolutions[0].Name,
+                firstElements,
+                textBoxPathEDX.Text,
+                firstOutputFiles,
+                count,
+                parallelCount);
             textBoxPythonScript.Text = GenerateScriptText(previewProp, 0);
 
             //Pythonスクリプトを保存、実行
             foreach (var solution in checkedSolutions)
             {
                 var compositions = solution.Divide(resolution, targetCount);
-                (string FileName, (string ElementName, double Weight)[] Compositions)[][] chunks;
-
-                if (compositions.Length == 1)
-                {
-                    chunks = Enumerable.Range(0, parallelCount).Select(_ => new[] { compositions[0] }).ToArray();
-                }
-                else
-                {
-                    chunks = SplitIntoChunks(compositions, parallelCount);
-                }
+                var chunks = CreateSimulationChunks(compositions, parallelCount);
                 var tasks = new Task[chunks.Length];
                 for (int i = 0; i < chunks.Length; i++)
                 {
@@ -257,31 +278,19 @@ namespace MineraScope
                     tasks[parallelIndex] = Task.Run(() =>
                     {
                         var chunk = chunks[parallelIndex];
-                        var elementsList = chunk.Select(c => c.Compositions).ToArray();
-                        var outputFile = chunk.Select(c => c.FileName).ToArray();
-                        var outputFolder = solution.Members.Length == 1
-                            ? Path.Combine(textBoxPathEDX.Text, solution.Name)
-                            : Path.Combine(textBoxPathEDX.Text, $"{solution.Name}_{resolution * 100}mol%");
+                        var (elementsList, outputFiles) = GetChunkData(chunk);
+                        var outputFolder = GetSimulationOutputFolder(solution, resolution);
 
                         Directory.CreateDirectory(outputFolder);
                         var filePath = Path.Combine(PythonPath, $"test{parallelIndex + 1}.py");
 
-                        var prop = new SimulationPropety
-                        {
-                            MineralGropName = solution.Name,
-                            //Atoms = [("Na", 0.8), ("Ca", 0.2), ("Al", 1.2), ("Si", 2.8), ("O", 8)],
-                            Atoms1 = elementsList,
-                            DetectorName = textBoxDetectorName.Text,
-                            CarbonCoatThickness = (double)numericUpDownCarbonThichness.Value,
-                            BeamEnergy = (double)numericUpDownBeamEnergy.Value,
-                            LiveTime = (double)numericUpDownLiveTime.Value,
-                            ProbeCurrent = (double)numericUpDownProbeCurrent.Value,
-                            Count = (double)numericUpDownExecution_Count.Value,
-                            Division = (int)numericUpDownEndmembers_Resolution.Value,
-                            ParallelCount = (int)numericUpDownExecution_Parallel.Value,
-                            OutPutFolder = outputFolder,
-                            OutputFile = outputFile
-                        };
+                        var prop = CreateSimulationProperty(
+                            solution.Name,
+                            elementsList,
+                            outputFolder,
+                            outputFiles,
+                            count,
+                            parallelCount);
                         File.WriteAllText(filePath, GenerateScriptText(prop, parallelIndex));
                         RunCommand(DTSAPath, filePath);
                     });
@@ -302,21 +311,23 @@ namespace MineraScope
         // <returns></returns>
         //public string GenerateScriptText((string Name, double Mol)[] str, string Detectorname)
         #region Pythonスクリプト生成
+        // 260416Codex: Python スクリプト生成時のローカル変数を読みやすく整理
         public string GenerateScriptText(SimulationPropety prop, int? parallelIndex = null)
         {
+            // 260416Codex: ローカル変数名の綴りと意味を揃えて読みやすくする
             //int div = 10;
             //var ratios = Enumerable.Range(0, 10).Select(e => (double)e).Select(e => (E1: e / (div - 1), E2: (div - e - 1) / (div - 1))).ToArray();
-            var minralGropName = prop.MineralGropName;
-            var atoms1 = prop.Atoms1;
+            var mineralGroupName = prop.MineralGropName;
+            var atoms = prop.Atoms1;
             var detectorName = prop.DetectorName;
             var carbonCoatThickness = prop.CarbonCoatThickness;
             double density = 3;
-            var beamenergy = prop.BeamEnergy;
+            var beamEnergy = prop.BeamEnergy;
             var liveTime = prop.LiveTime;
             var probeCurrent = prop.ProbeCurrent;
             var count = prop.Count;
-            var outputfolder = prop.OutPutFolder;
-            var outputfile = prop.OutputFile;
+            var outputFolder = prop.OutPutFolder;
+            var outputFiles = prop.OutputFile;
             var sb = new StringBuilder();
 
 
@@ -333,9 +344,9 @@ namespace MineraScope
             //c = epq.MaterialFactory.createPureElement(epq.Element.C)
             //sb.AppendLine("import sys\r\nsys.path.append(\"Z:\\members\\hirai\\DTSAII\\DTSA-II-master\\Lib\")");
             //sb.AppendLine("import dtsa2\r\nimport dtsa2.mcSimulate3 as mc\r\nfrom dtsa2 import findDetector \r\nfrom dtsa2 import wrap \r\nimport gov.nist.microanalysis.EPQLibrary as epq  \r\nimport os\r\nimport java.lang.System as System\r\ndesktop_path = os.path.join(os.path.expanduser(\"~\"), \"Desktop\")");
-            sb.AppendLine("import dtsa2.mcSimulate3 as mc\r\nimport os\r\noutput_dir = r\"" + outputfolder + "\"");
+            sb.AppendLine("import dtsa2.mcSimulate3 as mc\r\nimport os\r\noutput_dir = r\"" + outputFolder + "\"");
             sb.AppendLine("det = findDetector(\"" + detectorName + "\")");
-            sb.AppendLine("e0 = " + beamenergy);
+            sb.AppendLine("e0 = " + beamEnergy);
             //sb.AppendLine("probe_current =" + probeCurrent);
             //sb.AppendLine("liveTime =" + liveTime);
             sb.AppendLine("dose =" + probeCurrent + " *" + liveTime);
@@ -352,17 +363,17 @@ namespace MineraScope
             //  "Olivine_Forsterite0.000Fayarite1.000",
             //]
             sb.AppendLine("Weights = [");
-            foreach (var atom in atoms1)
+            foreach (var atom in atoms)
             {
                 var joined = string.Join(", ", atom.Select(x => x.Weight.ToString("F3")));
                 sb.AppendLine($"  [{joined}],");
             }
             sb.AppendLine("]");
             sb.AppendLine("FileNames = [");
-            foreach (var f in outputfile)
+            foreach (var fileName in outputFiles)
             {
-                var joined = string.Join(", ", f);
-                sb.AppendLine($" \"{minralGropName}_ {joined}\",");
+                var joined = string.Join(", ", fileName);
+                sb.AppendLine($" \"{mineralGroupName}_ {joined}\",");
             }
             sb.AppendLine("]");
             #endregion
@@ -376,14 +387,14 @@ namespace MineraScope
 
             sb.AppendLine("for i in range(" + count + "):");
             sb.Append("\tfor idx, (");
-            var elementNames = atoms1[0].Select(x => x.ElementName).ToArray();
+            var elementNames = atoms[0].Select(x => x.ElementName).ToArray();
             sb.Append(string.Join(", ", elementNames.Select(e => $"{e}_weight")));
             sb.AppendLine(") in enumerate(Weights):");
             foreach (var name in elementNames)
             {
                 sb.AppendLine($"\r\n\t\t{ToLowerInvariant(name)} = {name}_weight");
             }
-            sb.Append($"\r\n\t\t{minralGropName} = epq.Material(epq.Composition([");
+            sb.Append($"\r\n\t\t{mineralGroupName} = epq.Material(epq.Composition([");
             #endregion
             #region epq.Materialを設定する部分
             //Opx = epq.Material(epq.Composition([epq.Element.Fe, epq.Element.Mg, epq.Element.Si, epq.Element.O],
@@ -414,7 +425,7 @@ namespace MineraScope
             //print("Simulation {0} saved to {1}".format(i + 1, output_file))
             //System.exit(0)
             sb.AppendLine("\t\tprint(\"Starting simulation {0}(mix {1})...\".format(i + 1, idx + 1))");
-            sb.AppendLine("\t\tsd = mc.coatedSubstrate(carbonCoating, cThickness," + minralGropName + " , det,dose = dose)");
+            sb.AppendLine("\t\tsd = mc.coatedSubstrate(carbonCoating, cThickness," + mineralGroupName + " , det,dose = dose)");
             //sb.AppendLine("\t\tdisplay(sd)");
             sb.AppendLine($"\t\toutName = \"{{}}_{{}}run_{{}}_" + parallelIndex + ".emsa\".format(FileNames[idx],idx+1,i+1)");
             sb.AppendLine($"\t\toutput_file = os.path.join(output_dir, outName)");
@@ -446,79 +457,94 @@ namespace MineraScope
         #region EndmemberControl
         // EndmemberControlに端成分の情報を設定
         // 端成分数に応じてコントロールを追加/削除      
-        private void UpdateEndmemberUI()
+        // 260416Codex: 選択済み固溶体の表示準備を共通化
+        private void ResetVisibleEndmemberControls()
         {
-            var selectedSolution = checkedListBoxMineral.SelectedItem as SolidSolution;
-            for (int i = 1; i < 3 && i < endmemberControls.Count; i++)
+            foreach (var control in endmemberControls)
             {
-                endmemberControls[i].Reset();
+                control.Reset();
+                control.Visible = false;
+                control.Enabled = true;
+            }
+        }
+
+        // 260416Codex: 既定で表示する端成分コントロール数を明示
+        private void ShowDefaultEndmemberControls()
+        {
+            for (int i = 0; i < Math.Min(2, endmemberControls.Count); i++)
+            {
                 endmemberControls[i].Visible = true;
-                endmemberControls[i].Enabled = true;
             }
-            if (selectedSolution == null)
-            {
-                // 何も選択されていなければ 2個だけ表示
-                foreach (var comp in endmemberControls)
-                {
-                    comp.Reset();
-                    comp.Visible = false;
-                }
+        }
 
-                for (int i = 0; i < Math.Min(2, endmemberControls.Count); i++)
-                    endmemberControls[i].Visible = true;
-                return;
-            }
-
-            var members = selectedSolution.Members;
+        // 260416Codex: 動的に追加した端成分コントロールの破棄処理を分離
+        private void RemoveDynamicEndmemberControls()
+        {
             for (int i = endmemberControls.Count - 1; i >= 2; i--)
             {
                 var ctrl = endmemberControls[i];
                 endmemberControls.Remove(ctrl);
                 ctrl.Dispose();
             }
+        }
 
-            foreach (var comp in endmemberControls)
+        // 260416Codex: 必要数まで EndmemberControl を増やす
+        private void EnsureEndmemberControlCount(int requiredCount)
+        {
+            while (endmemberControls.Count < requiredCount)
             {
-                comp.Reset();
+                AddNewEndmemberControl();
             }
+        }
 
-            if (members == null)
+        // 260416Codex: 端成分の UI 反映を1か所に集約
+        private static void ApplyMember(EndmemberControl control, Mineral member)
+        {
+            control.EndmemberName = member.Name;
+            control.EndmemberFormula = member.FormulaText;
+            control.Enabled = true;
+            control.Visible = true;
+        }
+
+        // 260416Codex: 端成分 UI 更新の分岐を早期 return ベースに整理
+        private void UpdateEndmemberUI()
+        {
+            var selectedSolution = checkedListBoxMineral.SelectedItem as SolidSolution;
+
+            if (selectedSolution == null)
             {
-                for (int i = 0; i < Math.Min(2, endmemberControls.Count); i++)
-                    endmemberControls[i].Visible = true;
-
+                // 260416Codex: 未選択時の初期表示を helper で統一
+                ResetVisibleEndmemberControls();
+                ShowDefaultEndmemberControls();
                 return;
             }
 
-            int index = 0;
-            foreach (var member in members)
+            // 260416Codex: 選択済み固溶体に切り替わる前に余分なコントロールを整理
+            RemoveDynamicEndmemberControls();
+            ResetVisibleEndmemberControls();
+            var members = selectedSolution.Members;
+
+            if (members == null)
             {
-                if (members.Length == 1)
-                {
-                    var comp1 = EndmemberControl1;
-                    comp1.EndmemberName = member.Name;
-                    comp1.EndmemberFormula = member.FormulaText;
-                    comp1.Enabled = true;
-                    comp1.Visible = true;
-                    var comp2 = EndmemberControl2;
-                    comp2.Enabled = true;
-                    comp2.Visible = true;
-                }
-                else
-                {
-                    // 必要に応じてコントロールを追加
-                    if (index >= endmemberControls.Count)
-                    {
-                        AddNewEndmemberControl();
-                    }
-                    // コントロールを取得して設定
-                    var comp = endmemberControls[index];
-                    comp.EndmemberName = member.Name;
-                    comp.EndmemberFormula = member.FormulaText;
-                    comp.Enabled = true;
-                    comp.Visible = true;
-                    index++;
-                }
+                // 260416Codex: メンバー未設定時も既定表示に寄せる
+                ShowDefaultEndmemberControls();
+                return;
+            }
+
+            if (members.Length == 1)
+            {
+                // 260416Codex: 単一端成分時の表示設定を最短経路にする
+                ApplyMember(EndmemberControl1, members[0]);
+                EndmemberControl2.Enabled = true;
+                EndmemberControl2.Visible = true;
+                return;
+            }
+
+            // 260416Codex: 必要数を確保してから順番に反映する
+            EnsureEndmemberControlCount(members.Length);
+            for (int i = 0; i < members.Length; i++)
+            {
+                ApplyMember(endmemberControls[i], members[i]);
             }
         }
         // 新しいEndmemberコントロールを追加
@@ -627,6 +653,24 @@ namespace MineraScope
         }
         #endregion
 
+        // 260416Codex: 追加・更新で共通の固溶体生成処理をまとめる
+        private bool TryCreateSolutionFromInputs(out SolidSolution solution)
+        {
+            var members = CollectEndmemberMinerals();
+            if (members.Length == 0)
+            {
+                solution = null!;
+                return false;
+            }
+
+            solution = new SolidSolution(
+                textBoxMineral_Name.Text.Trim(),
+                textBoxMineral_Memo.Text.Trim(),
+                members,
+                ParseConstraints());
+            return true;
+        }
+
         private void RefreshCompositionViews()
         {
             UpdateCompositionCount();
@@ -639,12 +683,11 @@ namespace MineraScope
             BeginInvoke(RefreshCompositionViews);
         }
 
+        // 260416Codex: ItemCheck 後の再計算をメソッドグループで簡潔にする
         private void checkedListBoxMineral_ItemCheck(object sender, ItemCheckEventArgs e)
         {
-            BeginInvoke(new Action(() =>
-            {
-                UpdateCompositionCount();
-            }));
+            // 260416Codex: 非同期更新の delegate を簡潔にする
+            BeginInvoke(UpdateCompositionCount);
         }
 
         private void checkedListBoxMineral_SelectedIndexChanged(object sender, EventArgs e)
@@ -721,17 +764,12 @@ namespace MineraScope
         #endregion
         #region リストに追加・更新・削除・初期化メソッド
         #region 追加メソッド
+        // 260416Codex: 追加時の入力変換を helper ベースに統一
         private void buttonAddList_Click(object sender, EventArgs e)
         {
-            var members = CollectEndmemberMinerals();
-            if (members.Length == 0)
+            // 260416Codex: 入力からの固溶体生成を helper に統一
+            if (!TryCreateSolutionFromInputs(out var newSolution))
                 return;
-
-            var newSolution = new SolidSolution(
-                textBoxMineral_Name.Text.Trim(),
-                textBoxMineral_Memo.Text.Trim(),
-                members,
-                ParseConstraints());
 
             var updatedSolutions = LoadSolidSolutions()
                 .Append(newSolution)
@@ -742,18 +780,13 @@ namespace MineraScope
         }
         #endregion
         #region 更新メソッド
+        // 260416Codex: 更新時の入力変換も追加処理と揃える
         private void buttonUpdate_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMineral.SelectedIndex;
-            var members = CollectEndmemberMinerals();
-            if (members.Length == 0)
+            // 260416Codex: 更新時も追加時と同じ入力変換を使う
+            if (!TryCreateSolutionFromInputs(out var updatedSolution))
                 return;
-
-            var updatedSolution = new SolidSolution(
-                textBoxMineral_Name.Text.Trim(),
-                textBoxMineral_Memo.Text.Trim(),
-                members,
-                ParseConstraints());
 
             var existingSolutions = LoadSolidSolutions();
             existingSolutions[selectedIndex] = updatedSolution;
