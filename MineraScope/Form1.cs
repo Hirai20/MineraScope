@@ -559,7 +559,7 @@ namespace MineraScope
             newComp.Location = new Point(prev.Location.X, prev.Location.Y + prev.Height + 7);
             newComp.Size = prev.Size;
 
-            panelEndmembers.Controls.Add(newComp);
+            flowLayoutPanel3.Controls.Add(newComp);
             endmemberControls.Add(newComp);
         }
         #endregion

@@ -11,7 +11,8 @@ namespace MineraScope
             // To customize application configuration such as set high DPI settings or default font,
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
-            Application.Run(new Form1());
+            // 260416Codex: 起動時は Form1 ではなく LauncherForm を開く
+            Application.Run(new LauncherForm());
         }
     }
 }

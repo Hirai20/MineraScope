@@ -34,23 +34,26 @@ namespace MineraScope
             labelEndmembers_Resolution = new Label();
             groupBoxMineralInfo = new GroupBox();
             textBoxMineral_Memo = new TextBox();
+            buttonAddList = new Button();
             label15 = new Label();
             labelMineralInfo_Name = new Label();
+            buttonUpdate = new Button();
             textBoxMineral_Name = new TextBox();
             groupBoxEndmembers = new GroupBox();
+            panel1 = new Panel();
+            buttonEndmember_Delete = new Button();
+            buttonEndmember_Add = new Button();
+            labelEndmember_Formula = new Label();
+            labelEndmember_Name = new Label();
+            flowLayoutPanel3 = new FlowLayoutPanel();
+            EndmemberControl1 = new EndmemberControl();
+            EndmemberControl2 = new EndmemberControl();
             labelMineral_Target = new Label();
             numericUpDownMineral_Target = new NumericUpDown();
-            buttonEndmember_Add = new Button();
-            buttonEndmember_Delete = new Button();
             labelEndmembers_CompositionLists = new Label();
             textBoxEndmembers_CompositionLists = new TextBox();
             textBoxEndmembers_Constraints = new TextBox();
             labelEndmembers_Constraints = new Label();
-            panelEndmembers = new Panel();
-            EndmemberControl1 = new EndmemberControl();
-            labelEndmember_Name = new Label();
-            EndmemberControl2 = new EndmemberControl();
-            labelEndmember_Formula = new Label();
             labelCompositionCount = new Label();
             textBoxCompositionCount = new TextBox();
             checkedListBoxMineral = new CheckedListBox();
@@ -98,12 +101,10 @@ namespace MineraScope
             groupBox3 = new GroupBox();
             label1 = new Label();
             SpectrumGeneration = new GroupBox();
-            button1 = new Button();
-            buttonUpdate = new Button();
             groupBoxMineral = new GroupBox();
-            buttonMineral_Reset = new Button();
+            flowLayoutPanel2 = new FlowLayoutPanel();
             buttonMineral_AllDelete = new Button();
-            buttonAddList = new Button();
+            buttonMineral_Reset = new Button();
             tabControl2 = new TabControl();
             tabPage5 = new TabPage();
             buttonPathDTSA = new Button();
@@ -136,11 +137,16 @@ namespace MineraScope
             menuStrip1 = new MenuStrip();
             optionToolStripMenuItem = new ToolStripMenuItem();
             debugModeToolStripMenuItem = new ToolStripMenuItem();
+            groupBox1 = new GroupBox();
+            checkBox1 = new CheckBox();
+            flowLayoutPanel4 = new FlowLayoutPanel();
+            groupBox2 = new GroupBox();
             ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).BeginInit();
             groupBoxMineralInfo.SuspendLayout();
             groupBoxEndmembers.SuspendLayout();
+            panel1.SuspendLayout();
+            flowLayoutPanel3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownMineral_Target).BeginInit();
-            panelEndmembers.SuspendLayout();
             groupBoxComposition.SuspendLayout();
             ModelTrain.SuspendLayout();
             groupBox4.SuspendLayout();
@@ -158,9 +164,9 @@ namespace MineraScope
             groupBox3.SuspendLayout();
             SpectrumGeneration.SuspendLayout();
             groupBoxMineral.SuspendLayout();
+            flowLayoutPanel2.SuspendLayout();
             tabControl2.SuspendLayout();
             tabPage5.SuspendLayout();
-            tabPage6.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownProbeCurrent).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownLiveTime).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownCarbonThichness).BeginInit();
@@ -170,6 +176,9 @@ namespace MineraScope
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).BeginInit();
             groupBox5.SuspendLayout();
             menuStrip1.SuspendLayout();
+            groupBox1.SuspendLayout();
+            flowLayoutPanel4.SuspendLayout();
+            groupBox2.SuspendLayout();
             SuspendLayout();
             // 
             // buttonSpectrumGenerationRun
@@ -197,7 +206,7 @@ namespace MineraScope
             // 
             // numericUpDownEndmembers_Resolution
             // 
-            numericUpDownEndmembers_Resolution.Location = new Point(306, 138);
+            numericUpDownEndmembers_Resolution.Location = new Point(102, 69);
             numericUpDownEndmembers_Resolution.Name = "numericUpDownEndmembers_Resolution";
             numericUpDownEndmembers_Resolution.Size = new Size(42, 23);
             numericUpDownEndmembers_Resolution.TabIndex = 19;
@@ -208,7 +217,7 @@ namespace MineraScope
             // labelEndmembers_Resolution
             // 
             labelEndmembers_Resolution.AutoSize = true;
-            labelEndmembers_Resolution.Location = new Point(285, 119);
+            labelEndmembers_Resolution.Location = new Point(9, 71);
             labelEndmembers_Resolution.Margin = new Padding(2, 0, 2, 0);
             labelEndmembers_Resolution.Name = "labelEndmembers_Resolution";
             labelEndmembers_Resolution.Size = new Size(91, 15);
@@ -217,33 +226,47 @@ namespace MineraScope
             // 
             // groupBoxMineralInfo
             // 
+            groupBoxMineralInfo.Controls.Add(groupBox2);
             groupBoxMineralInfo.Controls.Add(textBoxMineral_Memo);
             groupBoxMineralInfo.Controls.Add(label15);
             groupBoxMineralInfo.Controls.Add(labelMineralInfo_Name);
             groupBoxMineralInfo.Controls.Add(textBoxMineral_Name);
             groupBoxMineralInfo.Controls.Add(groupBoxEndmembers);
-            groupBoxMineralInfo.Location = new Point(10, 190);
+            groupBoxMineralInfo.Dock = DockStyle.Bottom;
+            groupBoxMineralInfo.Location = new Point(3, 163);
             groupBoxMineralInfo.Name = "groupBoxMineralInfo";
-            groupBoxMineralInfo.Size = new Size(630, 324);
+            groupBoxMineralInfo.Size = new Size(634, 246);
             groupBoxMineralInfo.TabIndex = 37;
             groupBoxMineralInfo.TabStop = false;
-            groupBoxMineralInfo.Text = "鉱物情報";
+            groupBoxMineralInfo.Text = "詳細情報";
             // 
             // textBoxMineral_Memo
             // 
-            textBoxMineral_Memo.Location = new Point(450, 21);
+            textBoxMineral_Memo.Location = new Point(299, 22);
             textBoxMineral_Memo.Name = "textBoxMineral_Memo";
             textBoxMineral_Memo.Size = new Size(120, 23);
             textBoxMineral_Memo.TabIndex = 94;
             // 
+            // buttonAddList
+            // 
+            buttonAddList.AutoSize = true;
+            buttonAddList.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonAddList.Location = new Point(435, 3);
+            buttonAddList.Name = "buttonAddList";
+            buttonAddList.Size = new Size(85, 25);
+            buttonAddList.TabIndex = 96;
+            buttonAddList.Text = "?リストに追加?";
+            buttonAddList.UseVisualStyleBackColor = true;
+            buttonAddList.Click += buttonAddList_Click;
+            // 
             // label15
             // 
             label15.AutoSize = true;
-            label15.Location = new Point(291, 24);
+            label15.Location = new Point(253, 24);
             label15.Name = "label15";
-            label15.Size = new Size(111, 15);
+            label15.Size = new Size(40, 15);
             label15.TabIndex = 93;
-            label15.Text = "化学組成(任意入力)";
+            label15.Text = "memo";
             // 
             // labelMineralInfo_Name
             // 
@@ -254,39 +277,126 @@ namespace MineraScope
             labelMineralInfo_Name.TabIndex = 92;
             labelMineralInfo_Name.Text = "鉱物/鉱物グループ名";
             // 
+            // buttonUpdate
+            // 
+            buttonUpdate.Location = new Point(526, 3);
+            buttonUpdate.Name = "buttonUpdate";
+            buttonUpdate.Size = new Size(105, 24);
+            buttonUpdate.TabIndex = 99;
+            buttonUpdate.Text = "?リストを更新?";
+            buttonUpdate.UseVisualStyleBackColor = true;
+            buttonUpdate.Click += buttonUpdate_Click;
+            // 
             // textBoxMineral_Name
             // 
-            textBoxMineral_Name.Location = new Point(135, 21);
+            textBoxMineral_Name.Location = new Point(122, 21);
             textBoxMineral_Name.Name = "textBoxMineral_Name";
             textBoxMineral_Name.Size = new Size(120, 23);
             textBoxMineral_Name.TabIndex = 91;
             // 
             // groupBoxEndmembers
             // 
-            groupBoxEndmembers.Controls.Add(labelMineral_Target);
-            groupBoxEndmembers.Controls.Add(numericUpDownMineral_Target);
-            groupBoxEndmembers.Controls.Add(buttonEndmember_Add);
-            groupBoxEndmembers.Controls.Add(buttonEndmember_Delete);
-            groupBoxEndmembers.Controls.Add(labelEndmembers_CompositionLists);
-            groupBoxEndmembers.Controls.Add(numericUpDownEndmembers_Resolution);
-            groupBoxEndmembers.Controls.Add(labelEndmembers_Resolution);
-            groupBoxEndmembers.Controls.Add(textBoxEndmembers_CompositionLists);
-            groupBoxEndmembers.Controls.Add(textBoxEndmembers_Constraints);
-            groupBoxEndmembers.Controls.Add(labelEndmembers_Constraints);
-            groupBoxEndmembers.Controls.Add(panelEndmembers);
+            groupBoxEndmembers.Controls.Add(panel1);
             groupBoxEndmembers.Location = new Point(5, 50);
             groupBoxEndmembers.Margin = new Padding(1);
             groupBoxEndmembers.Name = "groupBoxEndmembers";
             groupBoxEndmembers.Padding = new Padding(1);
-            groupBoxEndmembers.Size = new Size(600, 270);
+            groupBoxEndmembers.Size = new Size(301, 150);
             groupBoxEndmembers.TabIndex = 90;
             groupBoxEndmembers.TabStop = false;
             groupBoxEndmembers.Text = "端成分";
             // 
+            // panel1
+            // 
+            panel1.AutoSize = true;
+            panel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panel1.Controls.Add(buttonEndmember_Delete);
+            panel1.Controls.Add(buttonEndmember_Add);
+            panel1.Controls.Add(labelEndmember_Formula);
+            panel1.Controls.Add(labelEndmember_Name);
+            panel1.Controls.Add(flowLayoutPanel3);
+            panel1.Location = new Point(4, 20);
+            panel1.Name = "panel1";
+            panel1.Size = new Size(288, 124);
+            panel1.TabIndex = 106;
+            // 
+            // buttonEndmember_Delete
+            // 
+            buttonEndmember_Delete.Font = new Font("Yu Gothic UI", 8F);
+            buttonEndmember_Delete.Location = new Point(244, 98);
+            buttonEndmember_Delete.Name = "buttonEndmember_Delete";
+            buttonEndmember_Delete.Size = new Size(37, 23);
+            buttonEndmember_Delete.TabIndex = 98;
+            buttonEndmember_Delete.Text = "削除";
+            buttonEndmember_Delete.UseVisualStyleBackColor = true;
+            buttonEndmember_Delete.Click += buttonRemoveEndmemberControl_Click;
+            // 
+            // buttonEndmember_Add
+            // 
+            buttonEndmember_Add.Font = new Font("Yu Gothic UI", 8F);
+            buttonEndmember_Add.Location = new Point(204, 98);
+            buttonEndmember_Add.Name = "buttonEndmember_Add";
+            buttonEndmember_Add.Size = new Size(37, 23);
+            buttonEndmember_Add.TabIndex = 100;
+            buttonEndmember_Add.Text = "追加";
+            buttonEndmember_Add.UseVisualStyleBackColor = true;
+            buttonEndmember_Add.Click += buttonAddEndmemberControl_Click;
+            // 
+            // labelEndmember_Formula
+            // 
+            labelEndmember_Formula.AutoSize = true;
+            labelEndmember_Formula.Location = new Point(176, 0);
+            labelEndmember_Formula.Margin = new Padding(60, 0, 0, 0);
+            labelEndmember_Formula.Name = "labelEndmember_Formula";
+            labelEndmember_Formula.Size = new Size(55, 15);
+            labelEndmember_Formula.TabIndex = 76;
+            labelEndmember_Formula.Text = "化学組成";
+            // 
+            // labelEndmember_Name
+            // 
+            labelEndmember_Name.AutoSize = true;
+            labelEndmember_Name.Location = new Point(41, 0);
+            labelEndmember_Name.Margin = new Padding(60, 0, 0, 0);
+            labelEndmember_Name.Name = "labelEndmember_Name";
+            labelEndmember_Name.Size = new Size(43, 15);
+            labelEndmember_Name.TabIndex = 75;
+            labelEndmember_Name.Text = "鉱物名";
+            // 
+            // flowLayoutPanel3
+            // 
+            flowLayoutPanel3.AutoScroll = true;
+            flowLayoutPanel3.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            flowLayoutPanel3.Controls.Add(EndmemberControl1);
+            flowLayoutPanel3.Controls.Add(EndmemberControl2);
+            flowLayoutPanel3.FlowDirection = FlowDirection.TopDown;
+            flowLayoutPanel3.Location = new Point(3, 17);
+            flowLayoutPanel3.Name = "flowLayoutPanel3";
+            flowLayoutPanel3.Size = new Size(282, 87);
+            flowLayoutPanel3.TabIndex = 103;
+            flowLayoutPanel3.WrapContents = false;
+            // 
+            // EndmemberControl1
+            // 
+            EndmemberControl1.EndmemberFormula = "  ";
+            EndmemberControl1.EndmemberName = "  ";
+            EndmemberControl1.Location = new Point(3, 3);
+            EndmemberControl1.Name = "EndmemberControl1";
+            EndmemberControl1.Size = new Size(260, 23);
+            EndmemberControl1.TabIndex = 87;
+            // 
+            // EndmemberControl2
+            // 
+            EndmemberControl2.EndmemberFormula = "  ";
+            EndmemberControl2.EndmemberName = "  ";
+            EndmemberControl2.Location = new Point(3, 32);
+            EndmemberControl2.Name = "EndmemberControl2";
+            EndmemberControl2.Size = new Size(260, 23);
+            EndmemberControl2.TabIndex = 88;
+            // 
             // labelMineral_Target
             // 
             labelMineral_Target.AutoSize = true;
-            labelMineral_Target.Location = new Point(390, 113);
+            labelMineral_Target.Location = new Point(164, 71);
             labelMineral_Target.Margin = new Padding(2, 0, 2, 0);
             labelMineral_Target.Name = "labelMineral_Target";
             labelMineral_Target.Size = new Size(87, 15);
@@ -295,7 +405,7 @@ namespace MineraScope
             // 
             // numericUpDownMineral_Target
             // 
-            numericUpDownMineral_Target.Location = new Point(483, 111);
+            numericUpDownMineral_Target.Location = new Point(256, 71);
             numericUpDownMineral_Target.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
             numericUpDownMineral_Target.Name = "numericUpDownMineral_Target";
             numericUpDownMineral_Target.Size = new Size(50, 23);
@@ -303,32 +413,10 @@ namespace MineraScope
             numericUpDownMineral_Target.Value = new decimal(new int[] { 1000, 0, 0, 0 });
             numericUpDownMineral_Target.ValueChanged += numericUpDownMineral_Target_ValueChanged;
             // 
-            // buttonEndmember_Add
-            // 
-            buttonEndmember_Add.Font = new Font("Yu Gothic UI", 8F);
-            buttonEndmember_Add.Location = new Point(190, 243);
-            buttonEndmember_Add.Name = "buttonEndmember_Add";
-            buttonEndmember_Add.Size = new Size(37, 23);
-            buttonEndmember_Add.TabIndex = 100;
-            buttonEndmember_Add.Text = "追加";
-            buttonEndmember_Add.UseVisualStyleBackColor = true;
-            buttonEndmember_Add.Click += buttonAddEndmemberControl_Click;
-            // 
-            // buttonEndmember_Delete
-            // 
-            buttonEndmember_Delete.Font = new Font("Yu Gothic UI", 8F);
-            buttonEndmember_Delete.Location = new Point(233, 243);
-            buttonEndmember_Delete.Name = "buttonEndmember_Delete";
-            buttonEndmember_Delete.Size = new Size(37, 23);
-            buttonEndmember_Delete.TabIndex = 98;
-            buttonEndmember_Delete.Text = "削除";
-            buttonEndmember_Delete.UseVisualStyleBackColor = true;
-            buttonEndmember_Delete.Click += buttonRemoveEndmemberControl_Click;
-            // 
             // labelEndmembers_CompositionLists
             // 
             labelEndmembers_CompositionLists.AutoSize = true;
-            labelEndmembers_CompositionLists.Location = new Point(392, 140);
+            labelEndmembers_CompositionLists.Location = new Point(6, 103);
             labelEndmembers_CompositionLists.Name = "labelEndmembers_CompositionLists";
             labelEndmembers_CompositionLists.Size = new Size(80, 15);
             labelEndmembers_CompositionLists.TabIndex = 96;
@@ -336,80 +424,30 @@ namespace MineraScope
             // 
             // textBoxEndmembers_CompositionLists
             // 
-            textBoxEndmembers_CompositionLists.Location = new Point(304, 167);
+            textBoxEndmembers_CompositionLists.Location = new Point(17, 122);
             textBoxEndmembers_CompositionLists.Multiline = true;
             textBoxEndmembers_CompositionLists.Name = "textBoxEndmembers_CompositionLists";
             textBoxEndmembers_CompositionLists.ScrollBars = ScrollBars.Both;
-            textBoxEndmembers_CompositionLists.Size = new Size(286, 70);
+            textBoxEndmembers_CompositionLists.Size = new Size(288, 51);
             textBoxEndmembers_CompositionLists.TabIndex = 95;
             // 
             // textBoxEndmembers_Constraints
             // 
-            textBoxEndmembers_Constraints.Location = new Point(286, 35);
+            textBoxEndmembers_Constraints.Location = new Point(65, 17);
             textBoxEndmembers_Constraints.Multiline = true;
             textBoxEndmembers_Constraints.Name = "textBoxEndmembers_Constraints";
             textBoxEndmembers_Constraints.ScrollBars = ScrollBars.Both;
-            textBoxEndmembers_Constraints.Size = new Size(286, 70);
+            textBoxEndmembers_Constraints.Size = new Size(230, 41);
             textBoxEndmembers_Constraints.TabIndex = 93;
             // 
             // labelEndmembers_Constraints
             // 
             labelEndmembers_Constraints.AutoSize = true;
-            labelEndmembers_Constraints.Location = new Point(395, 17);
+            labelEndmembers_Constraints.Location = new Point(15, 20);
             labelEndmembers_Constraints.Name = "labelEndmembers_Constraints";
             labelEndmembers_Constraints.Size = new Size(43, 15);
             labelEndmembers_Constraints.TabIndex = 94;
             labelEndmembers_Constraints.Text = "条件式";
-            // 
-            // panelEndmembers
-            // 
-            panelEndmembers.AutoScroll = true;
-            panelEndmembers.BackColor = SystemColors.Control;
-            panelEndmembers.BackgroundImageLayout = ImageLayout.None;
-            panelEndmembers.Controls.Add(EndmemberControl1);
-            panelEndmembers.Controls.Add(labelEndmember_Name);
-            panelEndmembers.Controls.Add(EndmemberControl2);
-            panelEndmembers.Controls.Add(labelEndmember_Formula);
-            panelEndmembers.Location = new Point(0, 20);
-            panelEndmembers.Name = "panelEndmembers";
-            panelEndmembers.Size = new Size(280, 217);
-            panelEndmembers.TabIndex = 90;
-            // 
-            // EndmemberControl1
-            // 
-            EndmemberControl1.EndmemberFormula = "  ";
-            EndmemberControl1.EndmemberName = "  ";
-            EndmemberControl1.Location = new Point(3, 40);
-            EndmemberControl1.Name = "EndmemberControl1";
-            EndmemberControl1.Size = new Size(260, 23);
-            EndmemberControl1.TabIndex = 87;
-            // 
-            // labelEndmember_Name
-            // 
-            labelEndmember_Name.AutoSize = true;
-            labelEndmember_Name.Location = new Point(49, 11);
-            labelEndmember_Name.Name = "labelEndmember_Name";
-            labelEndmember_Name.Size = new Size(43, 15);
-            labelEndmember_Name.TabIndex = 75;
-            labelEndmember_Name.Text = "鉱物名";
-            // 
-            // EndmemberControl2
-            // 
-            EndmemberControl2.EndmemberFormula = "  ";
-            EndmemberControl2.EndmemberName = "  ";
-            EndmemberControl2.Location = new Point(3, 69);
-            EndmemberControl2.Name = "EndmemberControl2";
-            EndmemberControl2.Size = new Size(260, 23);
-            EndmemberControl2.TabIndex = 88;
-            // 
-            // labelEndmember_Formula
-            // 
-            labelEndmember_Formula.AutoSize = true;
-            labelEndmember_Formula.Location = new Point(172, 11);
-            labelEndmember_Formula.Name = "labelEndmember_Formula";
-            labelEndmember_Formula.Size = new Size(55, 15);
-            labelEndmember_Formula.TabIndex = 76;
-            labelEndmember_Formula.Text = "化学組成";
             // 
             // labelCompositionCount
             // 
@@ -435,13 +473,14 @@ namespace MineraScope
             // 
             // checkedListBoxMineral
             // 
+            checkedListBoxMineral.Dock = DockStyle.Fill;
             checkedListBoxMineral.FormattingEnabled = true;
             checkedListBoxMineral.HorizontalScrollbar = true;
-            checkedListBoxMineral.Location = new Point(5, 20);
+            checkedListBoxMineral.Location = new Point(3, 48);
             checkedListBoxMineral.MultiColumn = true;
             checkedListBoxMineral.Name = "checkedListBoxMineral";
             checkedListBoxMineral.ScrollAlwaysVisible = true;
-            checkedListBoxMineral.Size = new Size(625, 94);
+            checkedListBoxMineral.Size = new Size(634, 115);
             checkedListBoxMineral.TabIndex = 86;
             checkedListBoxMineral.ItemCheck += checkedListBoxMineral_ItemCheck;
             checkedListBoxMineral.SelectedIndexChanged += checkedListBoxMineral_SelectedIndexChanged;
@@ -757,10 +796,12 @@ namespace MineraScope
             // 
             // buttonMineral_Delete
             // 
+            buttonMineral_Delete.AutoSize = true;
+            buttonMineral_Delete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonMineral_Delete.Font = new Font("Yu Gothic UI", 8F);
-            buttonMineral_Delete.Location = new Point(534, 116);
+            buttonMineral_Delete.Location = new Point(536, 3);
             buttonMineral_Delete.Name = "buttonMineral_Delete";
-            buttonMineral_Delete.Size = new Size(37, 23);
+            buttonMineral_Delete.Size = new Size(39, 23);
             buttonMineral_Delete.TabIndex = 97;
             buttonMineral_Delete.Text = "削除";
             buttonMineral_Delete.UseVisualStyleBackColor = true;
@@ -895,18 +936,14 @@ namespace MineraScope
             // 
             // SpectrumGeneration
             // 
-            SpectrumGeneration.Controls.Add(button1);
-            SpectrumGeneration.Controls.Add(buttonUpdate);
+            SpectrumGeneration.Controls.Add(groupBox1);
             SpectrumGeneration.Controls.Add(groupBoxMineral);
-            SpectrumGeneration.Controls.Add(buttonAddList);
             SpectrumGeneration.Controls.Add(labelPythonScript);
             SpectrumGeneration.Controls.Add(textBoxPythonScript);
             SpectrumGeneration.Controls.Add(tabControl2);
-            SpectrumGeneration.Controls.Add(groupBox5);
             SpectrumGeneration.Controls.Add(buttonSpectrumGenerationRun);
             SpectrumGeneration.Controls.Add(labelCompositionCount);
             SpectrumGeneration.Controls.Add(textBoxCompositionCount);
-            SpectrumGeneration.Controls.Add(groupBoxMineralInfo);
             SpectrumGeneration.Dock = DockStyle.Left;
             SpectrumGeneration.Location = new Point(3, 27);
             SpectrumGeneration.Name = "SpectrumGeneration";
@@ -915,69 +952,59 @@ namespace MineraScope
             SpectrumGeneration.TabStop = false;
             SpectrumGeneration.Text = "EDXスペクトル生成";
             // 
-            // button1
-            // 
-            button1.Location = new Point(410, 165);
-            button1.Name = "button1";
-            button1.Size = new Size(105, 24);
-            button1.TabIndex = 100;
-            button1.Text = "新しいボタン";
-            button1.UseVisualStyleBackColor = true;
-            // 
-            // buttonUpdate
-            // 
-            buttonUpdate.Location = new Point(145, 166);
-            buttonUpdate.Name = "buttonUpdate";
-            buttonUpdate.Size = new Size(105, 24);
-            buttonUpdate.TabIndex = 99;
-            buttonUpdate.Text = "?リストを更新?";
-            buttonUpdate.UseVisualStyleBackColor = true;
-            buttonUpdate.Click += buttonUpdate_Click;
-            // 
             // groupBoxMineral
             // 
-            groupBoxMineral.Controls.Add(buttonMineral_Reset);
-            groupBoxMineral.Controls.Add(buttonMineral_AllDelete);
+            groupBoxMineral.Controls.Add(flowLayoutPanel4);
             groupBoxMineral.Controls.Add(checkedListBoxMineral);
-            groupBoxMineral.Controls.Add(buttonMineral_Delete);
-            groupBoxMineral.Location = new Point(5, 20);
+            groupBoxMineral.Controls.Add(flowLayoutPanel2);
+            groupBoxMineral.Controls.Add(groupBoxMineralInfo);
+            groupBoxMineral.Location = new Point(5, 99);
             groupBoxMineral.Name = "groupBoxMineral";
-            groupBoxMineral.Size = new Size(635, 140);
+            groupBoxMineral.Size = new Size(640, 412);
             groupBoxMineral.TabIndex = 98;
             groupBoxMineral.TabStop = false;
-            groupBoxMineral.Text = "鉱物/ 鉱物グループリスト";
+            groupBoxMineral.Text = "計算対象";
             // 
-            // buttonMineral_Reset
+            // flowLayoutPanel2
             // 
-            buttonMineral_Reset.Font = new Font("Yu Gothic UI", 8F);
-            buttonMineral_Reset.Location = new Point(10, 116);
-            buttonMineral_Reset.Name = "buttonMineral_Reset";
-            buttonMineral_Reset.Size = new Size(53, 23);
-            buttonMineral_Reset.TabIndex = 99;
-            buttonMineral_Reset.Text = "初期化";
-            buttonMineral_Reset.UseVisualStyleBackColor = true;
-            buttonMineral_Reset.Click += buttonMineral_Reset_Click;
+            flowLayoutPanel2.AutoSize = true;
+            flowLayoutPanel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            flowLayoutPanel2.Controls.Add(buttonMineral_AllDelete);
+            flowLayoutPanel2.Controls.Add(buttonMineral_Delete);
+            flowLayoutPanel2.Controls.Add(buttonMineral_Reset);
+            flowLayoutPanel2.Controls.Add(checkBox1);
+            flowLayoutPanel2.Dock = DockStyle.Top;
+            flowLayoutPanel2.FlowDirection = FlowDirection.RightToLeft;
+            flowLayoutPanel2.Location = new Point(3, 19);
+            flowLayoutPanel2.Name = "flowLayoutPanel2";
+            flowLayoutPanel2.Size = new Size(634, 29);
+            flowLayoutPanel2.TabIndex = 103;
             // 
             // buttonMineral_AllDelete
             // 
+            buttonMineral_AllDelete.AutoSize = true;
+            buttonMineral_AllDelete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonMineral_AllDelete.Font = new Font("Yu Gothic UI", 8F);
-            buttonMineral_AllDelete.Location = new Point(577, 116);
+            buttonMineral_AllDelete.Location = new Point(581, 3);
             buttonMineral_AllDelete.Name = "buttonMineral_AllDelete";
-            buttonMineral_AllDelete.Size = new Size(53, 23);
+            buttonMineral_AllDelete.Size = new Size(50, 23);
             buttonMineral_AllDelete.TabIndex = 98;
             buttonMineral_AllDelete.Text = "全削除";
             buttonMineral_AllDelete.UseVisualStyleBackColor = true;
             buttonMineral_AllDelete.Click += buttonMineral_AllDelete_Click;
             // 
-            // buttonAddList
+            // buttonMineral_Reset
             // 
-            buttonAddList.Location = new Point(15, 165);
-            buttonAddList.Name = "buttonAddList";
-            buttonAddList.Size = new Size(105, 24);
-            buttonAddList.TabIndex = 96;
-            buttonAddList.Text = "?リストに追加?";
-            buttonAddList.UseVisualStyleBackColor = true;
-            buttonAddList.Click += buttonAddList_Click;
+            buttonMineral_Reset.AutoSize = true;
+            buttonMineral_Reset.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonMineral_Reset.Font = new Font("Yu Gothic UI", 8F);
+            buttonMineral_Reset.Location = new Point(480, 3);
+            buttonMineral_Reset.Name = "buttonMineral_Reset";
+            buttonMineral_Reset.Size = new Size(50, 23);
+            buttonMineral_Reset.TabIndex = 99;
+            buttonMineral_Reset.Text = "初期化";
+            buttonMineral_Reset.UseVisualStyleBackColor = true;
+            buttonMineral_Reset.Click += buttonMineral_Reset_Click;
             // 
             // tabControl2
             // 
@@ -1090,16 +1117,6 @@ namespace MineraScope
             // 
             // tabPage6
             // 
-            tabPage6.Controls.Add(numericUpDownProbeCurrent);
-            tabPage6.Controls.Add(labelProbeCurrent);
-            tabPage6.Controls.Add(numericUpDownLiveTime);
-            tabPage6.Controls.Add(labelLiveTime);
-            tabPage6.Controls.Add(labelDetectorName);
-            tabPage6.Controls.Add(numericUpDownCarbonThichness);
-            tabPage6.Controls.Add(labelBeamEnergy);
-            tabPage6.Controls.Add(numericUpDownBeamEnergy);
-            tabPage6.Controls.Add(labelCarbonThickness);
-            tabPage6.Controls.Add(textBoxDetectorName);
             tabPage6.Location = new Point(4, 24);
             tabPage6.Name = "tabPage6";
             tabPage6.Padding = new Padding(3);
@@ -1111,7 +1128,7 @@ namespace MineraScope
             // numericUpDownProbeCurrent
             // 
             numericUpDownProbeCurrent.DecimalPlaces = 2;
-            numericUpDownProbeCurrent.Location = new Point(238, 86);
+            numericUpDownProbeCurrent.Location = new Point(439, 42);
             numericUpDownProbeCurrent.Margin = new Padding(3, 2, 3, 2);
             numericUpDownProbeCurrent.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
             numericUpDownProbeCurrent.Name = "numericUpDownProbeCurrent";
@@ -1122,7 +1139,7 @@ namespace MineraScope
             // labelProbeCurrent
             // 
             labelProbeCurrent.AutoEllipsis = true;
-            labelProbeCurrent.Location = new Point(151, 88);
+            labelProbeCurrent.Location = new Point(352, 44);
             labelProbeCurrent.Name = "labelProbeCurrent";
             labelProbeCurrent.Size = new Size(80, 15);
             labelProbeCurrent.TabIndex = 17;
@@ -1131,7 +1148,7 @@ namespace MineraScope
             // numericUpDownLiveTime
             // 
             numericUpDownLiveTime.DecimalPlaces = 1;
-            numericUpDownLiveTime.Location = new Point(95, 85);
+            numericUpDownLiveTime.Location = new Point(296, 41);
             numericUpDownLiveTime.Margin = new Padding(3, 2, 3, 2);
             numericUpDownLiveTime.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
             numericUpDownLiveTime.Name = "numericUpDownLiveTime";
@@ -1142,7 +1159,7 @@ namespace MineraScope
             // labelLiveTime
             // 
             labelLiveTime.AutoEllipsis = true;
-            labelLiveTime.Location = new Point(9, 88);
+            labelLiveTime.Location = new Point(210, 44);
             labelLiveTime.Name = "labelLiveTime";
             labelLiveTime.Size = new Size(80, 15);
             labelLiveTime.TabIndex = 15;
@@ -1150,7 +1167,7 @@ namespace MineraScope
             // 
             // labelDetectorName
             // 
-            labelDetectorName.Location = new Point(9, 10);
+            labelDetectorName.Location = new Point(9, 20);
             labelDetectorName.Name = "labelDetectorName";
             labelDetectorName.Size = new Size(60, 15);
             labelDetectorName.TabIndex = 8;
@@ -1161,7 +1178,7 @@ namespace MineraScope
             numericUpDownCarbonThichness.DecimalPlaces = 3;
             numericUpDownCarbonThichness.ForeColor = SystemColors.WindowText;
             numericUpDownCarbonThichness.Increment = new decimal(new int[] { 1, 0, 0, 131072 });
-            numericUpDownCarbonThichness.Location = new Point(137, 32);
+            numericUpDownCarbonThichness.Location = new Point(137, 42);
             numericUpDownCarbonThichness.Margin = new Padding(3, 2, 3, 2);
             numericUpDownCarbonThichness.Name = "numericUpDownCarbonThichness";
             numericUpDownCarbonThichness.RightToLeft = RightToLeft.No;
@@ -1172,7 +1189,7 @@ namespace MineraScope
             // labelBeamEnergy
             // 
             labelBeamEnergy.AutoEllipsis = true;
-            labelBeamEnergy.Location = new Point(9, 62);
+            labelBeamEnergy.Location = new Point(210, 19);
             labelBeamEnergy.Name = "labelBeamEnergy";
             labelBeamEnergy.Size = new Size(80, 15);
             labelBeamEnergy.TabIndex = 14;
@@ -1181,7 +1198,7 @@ namespace MineraScope
             // numericUpDownBeamEnergy
             // 
             numericUpDownBeamEnergy.DecimalPlaces = 2;
-            numericUpDownBeamEnergy.Location = new Point(135, 60);
+            numericUpDownBeamEnergy.Location = new Point(336, 17);
             numericUpDownBeamEnergy.Margin = new Padding(3, 2, 3, 2);
             numericUpDownBeamEnergy.Name = "numericUpDownBeamEnergy";
             numericUpDownBeamEnergy.Size = new Size(50, 23);
@@ -1190,7 +1207,7 @@ namespace MineraScope
             // 
             // labelCarbonThickness
             // 
-            labelCarbonThickness.Location = new Point(9, 34);
+            labelCarbonThickness.Location = new Point(9, 44);
             labelCarbonThickness.Name = "labelCarbonThickness";
             labelCarbonThickness.Size = new Size(122, 15);
             labelCarbonThickness.TabIndex = 12;
@@ -1198,7 +1215,7 @@ namespace MineraScope
             // 
             // textBoxDetectorName
             // 
-            textBoxDetectorName.Location = new Point(135, 2);
+            textBoxDetectorName.Location = new Point(135, 12);
             textBoxDetectorName.Margin = new Padding(3, 2, 3, 2);
             textBoxDetectorName.Name = "textBoxDetectorName";
             textBoxDetectorName.Size = new Size(50, 23);
@@ -1257,7 +1274,7 @@ namespace MineraScope
             // groupBox5
             // 
             groupBox5.Controls.Add(label2);
-            groupBox5.Location = new Point(10, 44);
+            groupBox5.Location = new Point(7, 20);
             groupBox5.Name = "groupBox5";
             groupBox5.Size = new Size(0, 0);
             groupBox5.TabIndex = 41;
@@ -1297,6 +1314,65 @@ namespace MineraScope
             debugModeToolStripMenuItem.Size = new Size(142, 22);
             debugModeToolStripMenuItem.Text = "Debug mode";
             // 
+            // groupBox1
+            // 
+            groupBox1.Controls.Add(numericUpDownProbeCurrent);
+            groupBox1.Controls.Add(groupBox5);
+            groupBox1.Controls.Add(labelProbeCurrent);
+            groupBox1.Controls.Add(labelDetectorName);
+            groupBox1.Controls.Add(numericUpDownLiveTime);
+            groupBox1.Controls.Add(textBoxDetectorName);
+            groupBox1.Controls.Add(labelLiveTime);
+            groupBox1.Controls.Add(labelCarbonThickness);
+            groupBox1.Controls.Add(labelBeamEnergy);
+            groupBox1.Controls.Add(numericUpDownBeamEnergy);
+            groupBox1.Controls.Add(numericUpDownCarbonThichness);
+            groupBox1.Location = new Point(8, 24);
+            groupBox1.Name = "groupBox1";
+            groupBox1.Size = new Size(637, 67);
+            groupBox1.TabIndex = 99;
+            groupBox1.TabStop = false;
+            groupBox1.Text = "SEM-EDX条件";
+            // 
+            // checkBox1
+            // 
+            checkBox1.AutoSize = true;
+            checkBox1.Location = new Point(367, 3);
+            checkBox1.Name = "checkBox1";
+            checkBox1.Size = new Size(107, 19);
+            checkBox1.TabIndex = 100;
+            checkBox1.Text = "詳細情報を表示";
+            checkBox1.UseVisualStyleBackColor = true;
+            // 
+            // flowLayoutPanel4
+            // 
+            flowLayoutPanel4.AutoSize = true;
+            flowLayoutPanel4.Controls.Add(buttonUpdate);
+            flowLayoutPanel4.Controls.Add(buttonAddList);
+            flowLayoutPanel4.Dock = DockStyle.Bottom;
+            flowLayoutPanel4.FlowDirection = FlowDirection.RightToLeft;
+            flowLayoutPanel4.Location = new Point(3, 132);
+            flowLayoutPanel4.Name = "flowLayoutPanel4";
+            flowLayoutPanel4.Size = new Size(634, 31);
+            flowLayoutPanel4.TabIndex = 105;
+            // 
+            // groupBox2
+            // 
+            groupBox2.Controls.Add(textBoxEndmembers_Constraints);
+            groupBox2.Controls.Add(labelEndmembers_Resolution);
+            groupBox2.Controls.Add(labelEndmembers_Constraints);
+            groupBox2.Controls.Add(numericUpDownEndmembers_Resolution);
+            groupBox2.Controls.Add(labelEndmembers_CompositionLists);
+            groupBox2.Controls.Add(numericUpDownMineral_Target);
+            groupBox2.Controls.Add(textBoxEndmembers_CompositionLists);
+            groupBox2.Controls.Add(labelMineral_Target);
+            groupBox2.Location = new Point(310, 50);
+            groupBox2.Name = "groupBox2";
+            groupBox2.Size = new Size(317, 181);
+            groupBox2.TabIndex = 103;
+            groupBox2.TabStop = false;
+            groupBox2.Text = "サンプリング条件";
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -1315,9 +1391,10 @@ namespace MineraScope
             groupBoxMineralInfo.PerformLayout();
             groupBoxEndmembers.ResumeLayout(false);
             groupBoxEndmembers.PerformLayout();
+            panel1.ResumeLayout(false);
+            panel1.PerformLayout();
+            flowLayoutPanel3.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)numericUpDownMineral_Target).EndInit();
-            panelEndmembers.ResumeLayout(false);
-            panelEndmembers.PerformLayout();
             groupBoxComposition.ResumeLayout(false);
             groupBoxComposition.PerformLayout();
             ModelTrain.ResumeLayout(false);
@@ -1343,11 +1420,12 @@ namespace MineraScope
             SpectrumGeneration.ResumeLayout(false);
             SpectrumGeneration.PerformLayout();
             groupBoxMineral.ResumeLayout(false);
+            groupBoxMineral.PerformLayout();
+            flowLayoutPanel2.ResumeLayout(false);
+            flowLayoutPanel2.PerformLayout();
             tabControl2.ResumeLayout(false);
             tabPage5.ResumeLayout(false);
             tabPage5.PerformLayout();
-            tabPage6.ResumeLayout(false);
-            tabPage6.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownProbeCurrent).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownLiveTime).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownCarbonThichness).EndInit();
@@ -1359,6 +1437,12 @@ namespace MineraScope
             groupBox5.PerformLayout();
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
+            groupBox1.ResumeLayout(false);
+            groupBox1.PerformLayout();
+            flowLayoutPanel4.ResumeLayout(false);
+            flowLayoutPanel4.PerformLayout();
+            groupBox2.ResumeLayout(false);
+            groupBox2.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -1377,7 +1461,6 @@ namespace MineraScope
         private EndmemberControl EndmemberControl1;
         private Label labelProgress;
         private GroupBox groupBoxEndmembers;
-        private Panel panelEndmembers;
         private CheckedListBox checkedListBoxMineral;
         private Label labelCompositionCount;
         private TextBox textBoxCompositionCount;
@@ -1467,7 +1550,6 @@ namespace MineraScope
         private Label labelMineral_Target;
         private NumericUpDown numericUpDownMineral_Target;
         private CheckedListBox checkedListBoxTrainMinerals;
-        private Button button1;
         private Button buttonAllSelect;
         private ProgressBar progressBar1;
         private TextBox textBoxPythonScript;
@@ -1476,6 +1558,13 @@ namespace MineraScope
         private Label labelLiveTime;
         private NumericUpDown numericUpDownProbeCurrent;
         private Label labelProbeCurrent;
+        private FlowLayoutPanel flowLayoutPanel2;
+        private FlowLayoutPanel flowLayoutPanel3;
+        private Panel panel1;
+        private GroupBox groupBox1;
+        private CheckBox checkBox1;
+        private GroupBox groupBox2;
+        private FlowLayoutPanel flowLayoutPanel4;
     }
 }
 
