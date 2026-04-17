@@ -17,16 +17,16 @@ namespace MineraScope
 
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
         {
-            // 260416Codex: Generator 導線では既存の Form1 を開く
-            using var form = new Form1();
-            form.ShowDialog(this);
+            // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに Form1 を残します。
+            var form = new Form1();
+            form.Show(this);
         }
 
         private void buttonOpenAnalyzer_Click(object sender, EventArgs e)
         {
-            // 260416Codex: Analyzer 導線では AnalyzerForm を開く
-            using var form = new AnalyzerForm();
-            form.ShowDialog(this);
+            // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに AnalyzerForm を残します。
+            var form = new AnalyzerForm();
+            form.Show(this);
         }
     }
 }

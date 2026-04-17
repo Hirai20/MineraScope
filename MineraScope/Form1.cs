@@ -178,17 +178,6 @@ namespace MineraScope
         private static T[] GetCheckedItems<T>(CheckedListBox listBox) =>
             listBox.CheckedItems.Cast<T>().ToArray();
 
-        private static void AppendLogLine(TextBox target, string message)
-        {
-            if (target.InvokeRequired)
-            {
-                target.Invoke(new Action(() => target.AppendText($"{message}{Environment.NewLine}")));
-                return;
-            }
-
-            target.AppendText($"{message}{Environment.NewLine}");
-        }
-
         private static string ToLowerInvariant(string value) => value.ToLowerInvariant();
         // 260416Codex: 単一組成時の複製と通常分割を1か所に集約
         private static T[][] CreateSimulationChunks<T>(T[] source, int parallelCount) =>
@@ -696,70 +685,40 @@ namespace MineraScope
             UpdateSelectedSolution();
         }
 
-        private void listBox1_DragDrop(object sender, DragEventArgs e)
+        #region フォルダ選択ダイアログ
+        // 260416Codex: Form1 固有のボタン名と共通フォルダ選択 helper をつなぐ役目だけに絞ります。
+        private void buttonFolderBrowserDialog_Click(object sender, EventArgs e)
         {
-            var droppedPaths = (string[])e.Data.GetData(DataFormats.FileDrop);
-            var msaFiles = new List<string>();
-
-            foreach (var path in droppedPaths)
-            {
-                var extension = Path.GetExtension(path);
-                if (File.Exists(path) && (extension.Equals(".msa", StringComparison.OrdinalIgnoreCase) || extension.Equals(".emsa", StringComparison.OrdinalIgnoreCase)))
-                {
-                    msaFiles.Add(path);
-                }
-                else if (Directory.Exists(path))
-                {
-                    msaFiles.AddRange(Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
-                        .Where(s => s.EndsWith(".msa", StringComparison.OrdinalIgnoreCase) || s.EndsWith(".emsa", StringComparison.OrdinalIgnoreCase)));
-                }
-            }
-            if (msaFiles.Count == 0)
+            if (sender is not Button button)
             {
                 return;
             }
 
-            listBoxPrediction_Failes.Items.Clear();
-            listBoxPrediction_Failes.Items.AddRange(msaFiles.Cast<object>().ToArray());
-        }
-
-        private void listBox1_DragEnter(object sender, DragEventArgs e)
-       => e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
-
-        #region フォルダ選択ダイアログ
-        private void buttonFolderBrowserDialog_Click(object sender, EventArgs e)
-        {
-            if (sender is Button button)
+            var targetTextBox = button.Name switch
             {
-                using var dialog = new FolderBrowserDialog();
-                if (dialog.ShowDialog() == DialogResult.OK)
-                {
-                    var targetTextBox = button.Name switch
-                    {
-                        nameof(buttonPathEDX) => textBoxPathEDX,
-                        nameof(buttonPathPython) => textBoxPathPython,
-                        nameof(buttonPathDTSA) => textBoxPathDTSA,
-                        nameof(buttonModel_Teacher) => textBoxModel_Teacher,
-                        nameof(buttonModel_SaveFolder) => textBoxModel_Save,
-                        nameof(buttonLoadModel) => textBoxLoadModel,
-                        _ => null
-                    };
+                nameof(buttonPathEDX) => textBoxPathEDX,
+                nameof(buttonPathPython) => textBoxPathPython,
+                nameof(buttonPathDTSA) => textBoxPathDTSA,
+                nameof(buttonModel_Teacher) => textBoxModel_Teacher,
+                nameof(buttonModel_SaveFolder) => textBoxModel_Save,
+                _ => null
+            };
 
-                    if (targetTextBox is not null)
-                    {
-                        targetTextBox.Text = dialog.SelectedPath;
-                    }
-                }
+            if (targetTextBox is not null)
+            {
+                FolderSelectionHelper.TrySelectFolder(targetTextBox);
             }
         }
+
+        // 260416Codex: 教師データ選択も共通 helper を通して後から別 Form へ移しやすくします。
         private void buttonModel_Teacher_Click(object sender, EventArgs e)
         {
-            using var dialog = new FolderBrowserDialog();
-            if (dialog.ShowDialog() == DialogResult.OK)
+            if (!FolderSelectionHelper.TrySelectFolder(textBoxModel_Teacher))
             {
-                textBoxModel_Teacher.Text = dialog.SelectedPath;
-                ScanMineralFolders(dialog.SelectedPath);
+                return;
             }
+
+            ScanMineralFolders(textBoxModel_Teacher.Text);
         }
         #endregion
         #region リストに追加・更新・削除・初期化メソッド
@@ -857,9 +816,7 @@ namespace MineraScope
 
         #endregion
         private void TrainLog(string message)
-            => AppendLogLine(textBoxModel_Evaluation, message);
-        private void PredictionLog(string message)
-            => AppendLogLine(textBoxPredicition_Result, message);
+            => TextBoxLogHelper.AppendLine(textBoxModel_Evaluation, message);
         //分類モデル
         private async void buttonModel_Train_Click(object sender, EventArgs e)
         {
@@ -903,28 +860,6 @@ namespace MineraScope
             //  完了処理
             buttonModel_Train.Enabled = true;
         }
-        private async void buttonPrediction_Click(object sender, EventArgs e)
-        {
-            buttonPrediction.Enabled = false;
-            textBoxPredicition_Result.Clear();
-
-            string modelPath = textBoxLoadModel.Text;
-            var files = listBoxPrediction_Failes.Items
-                .Cast<object>()
-                .Select(item => item.ToString())
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .Cast<string>()
-                .ToList();
-
-            await Task.Run(() =>
-            {
-                var predictDeepLearning = new DeepLearning(PredictionLog);
-                predictDeepLearning.RunPrediction(modelPath, files, AssemblyPath);
-            });
-
-            buttonPrediction.Enabled = true;
-        }
-
         private void optionToolStripMenuItem_CheckedChanged(object sender, EventArgs e)
         {
 
