@@ -108,32 +108,7 @@ namespace MineraScope
             }
 
 
-            //SolidSolution[] ss =
-            //    [
-            //        new SolidSolution("Olivine",
-            //        "(Mg,Fe)2SiO4",
-            //        [
-            //        new Mineral("Forsterite", "Mg2SiO4"),
-            //        new Mineral("Fayalite", "Fe2SiO4")
-            //        ],
-            //        [ "Forsterite + Fayalite = 1" ]),
-
-            //        new SolidSolution("Pyroxene",
-            //        "(Mg,Fe,Ca)SiO3",
-            //        [
-            //        new Mineral("Enstatite", "MgSiO3"),
-            //        new Mineral("Ferrosilite", "FeSiO3"),
-            //        new Mineral("Wollastonite", "CaSiO3")
-            //        ],
-            //        [ "Wollastonite <= 0.5"]),
-
-            //        new SolidSolution("Quartz",
-            //        "SiO2",
-            //        [
-            //        new Mineral("Quartz", "SiO2"),
-            //        ],
-            //        []),
-            //    ];
+            
 
             //var fs1 = new FileStream(AssemblyPath + "\\MineralDatabase.xml", FileMode.Create);
             //xml.Serialize(fs1, ss);
@@ -197,8 +172,6 @@ namespace MineraScope
             {
                 return;
             }
-
-            // 260416Codex: Python スクリプトのデバッグ用プレビュー表示は廃止し、実行に必要な処理だけ残します。
             foreach (var batch in plan.Batches)
             {
                 var tasks = batch.Jobs
@@ -621,7 +594,7 @@ namespace MineraScope
                 nameof(buttonPathEDX) => textBoxPathEDX,
                 nameof(buttonPathDTSA) => textBoxPathDTSA,
                 nameof(buttonModel_Teacher) => textBoxPathTeacher,
-                nameof(buttonModel_SaveFolder) => textBoxModel_Save,
+                nameof(buttonModel_SaveFolder) => textBoxModelPath,
                 _ => null
             };
 
@@ -729,7 +702,7 @@ namespace MineraScope
             }
 
             // 260416Codex: 既定保存先へ解決された結果を UI にも反映し、実行後の保存先が見える状態にします。
-            textBoxModel_Save.Text = trainingPlan.ModelOutputFolder;
+            textBoxModelPath.Text = trainingPlan.ModelOutputFolder;
 
             //  UIロックとログクリア
             buttonModel_Train.Enabled = false;

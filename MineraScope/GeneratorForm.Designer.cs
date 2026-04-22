@@ -45,7 +45,7 @@
             labelMineralInfo_Name = new Label();
             textBoxMineral_Name = new TextBox();
             groupBoxEndmembers = new GroupBox();
-            panel1 = new Panel();
+            panelEndmembers = new Panel();
             buttonEndmember_Delete = new Button();
             buttonEndmember_Add = new Button();
             labelEndmember_Formula = new Label();
@@ -54,7 +54,7 @@
             EndmemberControl1 = new EndmemberControl();
             EndmemberControl2 = new EndmemberControl();
             buttonAddList = new Button();
-            buttonUpdate = new Button();
+            buttonUpdateList = new Button();
             labelCompositionCount = new Label();
             textBoxCompositionCount = new TextBox();
             checkedListBoxMineral = new CheckedListBox();
@@ -67,12 +67,9 @@
             checkedListBoxTrainMinerals = new CheckedListBox();
             textBoxModel_Evaluation = new TextBox();
             label3 = new Label();
-            buttonModel_SaveFolder = new Button();
             numericUpDownModel_EaryStopping = new NumericUpDown();
             buttonModel_Train = new Button();
-            label7 = new Label();
             numericUpDownModel_Epochs = new NumericUpDown();
-            textBoxModel_Save = new TextBox();
             numericUpDownModel_BatchSize = new NumericUpDown();
             label5 = new Label();
             label10 = new Label();
@@ -80,32 +77,33 @@
             groupBoxModel_LearningData = new GroupBox();
             numericUpDownModel_ValidationSplit = new NumericUpDown();
             label13 = new Label();
+            numericBoxProbeCurrent = new Crystallography.Controls.NumericBox();
+            numericBoxLiveTime = new Crystallography.Controls.NumericBox();
+            buttonModel_SaveFolder = new Button();
+            label7 = new Label();
+            textBoxModelPath = new TextBox();
             labelPathTeacher = new Label();
             buttonModel_Teacher = new Button();
             textBoxPathTeacher = new TextBox();
-            buttonMineral_Delete = new Button();
+            buttonDelete = new Button();
             SpectrumGeneration = new GroupBox();
             groupBox1 = new GroupBox();
-            numericUpDownProbeCurrent = new NumericUpDown();
+            numericBoxCarbonThickness = new Crystallography.Controls.NumericBox();
             groupBox5 = new GroupBox();
             label2 = new Label();
-            labelProbeCurrent = new Label();
+            numericBoxBeamEnergy = new Crystallography.Controls.NumericBox();
             labelDetectorName = new Label();
-            numericUpDownLiveTime = new NumericUpDown();
             textBoxDetectorName = new TextBox();
-            labelLiveTime = new Label();
-            labelCarbonThickness = new Label();
-            labelBeamEnergy = new Label();
-            numericUpDownBeamEnergy = new NumericUpDown();
-            numericUpDownCarbonThichness = new NumericUpDown();
             groupBoxMineral = new GroupBox();
             flowLayoutPanel4 = new FlowLayoutPanel();
             flowLayoutPanel2 = new FlowLayoutPanel();
-            buttonMineral_AllDelete = new Button();
-            buttonMineral_Reset = new Button();
+            buttonAllDelete = new Button();
+            buttonReset = new Button();
             checkBox1 = new CheckBox();
             tabControl2 = new TabControl();
             tabPage5 = new TabPage();
+            flowLayoutPanel1 = new FlowLayoutPanel();
+            panel2 = new Panel();
             panel4 = new Panel();
             panelPathEDX = new Panel();
             labelPathEDX = new Label();
@@ -120,13 +118,12 @@
             labelExecution_Count = new Label();
             numericUpDownExecution_Parallel = new NumericUpDown();
             labelExecution_Parallel = new Label();
-            panel2 = new Panel();
             ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).BeginInit();
             groupBoxMineralInfo.SuspendLayout();
             groupBox2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownMineral_Target).BeginInit();
             groupBoxEndmembers.SuspendLayout();
-            panel1.SuspendLayout();
+            panelEndmembers.SuspendLayout();
             flowLayoutPanel3.SuspendLayout();
             groupBoxComposition.SuspendLayout();
             ModelTrain.SuspendLayout();
@@ -138,28 +135,25 @@
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_ValidationSplit).BeginInit();
             SpectrumGeneration.SuspendLayout();
             groupBox1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownProbeCurrent).BeginInit();
             groupBox5.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownLiveTime).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownBeamEnergy).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownCarbonThichness).BeginInit();
             groupBoxMineral.SuspendLayout();
             flowLayoutPanel4.SuspendLayout();
             flowLayoutPanel2.SuspendLayout();
             tabControl2.SuspendLayout();
             tabPage5.SuspendLayout();
+            flowLayoutPanel1.SuspendLayout();
+            panel2.SuspendLayout();
             panel4.SuspendLayout();
             panelPathEDX.SuspendLayout();
             panelPathDTSA.SuspendLayout();
             tabPage7.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).BeginInit();
-            panel2.SuspendLayout();
             SuspendLayout();
             // 
             // buttonSpectrumGenerationRun
             // 
-            buttonSpectrumGenerationRun.Location = new Point(558, 654);
+            buttonSpectrumGenerationRun.Location = new Point(558, 666);
             buttonSpectrumGenerationRun.Margin = new Padding(3, 2, 3, 2);
             buttonSpectrumGenerationRun.Name = "buttonSpectrumGenerationRun";
             buttonSpectrumGenerationRun.Size = new Size(77, 24);
@@ -197,7 +191,7 @@
             groupBoxMineralInfo.Controls.Add(textBoxMineral_Name);
             groupBoxMineralInfo.Controls.Add(groupBoxEndmembers);
             groupBoxMineralInfo.Dock = DockStyle.Bottom;
-            groupBoxMineralInfo.Location = new Point(3, 167);
+            groupBoxMineralInfo.Location = new Point(3, 175);
             groupBoxMineralInfo.Name = "groupBoxMineralInfo";
             groupBoxMineralInfo.Size = new Size(634, 242);
             groupBoxMineralInfo.TabIndex = 37;
@@ -311,7 +305,7 @@
             // 
             // groupBoxEndmembers
             // 
-            groupBoxEndmembers.Controls.Add(panel1);
+            groupBoxEndmembers.Controls.Add(panelEndmembers);
             groupBoxEndmembers.Location = new Point(5, 50);
             groupBoxEndmembers.Margin = new Padding(1);
             groupBoxEndmembers.Name = "groupBoxEndmembers";
@@ -321,26 +315,28 @@
             groupBoxEndmembers.TabStop = false;
             groupBoxEndmembers.Text = "端成分";
             // 
-            // panel1
+            // panelEndmembers
             // 
-            panel1.AutoSize = true;
-            panel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panel1.Controls.Add(buttonEndmember_Delete);
-            panel1.Controls.Add(buttonEndmember_Add);
-            panel1.Controls.Add(labelEndmember_Formula);
-            panel1.Controls.Add(labelEndmember_Name);
-            panel1.Controls.Add(flowLayoutPanel3);
-            panel1.Location = new Point(4, 20);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(288, 124);
-            panel1.TabIndex = 106;
+            panelEndmembers.AutoSize = true;
+            panelEndmembers.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panelEndmembers.Controls.Add(buttonEndmember_Delete);
+            panelEndmembers.Controls.Add(buttonEndmember_Add);
+            panelEndmembers.Controls.Add(labelEndmember_Formula);
+            panelEndmembers.Controls.Add(labelEndmember_Name);
+            panelEndmembers.Controls.Add(flowLayoutPanel3);
+            panelEndmembers.Location = new Point(4, 20);
+            panelEndmembers.Name = "panelEndmembers";
+            panelEndmembers.Size = new Size(291, 127);
+            panelEndmembers.TabIndex = 106;
             // 
             // buttonEndmember_Delete
             // 
+            buttonEndmember_Delete.AutoSize = true;
+            buttonEndmember_Delete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonEndmember_Delete.Font = new Font("Yu Gothic UI", 8F);
-            buttonEndmember_Delete.Location = new Point(244, 98);
+            buttonEndmember_Delete.Location = new Point(249, 101);
             buttonEndmember_Delete.Name = "buttonEndmember_Delete";
-            buttonEndmember_Delete.Size = new Size(37, 23);
+            buttonEndmember_Delete.Size = new Size(39, 23);
             buttonEndmember_Delete.TabIndex = 98;
             buttonEndmember_Delete.Text = "削除";
             buttonEndmember_Delete.UseVisualStyleBackColor = true;
@@ -348,10 +344,12 @@
             // 
             // buttonEndmember_Add
             // 
+            buttonEndmember_Add.AutoSize = true;
+            buttonEndmember_Add.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonEndmember_Add.Font = new Font("Yu Gothic UI", 8F);
-            buttonEndmember_Add.Location = new Point(204, 98);
+            buttonEndmember_Add.Location = new Point(204, 101);
             buttonEndmember_Add.Name = "buttonEndmember_Add";
-            buttonEndmember_Add.Size = new Size(37, 23);
+            buttonEndmember_Add.Size = new Size(39, 23);
             buttonEndmember_Add.TabIndex = 100;
             buttonEndmember_Add.Text = "追加";
             buttonEndmember_Add.UseVisualStyleBackColor = true;
@@ -420,20 +418,20 @@
             buttonAddList.UseVisualStyleBackColor = true;
             buttonAddList.Click += buttonAddList_Click;
             // 
-            // buttonUpdate
+            // buttonUpdateList
             // 
-            buttonUpdate.Location = new Point(526, 3);
-            buttonUpdate.Name = "buttonUpdate";
-            buttonUpdate.Size = new Size(105, 24);
-            buttonUpdate.TabIndex = 99;
-            buttonUpdate.Text = "リストを更新";
-            buttonUpdate.UseVisualStyleBackColor = true;
-            buttonUpdate.Click += buttonUpdate_Click;
+            buttonUpdateList.Location = new Point(526, 3);
+            buttonUpdateList.Name = "buttonUpdateList";
+            buttonUpdateList.Size = new Size(105, 24);
+            buttonUpdateList.TabIndex = 99;
+            buttonUpdateList.Text = "リストを更新";
+            buttonUpdateList.UseVisualStyleBackColor = true;
+            buttonUpdateList.Click += buttonUpdate_Click;
             // 
             // labelCompositionCount
             // 
             labelCompositionCount.AutoSize = true;
-            labelCompositionCount.Location = new Point(527, 680);
+            labelCompositionCount.Location = new Point(199, 675);
             labelCompositionCount.Margin = new Padding(2, 0, 2, 0);
             labelCompositionCount.Name = "labelCompositionCount";
             labelCompositionCount.Size = new Size(99, 15);
@@ -443,7 +441,7 @@
             // textBoxCompositionCount
             // 
             textBoxCompositionCount.BackColor = Color.White;
-            textBoxCompositionCount.Location = new Point(378, 657);
+            textBoxCompositionCount.Location = new Point(327, 654);
             textBoxCompositionCount.Margin = new Padding(3, 2, 3, 2);
             textBoxCompositionCount.Multiline = true;
             textBoxCompositionCount.Name = "textBoxCompositionCount";
@@ -461,7 +459,7 @@
             checkedListBoxMineral.MultiColumn = true;
             checkedListBoxMineral.Name = "checkedListBoxMineral";
             checkedListBoxMineral.ScrollAlwaysVisible = true;
-            checkedListBoxMineral.Size = new Size(634, 88);
+            checkedListBoxMineral.Size = new Size(634, 96);
             checkedListBoxMineral.TabIndex = 86;
             checkedListBoxMineral.ItemCheck += checkedListBoxMineral_ItemCheck;
             checkedListBoxMineral.SelectedIndexChanged += checkedListBoxMineral_SelectedIndexChanged;
@@ -526,7 +524,7 @@
             numericBox1.FooterText = "フッター";
             numericBox1.HeaderFont = new Font("Yu Gothic UI", 9F);
             numericBox1.HeaderText = "エポック数";
-            numericBox1.Location = new Point(8, 218);
+            numericBox1.Location = new Point(19, 221);
             numericBox1.Margin = new Padding(0);
             numericBox1.MaximumSize = new Size(1000, 28);
             numericBox1.MinimumSize = new Size(1, 18);
@@ -580,18 +578,6 @@
             label3.TabIndex = 100;
             label3.Text = "待機回数";
             // 
-            // buttonModel_SaveFolder
-            // 
-            buttonModel_SaveFolder.AutoSize = true;
-            buttonModel_SaveFolder.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonModel_SaveFolder.Location = new Point(274, 8);
-            buttonModel_SaveFolder.Name = "buttonModel_SaveFolder";
-            buttonModel_SaveFolder.Size = new Size(26, 25);
-            buttonModel_SaveFolder.TabIndex = 1;
-            buttonModel_SaveFolder.Text = "...";
-            buttonModel_SaveFolder.UseVisualStyleBackColor = true;
-            buttonModel_SaveFolder.Click += buttonFolderBrowserDialog_Click;
-            // 
             // numericUpDownModel_EaryStopping
             // 
             numericUpDownModel_EaryStopping.Location = new Point(300, 124);
@@ -610,15 +596,6 @@
             buttonModel_Train.UseVisualStyleBackColor = true;
             buttonModel_Train.Click += buttonModel_Train_Click;
             // 
-            // label7
-            // 
-            label7.AutoSize = true;
-            label7.Location = new Point(11, 13);
-            label7.Name = "label7";
-            label7.Size = new Size(81, 15);
-            label7.TabIndex = 24;
-            label7.Text = "モデルの保存先";
-            // 
             // numericUpDownModel_Epochs
             // 
             numericUpDownModel_Epochs.Location = new Point(138, 124);
@@ -627,13 +604,6 @@
             numericUpDownModel_Epochs.Size = new Size(42, 23);
             numericUpDownModel_Epochs.TabIndex = 96;
             numericUpDownModel_Epochs.Value = new decimal(new int[] { 500, 0, 0, 0 });
-            // 
-            // textBoxModel_Save
-            // 
-            textBoxModel_Save.Location = new Point(113, 11);
-            textBoxModel_Save.Name = "textBoxModel_Save";
-            textBoxModel_Save.Size = new Size(155, 23);
-            textBoxModel_Save.TabIndex = 23;
             // 
             // numericUpDownModel_BatchSize
             // 
@@ -702,10 +672,81 @@
             label13.TabIndex = 30;
             label13.Text = "テストデータの割合(%)";
             // 
+            // numericBoxProbeCurrent
+            // 
+            numericBoxProbeCurrent.BackColor = Color.Transparent;
+            numericBoxProbeCurrent.DecimalPlaces = 2;
+            numericBoxProbeCurrent.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxProbeCurrent.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxProbeCurrent.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxProbeCurrent.HeaderText = "照射電流(nA)";
+            numericBoxProbeCurrent.Location = new Point(216, 40);
+            numericBoxProbeCurrent.Margin = new Padding(0);
+            numericBoxProbeCurrent.MaximumSize = new Size(1000, 28);
+            numericBoxProbeCurrent.MinimumSize = new Size(1, 18);
+            numericBoxProbeCurrent.Name = "numericBoxProbeCurrent";
+            numericBoxProbeCurrent.RadianValue = 0.0087266462599716477D;
+            numericBoxProbeCurrent.ShowUpDown = true;
+            numericBoxProbeCurrent.Size = new Size(138, 26);
+            numericBoxProbeCurrent.SmartIncrement = true;
+            numericBoxProbeCurrent.TabIndex = 104;
+            numericBoxProbeCurrent.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxProbeCurrent.Value = 0.5D;
+            // 
+            // numericBoxLiveTime
+            // 
+            numericBoxLiveTime.BackColor = Color.Transparent;
+            numericBoxLiveTime.DecimalPlaces = 1;
+            numericBoxLiveTime.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxLiveTime.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxLiveTime.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxLiveTime.HeaderText = "測定時間(秒)";
+            numericBoxLiveTime.Location = new Point(370, 14);
+            numericBoxLiveTime.Margin = new Padding(0);
+            numericBoxLiveTime.MaximumSize = new Size(1000, 28);
+            numericBoxLiveTime.Minimum = 0D;
+            numericBoxLiveTime.MinimumSize = new Size(1, 18);
+            numericBoxLiveTime.Name = "numericBoxLiveTime";
+            numericBoxLiveTime.RadianValue = 2.0943951023931953D;
+            numericBoxLiveTime.ShowUpDown = true;
+            numericBoxLiveTime.Size = new Size(136, 26);
+            numericBoxLiveTime.SmartIncrement = true;
+            numericBoxLiveTime.TabIndex = 105;
+            numericBoxLiveTime.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxLiveTime.Value = 120D;
+            // 
+            // buttonModel_SaveFolder
+            // 
+            buttonModel_SaveFolder.AutoSize = true;
+            buttonModel_SaveFolder.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonModel_SaveFolder.Location = new Point(275, 5);
+            buttonModel_SaveFolder.Name = "buttonModel_SaveFolder";
+            buttonModel_SaveFolder.Size = new Size(26, 25);
+            buttonModel_SaveFolder.TabIndex = 1;
+            buttonModel_SaveFolder.Text = "...";
+            buttonModel_SaveFolder.UseVisualStyleBackColor = true;
+            buttonModel_SaveFolder.Click += buttonFolderBrowserDialog_Click;
+            // 
+            // label7
+            // 
+            label7.AutoSize = true;
+            label7.Location = new Point(12, 10);
+            label7.Name = "label7";
+            label7.Size = new Size(81, 15);
+            label7.TabIndex = 24;
+            label7.Text = "モデルの保存先";
+            // 
+            // textBoxModelPath
+            // 
+            textBoxModelPath.Location = new Point(115, 10);
+            textBoxModelPath.Name = "textBoxModelPath";
+            textBoxModelPath.Size = new Size(155, 23);
+            textBoxModelPath.TabIndex = 23;
+            // 
             // labelPathTeacher
             // 
             labelPathTeacher.AutoSize = true;
-            labelPathTeacher.Location = new Point(20, 10);
+            labelPathTeacher.Location = new Point(23, 10);
             labelPathTeacher.Name = "labelPathTeacher";
             labelPathTeacher.Size = new Size(57, 15);
             labelPathTeacher.TabIndex = 2;
@@ -715,7 +756,7 @@
             // 
             buttonModel_Teacher.AutoSize = true;
             buttonModel_Teacher.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonModel_Teacher.Location = new Point(274, 6);
+            buttonModel_Teacher.Location = new Point(275, 5);
             buttonModel_Teacher.Name = "buttonModel_Teacher";
             buttonModel_Teacher.Size = new Size(26, 25);
             buttonModel_Teacher.TabIndex = 1;
@@ -725,23 +766,23 @@
             // 
             // textBoxPathTeacher
             // 
-            textBoxPathTeacher.Location = new Point(113, 5);
+            textBoxPathTeacher.Location = new Point(115, 5);
             textBoxPathTeacher.Name = "textBoxPathTeacher";
             textBoxPathTeacher.Size = new Size(155, 23);
             textBoxPathTeacher.TabIndex = 1;
             // 
-            // buttonMineral_Delete
+            // buttonDelete
             // 
-            buttonMineral_Delete.AutoSize = true;
-            buttonMineral_Delete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonMineral_Delete.Font = new Font("Yu Gothic UI", 8F);
-            buttonMineral_Delete.Location = new Point(536, 3);
-            buttonMineral_Delete.Name = "buttonMineral_Delete";
-            buttonMineral_Delete.Size = new Size(39, 23);
-            buttonMineral_Delete.TabIndex = 97;
-            buttonMineral_Delete.Text = "削除";
-            buttonMineral_Delete.UseVisualStyleBackColor = true;
-            buttonMineral_Delete.Click += buttonMineral_Delete_Click;
+            buttonDelete.AutoSize = true;
+            buttonDelete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonDelete.Font = new Font("Yu Gothic UI", 8F);
+            buttonDelete.Location = new Point(536, 3);
+            buttonDelete.Name = "buttonDelete";
+            buttonDelete.Size = new Size(39, 23);
+            buttonDelete.TabIndex = 97;
+            buttonDelete.Text = "削除";
+            buttonDelete.UseVisualStyleBackColor = true;
+            buttonDelete.Click += buttonMineral_Delete_Click;
             // 
             // SpectrumGeneration
             // 
@@ -761,34 +802,41 @@
             // 
             // groupBox1
             // 
-            groupBox1.Controls.Add(numericUpDownProbeCurrent);
+            groupBox1.Controls.Add(numericBoxCarbonThickness);
+            groupBox1.Controls.Add(numericBoxLiveTime);
+            groupBox1.Controls.Add(numericBoxProbeCurrent);
             groupBox1.Controls.Add(groupBox5);
-            groupBox1.Controls.Add(labelProbeCurrent);
+            groupBox1.Controls.Add(numericBoxBeamEnergy);
             groupBox1.Controls.Add(labelDetectorName);
-            groupBox1.Controls.Add(numericUpDownLiveTime);
             groupBox1.Controls.Add(textBoxDetectorName);
-            groupBox1.Controls.Add(labelLiveTime);
-            groupBox1.Controls.Add(labelCarbonThickness);
-            groupBox1.Controls.Add(labelBeamEnergy);
-            groupBox1.Controls.Add(numericUpDownBeamEnergy);
-            groupBox1.Controls.Add(numericUpDownCarbonThichness);
-            groupBox1.Location = new Point(8, 24);
+            groupBox1.Location = new Point(5, 156);
             groupBox1.Name = "groupBox1";
-            groupBox1.Size = new Size(637, 67);
+            groupBox1.Size = new Size(640, 74);
             groupBox1.TabIndex = 99;
             groupBox1.TabStop = false;
             groupBox1.Text = "SEM-EDX条件";
             // 
-            // numericUpDownProbeCurrent
+            // numericBoxCarbonThickness
             // 
-            numericUpDownProbeCurrent.DecimalPlaces = 2;
-            numericUpDownProbeCurrent.Location = new Point(440, 42);
-            numericUpDownProbeCurrent.Margin = new Padding(3, 2, 3, 2);
-            numericUpDownProbeCurrent.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
-            numericUpDownProbeCurrent.Name = "numericUpDownProbeCurrent";
-            numericUpDownProbeCurrent.Size = new Size(50, 23);
-            numericUpDownProbeCurrent.TabIndex = 18;
-            numericUpDownProbeCurrent.Value = new decimal(new int[] { 5, 0, 0, 65536 });
+            numericBoxCarbonThickness.BackColor = Color.Transparent;
+            numericBoxCarbonThickness.DecimalPlaces = 3;
+            numericBoxCarbonThickness.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.HeaderText = "カーボン蒸着の厚さ(nm)";
+            numericBoxCarbonThickness.Location = new Point(9, 39);
+            numericBoxCarbonThickness.Margin = new Padding(0);
+            numericBoxCarbonThickness.MaximumSize = new Size(1000, 28);
+            numericBoxCarbonThickness.Minimum = 0D;
+            numericBoxCarbonThickness.MinimumSize = new Size(1, 18);
+            numericBoxCarbonThickness.Name = "numericBoxCarbonThickness";
+            numericBoxCarbonThickness.RadianValue = 0.00034906585039886593D;
+            numericBoxCarbonThickness.ShowUpDown = true;
+            numericBoxCarbonThickness.Size = new Size(199, 26);
+            numericBoxCarbonThickness.SmartIncrement = true;
+            numericBoxCarbonThickness.TabIndex = 104;
+            numericBoxCarbonThickness.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.Value = 0.02D;
             // 
             // groupBox5
             // 
@@ -809,14 +857,29 @@
             label2.TabIndex = 42;
             label2.Text = "成分";
             // 
-            // labelProbeCurrent
+            // numericBoxBeamEnergy
             // 
-            labelProbeCurrent.AutoEllipsis = true;
-            labelProbeCurrent.Location = new Point(352, 44);
-            labelProbeCurrent.Name = "labelProbeCurrent";
-            labelProbeCurrent.Size = new Size(80, 15);
-            labelProbeCurrent.TabIndex = 17;
-            labelProbeCurrent.Text = "照射電流(nA)";
+            numericBoxBeamEnergy.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            numericBoxBeamEnergy.AutoValidate = AutoValidate.EnableAllowFocusChange;
+            numericBoxBeamEnergy.BackColor = Color.Transparent;
+            numericBoxBeamEnergy.DecimalPlaces = 2;
+            numericBoxBeamEnergy.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxBeamEnergy.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBeamEnergy.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBeamEnergy.HeaderText = "加速電圧(kV)";
+            numericBoxBeamEnergy.Location = new Point(216, 14);
+            numericBoxBeamEnergy.Margin = new Padding(0);
+            numericBoxBeamEnergy.MaximumSize = new Size(1000, 28);
+            numericBoxBeamEnergy.Minimum = 0D;
+            numericBoxBeamEnergy.MinimumSize = new Size(1, 18);
+            numericBoxBeamEnergy.Name = "numericBoxBeamEnergy";
+            numericBoxBeamEnergy.RadianValue = 0.3490658503988659D;
+            numericBoxBeamEnergy.ShowUpDown = true;
+            numericBoxBeamEnergy.Size = new Size(138, 26);
+            numericBoxBeamEnergy.SmartIncrement = true;
+            numericBoxBeamEnergy.TabIndex = 104;
+            numericBoxBeamEnergy.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBeamEnergy.Value = 20D;
             // 
             // labelDetectorName
             // 
@@ -825,17 +888,6 @@
             labelDetectorName.Size = new Size(60, 15);
             labelDetectorName.TabIndex = 8;
             labelDetectorName.Text = "検出器名";
-            // 
-            // numericUpDownLiveTime
-            // 
-            numericUpDownLiveTime.DecimalPlaces = 1;
-            numericUpDownLiveTime.Location = new Point(296, 41);
-            numericUpDownLiveTime.Margin = new Padding(3, 2, 3, 2);
-            numericUpDownLiveTime.Maximum = new decimal(new int[] { 1000, 0, 0, 0 });
-            numericUpDownLiveTime.Name = "numericUpDownLiveTime";
-            numericUpDownLiveTime.Size = new Size(50, 23);
-            numericUpDownLiveTime.TabIndex = 16;
-            numericUpDownLiveTime.Value = new decimal(new int[] { 120, 0, 0, 0 });
             // 
             // textBoxDetectorName
             // 
@@ -846,55 +898,6 @@
             textBoxDetectorName.TabIndex = 3;
             textBoxDetectorName.Text = "test";
             // 
-            // labelLiveTime
-            // 
-            labelLiveTime.AutoEllipsis = true;
-            labelLiveTime.Location = new Point(210, 44);
-            labelLiveTime.Name = "labelLiveTime";
-            labelLiveTime.Size = new Size(80, 15);
-            labelLiveTime.TabIndex = 15;
-            labelLiveTime.Text = "測定時間(秒)";
-            // 
-            // labelCarbonThickness
-            // 
-            labelCarbonThickness.Location = new Point(9, 44);
-            labelCarbonThickness.Name = "labelCarbonThickness";
-            labelCarbonThickness.Size = new Size(122, 15);
-            labelCarbonThickness.TabIndex = 12;
-            labelCarbonThickness.Text = "カーボン蒸着の厚さ(nm)";
-            // 
-            // labelBeamEnergy
-            // 
-            labelBeamEnergy.AutoEllipsis = true;
-            labelBeamEnergy.Location = new Point(210, 19);
-            labelBeamEnergy.Name = "labelBeamEnergy";
-            labelBeamEnergy.Size = new Size(80, 15);
-            labelBeamEnergy.TabIndex = 14;
-            labelBeamEnergy.Text = "加速電圧(kV)";
-            // 
-            // numericUpDownBeamEnergy
-            // 
-            numericUpDownBeamEnergy.DecimalPlaces = 2;
-            numericUpDownBeamEnergy.Location = new Point(296, 16);
-            numericUpDownBeamEnergy.Margin = new Padding(3, 2, 3, 2);
-            numericUpDownBeamEnergy.Name = "numericUpDownBeamEnergy";
-            numericUpDownBeamEnergy.Size = new Size(50, 23);
-            numericUpDownBeamEnergy.TabIndex = 13;
-            numericUpDownBeamEnergy.Value = new decimal(new int[] { 20, 0, 0, 0 });
-            // 
-            // numericUpDownCarbonThichness
-            // 
-            numericUpDownCarbonThichness.DecimalPlaces = 3;
-            numericUpDownCarbonThichness.ForeColor = SystemColors.WindowText;
-            numericUpDownCarbonThichness.Increment = new decimal(new int[] { 1, 0, 0, 131072 });
-            numericUpDownCarbonThichness.Location = new Point(137, 42);
-            numericUpDownCarbonThichness.Margin = new Padding(3, 2, 3, 2);
-            numericUpDownCarbonThichness.Name = "numericUpDownCarbonThichness";
-            numericUpDownCarbonThichness.RightToLeft = RightToLeft.No;
-            numericUpDownCarbonThichness.Size = new Size(50, 23);
-            numericUpDownCarbonThichness.TabIndex = 11;
-            numericUpDownCarbonThichness.Value = new decimal(new int[] { 2, 0, 0, 131072 });
-            // 
             // groupBoxMineral
             // 
             groupBoxMineral.Controls.Add(checkedListBoxMineral);
@@ -903,7 +906,7 @@
             groupBoxMineral.Controls.Add(groupBoxMineralInfo);
             groupBoxMineral.Location = new Point(5, 232);
             groupBoxMineral.Name = "groupBoxMineral";
-            groupBoxMineral.Size = new Size(640, 412);
+            groupBoxMineral.Size = new Size(640, 420);
             groupBoxMineral.TabIndex = 98;
             groupBoxMineral.TabStop = false;
             groupBoxMineral.Text = "計算対象";
@@ -911,11 +914,11 @@
             // flowLayoutPanel4
             // 
             flowLayoutPanel4.AutoSize = true;
-            flowLayoutPanel4.Controls.Add(buttonUpdate);
+            flowLayoutPanel4.Controls.Add(buttonUpdateList);
             flowLayoutPanel4.Controls.Add(buttonAddList);
             flowLayoutPanel4.Dock = DockStyle.Bottom;
             flowLayoutPanel4.FlowDirection = FlowDirection.RightToLeft;
-            flowLayoutPanel4.Location = new Point(3, 136);
+            flowLayoutPanel4.Location = new Point(3, 144);
             flowLayoutPanel4.Name = "flowLayoutPanel4";
             flowLayoutPanel4.Size = new Size(634, 31);
             flowLayoutPanel4.TabIndex = 105;
@@ -924,9 +927,9 @@
             // 
             flowLayoutPanel2.AutoSize = true;
             flowLayoutPanel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            flowLayoutPanel2.Controls.Add(buttonMineral_AllDelete);
-            flowLayoutPanel2.Controls.Add(buttonMineral_Delete);
-            flowLayoutPanel2.Controls.Add(buttonMineral_Reset);
+            flowLayoutPanel2.Controls.Add(buttonAllDelete);
+            flowLayoutPanel2.Controls.Add(buttonDelete);
+            flowLayoutPanel2.Controls.Add(buttonReset);
             flowLayoutPanel2.Controls.Add(checkBox1);
             flowLayoutPanel2.Dock = DockStyle.Top;
             flowLayoutPanel2.FlowDirection = FlowDirection.RightToLeft;
@@ -935,31 +938,31 @@
             flowLayoutPanel2.Size = new Size(634, 29);
             flowLayoutPanel2.TabIndex = 103;
             // 
-            // buttonMineral_AllDelete
+            // buttonAllDelete
             // 
-            buttonMineral_AllDelete.AutoSize = true;
-            buttonMineral_AllDelete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonMineral_AllDelete.Font = new Font("Yu Gothic UI", 8F);
-            buttonMineral_AllDelete.Location = new Point(581, 3);
-            buttonMineral_AllDelete.Name = "buttonMineral_AllDelete";
-            buttonMineral_AllDelete.Size = new Size(50, 23);
-            buttonMineral_AllDelete.TabIndex = 98;
-            buttonMineral_AllDelete.Text = "全削除";
-            buttonMineral_AllDelete.UseVisualStyleBackColor = true;
-            buttonMineral_AllDelete.Click += buttonMineral_AllDelete_Click;
+            buttonAllDelete.AutoSize = true;
+            buttonAllDelete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonAllDelete.Font = new Font("Yu Gothic UI", 8F);
+            buttonAllDelete.Location = new Point(581, 3);
+            buttonAllDelete.Name = "buttonAllDelete";
+            buttonAllDelete.Size = new Size(50, 23);
+            buttonAllDelete.TabIndex = 98;
+            buttonAllDelete.Text = "全削除";
+            buttonAllDelete.UseVisualStyleBackColor = true;
+            buttonAllDelete.Click += buttonMineral_AllDelete_Click;
             // 
-            // buttonMineral_Reset
+            // buttonReset
             // 
-            buttonMineral_Reset.AutoSize = true;
-            buttonMineral_Reset.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonMineral_Reset.Font = new Font("Yu Gothic UI", 8F);
-            buttonMineral_Reset.Location = new Point(480, 3);
-            buttonMineral_Reset.Name = "buttonMineral_Reset";
-            buttonMineral_Reset.Size = new Size(50, 23);
-            buttonMineral_Reset.TabIndex = 99;
-            buttonMineral_Reset.Text = "初期化";
-            buttonMineral_Reset.UseVisualStyleBackColor = true;
-            buttonMineral_Reset.Click += buttonMineral_Reset_Click;
+            buttonReset.AutoSize = true;
+            buttonReset.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonReset.Font = new Font("Yu Gothic UI", 8F);
+            buttonReset.Location = new Point(480, 3);
+            buttonReset.Name = "buttonReset";
+            buttonReset.Size = new Size(50, 23);
+            buttonReset.TabIndex = 99;
+            buttonReset.Text = "初期化";
+            buttonReset.UseVisualStyleBackColor = true;
+            buttonReset.Click += buttonMineral_Reset_Click;
             // 
             // checkBox1
             // 
@@ -975,7 +978,7 @@
             // 
             tabControl2.Controls.Add(tabPage5);
             tabControl2.Controls.Add(tabPage7);
-            tabControl2.Location = new Point(6, 97);
+            tabControl2.Location = new Point(3, 24);
             tabControl2.Name = "tabControl2";
             tabControl2.SelectedIndex = 0;
             tabControl2.Size = new Size(649, 131);
@@ -983,10 +986,7 @@
             // 
             // tabPage5
             // 
-            tabPage5.Controls.Add(panel2);
-            tabPage5.Controls.Add(panel4);
-            tabPage5.Controls.Add(panelPathEDX);
-            tabPage5.Controls.Add(panelPathDTSA);
+            tabPage5.Controls.Add(flowLayoutPanel1);
             tabPage5.Location = new Point(4, 24);
             tabPage5.Name = "tabPage5";
             tabPage5.Padding = new Padding(3);
@@ -995,6 +995,32 @@
             tabPage5.Text = "ファイル設定";
             tabPage5.UseVisualStyleBackColor = true;
             // 
+            // flowLayoutPanel1
+            // 
+            flowLayoutPanel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            flowLayoutPanel1.Controls.Add(panel2);
+            flowLayoutPanel1.Controls.Add(panel4);
+            flowLayoutPanel1.Controls.Add(panelPathEDX);
+            flowLayoutPanel1.Controls.Add(panelPathDTSA);
+            flowLayoutPanel1.Dock = DockStyle.Top;
+            flowLayoutPanel1.FlowDirection = FlowDirection.TopDown;
+            flowLayoutPanel1.Location = new Point(3, 3);
+            flowLayoutPanel1.Name = "flowLayoutPanel1";
+            flowLayoutPanel1.Size = new Size(635, 94);
+            flowLayoutPanel1.TabIndex = 20;
+            // 
+            // panel2
+            // 
+            panel2.AutoSize = true;
+            panel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panel2.Controls.Add(label7);
+            panel2.Controls.Add(textBoxModelPath);
+            panel2.Controls.Add(buttonModel_SaveFolder);
+            panel2.Location = new Point(3, 3);
+            panel2.Name = "panel2";
+            panel2.Size = new Size(304, 36);
+            panel2.TabIndex = 19;
+            // 
             // panel4
             // 
             panel4.AutoSize = true;
@@ -1002,9 +1028,9 @@
             panel4.Controls.Add(buttonModel_Teacher);
             panel4.Controls.Add(textBoxPathTeacher);
             panel4.Controls.Add(labelPathTeacher);
-            panel4.Location = new Point(317, 10);
+            panel4.Location = new Point(3, 45);
             panel4.Name = "panel4";
-            panel4.Size = new Size(303, 34);
+            panel4.Size = new Size(304, 33);
             panel4.TabIndex = 18;
             // 
             // panelPathEDX
@@ -1014,15 +1040,15 @@
             panelPathEDX.Controls.Add(labelPathEDX);
             panelPathEDX.Controls.Add(textBoxPathEDX);
             panelPathEDX.Controls.Add(buttonPathDTSA);
-            panelPathEDX.Location = new Point(5, 51);
+            panelPathEDX.Location = new Point(313, 3);
             panelPathEDX.Name = "panelPathEDX";
-            panelPathEDX.Size = new Size(304, 40);
+            panelPathEDX.Size = new Size(304, 33);
             panelPathEDX.TabIndex = 17;
             // 
             // labelPathEDX
             // 
             labelPathEDX.AutoSize = true;
-            labelPathEDX.Location = new Point(3, 17);
+            labelPathEDX.Location = new Point(5, 10);
             labelPathEDX.Name = "labelPathEDX";
             labelPathEDX.Size = new Size(110, 15);
             labelPathEDX.TabIndex = 15;
@@ -1030,7 +1056,7 @@
             // 
             // textBoxPathEDX
             // 
-            textBoxPathEDX.Location = new Point(114, 14);
+            textBoxPathEDX.Location = new Point(115, 5);
             textBoxPathEDX.Name = "textBoxPathEDX";
             textBoxPathEDX.Size = new Size(155, 23);
             textBoxPathEDX.TabIndex = 0;
@@ -1039,7 +1065,7 @@
             // 
             buttonPathDTSA.AutoSize = true;
             buttonPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathDTSA.Location = new Point(275, 12);
+            buttonPathDTSA.Location = new Point(275, 5);
             buttonPathDTSA.Name = "buttonPathDTSA";
             buttonPathDTSA.Size = new Size(26, 25);
             buttonPathDTSA.TabIndex = 1;
@@ -1054,16 +1080,16 @@
             panelPathDTSA.Controls.Add(buttonPathEDX);
             panelPathDTSA.Controls.Add(textBoxPathDTSA);
             panelPathDTSA.Controls.Add(labelPathDTSA);
-            panelPathDTSA.Location = new Point(5, 10);
+            panelPathDTSA.Location = new Point(313, 42);
             panelPathDTSA.Name = "panelPathDTSA";
-            panelPathDTSA.Size = new Size(304, 35);
+            panelPathDTSA.Size = new Size(304, 33);
             panelPathDTSA.TabIndex = 16;
             // 
             // buttonPathEDX
             // 
             buttonPathEDX.AutoSize = true;
             buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathEDX.Location = new Point(275, 7);
+            buttonPathEDX.Location = new Point(275, 5);
             buttonPathEDX.Name = "buttonPathEDX";
             buttonPathEDX.Size = new Size(26, 25);
             buttonPathEDX.TabIndex = 1;
@@ -1073,7 +1099,7 @@
             // 
             // textBoxPathDTSA
             // 
-            textBoxPathDTSA.Location = new Point(114, 8);
+            textBoxPathDTSA.Location = new Point(115, 5);
             textBoxPathDTSA.Name = "textBoxPathDTSA";
             textBoxPathDTSA.Size = new Size(155, 23);
             textBoxPathDTSA.TabIndex = 0;
@@ -1082,7 +1108,7 @@
             // labelPathDTSA
             // 
             labelPathDTSA.AutoSize = true;
-            labelPathDTSA.Location = new Point(3, 12);
+            labelPathDTSA.Location = new Point(5, 10);
             labelPathDTSA.Name = "labelPathDTSA";
             labelPathDTSA.Size = new Size(105, 15);
             labelPathDTSA.TabIndex = 15;
@@ -1137,18 +1163,6 @@
             labelExecution_Parallel.TabIndex = 35;
             labelExecution_Parallel.Text = "並列数";
             // 
-            // panel2
-            // 
-            panel2.AutoSize = true;
-            panel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panel2.Controls.Add(label7);
-            panel2.Controls.Add(textBoxModel_Save);
-            panel2.Controls.Add(buttonModel_SaveFolder);
-            panel2.Location = new Point(317, 51);
-            panel2.Name = "panel2";
-            panel2.Size = new Size(303, 37);
-            panel2.TabIndex = 19;
-            // 
             // GeneratorForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -1167,8 +1181,8 @@
             ((System.ComponentModel.ISupportInitialize)numericUpDownMineral_Target).EndInit();
             groupBoxEndmembers.ResumeLayout(false);
             groupBoxEndmembers.PerformLayout();
-            panel1.ResumeLayout(false);
-            panel1.PerformLayout();
+            panelEndmembers.ResumeLayout(false);
+            panelEndmembers.PerformLayout();
             flowLayoutPanel3.ResumeLayout(false);
             groupBoxComposition.ResumeLayout(false);
             groupBoxComposition.PerformLayout();
@@ -1185,12 +1199,8 @@
             SpectrumGeneration.PerformLayout();
             groupBox1.ResumeLayout(false);
             groupBox1.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownProbeCurrent).EndInit();
             groupBox5.ResumeLayout(false);
             groupBox5.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownLiveTime).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownBeamEnergy).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownCarbonThichness).EndInit();
             groupBoxMineral.ResumeLayout(false);
             groupBoxMineral.PerformLayout();
             flowLayoutPanel4.ResumeLayout(false);
@@ -1199,7 +1209,10 @@
             flowLayoutPanel2.PerformLayout();
             tabControl2.ResumeLayout(false);
             tabPage5.ResumeLayout(false);
-            tabPage5.PerformLayout();
+            flowLayoutPanel1.ResumeLayout(false);
+            flowLayoutPanel1.PerformLayout();
+            panel2.ResumeLayout(false);
+            panel2.PerformLayout();
             panel4.ResumeLayout(false);
             panel4.PerformLayout();
             panelPathEDX.ResumeLayout(false);
@@ -1209,8 +1222,6 @@
             tabPage7.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).EndInit();
-            panel2.ResumeLayout(false);
-            panel2.PerformLayout();
             ResumeLayout(false);
         }
 
@@ -1240,15 +1251,11 @@
         private Label labelEndmembers_CompositionLists;
         private TextBox textBoxEndmembers_CompositionLists;
         private Button buttonAddList;
-        private Button buttonMineral_Delete;
+        private Button buttonDelete;
         private GroupBox groupBoxMineral;
         private Label labelMineralInfo_Name;
         private TextBox textBoxMineral_Name;
         private Label labelDetectorName;
-        private NumericUpDown numericUpDownCarbonThichness;
-        private Label labelBeamEnergy;
-        private NumericUpDown numericUpDownBeamEnergy;
-        private Label labelCarbonThickness;
         private TextBox textBoxDetectorName;
         private GroupBox groupBoxModel_LearningData;
         private GroupBox groupBox4;
@@ -1258,7 +1265,7 @@
         private Button buttonModel_Save;
         private Label label5;
         private Button buttonModel_Train;
-        private TextBox textBoxModel_Save;
+        private TextBox textBoxModelPath;
         private Label label7;
         private Label label13;
         private Label label10;
@@ -1268,27 +1275,23 @@
         private NumericUpDown numericUpDownModel_Epochs;
         private Button buttonEndmember_Add;
         private Button buttonEndmember_Delete;
-        private Button buttonUpdate;
+        private Button buttonUpdateList;
         private NumericUpDown numericUpDownModel_EaryStopping;
-        private Button buttonMineral_AllDelete;
+        private Button buttonAllDelete;
         private TextBox textBoxMineral_Memo;
         private Label label15;
         private Button buttonModel_SaveFolder;
         private Button buttonModel_Teacher;
-        private Button buttonMineral_Reset;
+        private Button buttonReset;
         private Label label3;
         private Label labelMineral_Target;
         private NumericUpDown numericUpDownMineral_Target;
         private CheckedListBox checkedListBoxTrainMinerals;
         private Button buttonAllSelect;
         private ProgressBar progressBar1;
-        private NumericUpDown numericUpDownLiveTime;
-        private Label labelLiveTime;
-        private NumericUpDown numericUpDownProbeCurrent;
-        private Label labelProbeCurrent;
         private FlowLayoutPanel flowLayoutPanel2;
         private FlowLayoutPanel flowLayoutPanel3;
-        private Panel panel1;
+        private Panel panelEndmembers;
         private GroupBox groupBox1;
         private CheckBox checkBox1;
         private GroupBox groupBox2;
@@ -1311,6 +1314,12 @@
         private Panel panelPathDTSA;
         private Panel panel4;
         private Panel panel2;
+        private FlowLayoutPanel flowLayoutPanel1;
+        private Crystallography.Controls.NumericBox numericBoxProbeCurrent;
+        private Crystallography.Controls.NumericBox numericBox3;
+        private Crystallography.Controls.NumericBox numericBoxLiveTime;
+        private Crystallography.Controls.NumericBox numericBoxBeamEnergy;
+        private Crystallography.Controls.NumericBox numericBoxCarbonThickness;
     }
 }
 

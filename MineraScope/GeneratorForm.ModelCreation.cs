@@ -26,13 +26,14 @@ namespace MineraScope
                     PythonScriptOutputPath,
                     textBoxPathDTSA.Text.Trim(),
                     textBoxPathTeacher.Text.Trim(),
-                    textBoxModel_Save.Text.Trim()),
+                    textBoxModelPath.Text.Trim()),
                 new SemEdxCondition(
                     textBoxDetectorName.Text.Trim(),
-                    (double)numericUpDownCarbonThichness.Value,
-                    (double)numericUpDownBeamEnergy.Value,
-                    (double)numericUpDownLiveTime.Value,
-                    (double)numericUpDownProbeCurrent.Value),
+                    // 260416Codex: SEM-EDX 条件の数値入力は NumericBox に統一します。
+                    numericBoxCarbonThickness.Value,
+                    numericBoxBeamEnergy.Value,
+                    numericBoxLiveTime.Value,
+                    numericBoxProbeCurrent.Value),
                 new SimulationExecutionSettings(
                     (int)numericUpDownMineral_Target.Value,
                     (double)numericUpDownEndmembers_Resolution.Value / 100,
