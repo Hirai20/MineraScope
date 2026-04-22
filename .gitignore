@@ -8,6 +8,8 @@ obj/
 *.suo
 *.userosscache
 *.sln.docstates
+# 260416Codex: Visual Studio project cache files are local-only and should stay untracked.
+*.lscache
 
 .DS_Store
 Thumbs.db
