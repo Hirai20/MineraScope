@@ -33,7 +33,8 @@ namespace MineraScope
         // 260416Codex: Each job always follows the same three steps, so keep the execution path flat.
         private void ExecuteJob(SimulationExecutionJob job)
         {
-            Directory.CreateDirectory(job.Property.OutPutFolder);
+            // 260416Codex: 新しい正綴りの別名を使い、内部コードから誤字を減らします。
+            Directory.CreateDirectory(job.Property.OutputFolder);
             File.WriteAllText(job.ScriptPath, _scriptGenerator.Generate(job.Property, job.ParallelIndex));
             RunCommand(job.DtsaFolder, job.ScriptPath);
         }

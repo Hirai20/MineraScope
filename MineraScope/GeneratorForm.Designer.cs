@@ -62,18 +62,14 @@
             labelCompositionName = new Label();
             ModelTrain = new GroupBox();
             groupBox4 = new GroupBox();
-            numericBox1 = new Crystallography.Controls.NumericBox();
+            numericBoxModel_EarlyStopping = new Crystallography.Controls.NumericBox();
+            numericBoxModel_BatchSize = new Crystallography.Controls.NumericBox();
+            numericBoxModel_Epochs = new Crystallography.Controls.NumericBox();
             buttonAllSelect = new Button();
             checkedListBoxTrainMinerals = new CheckedListBox();
             textBoxModel_Evaluation = new TextBox();
-            label3 = new Label();
-            numericUpDownModel_EaryStopping = new NumericUpDown();
             buttonModel_Train = new Button();
-            numericUpDownModel_Epochs = new NumericUpDown();
-            numericUpDownModel_BatchSize = new NumericUpDown();
             label5 = new Label();
-            label10 = new Label();
-            label9 = new Label();
             groupBoxModel_LearningData = new GroupBox();
             numericUpDownModel_ValidationSplit = new NumericUpDown();
             label13 = new Label();
@@ -128,9 +124,6 @@
             groupBoxComposition.SuspendLayout();
             ModelTrain.SuspendLayout();
             groupBox4.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_EaryStopping).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_Epochs).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_BatchSize).BeginInit();
             groupBoxModel_LearningData.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_ValidationSplit).BeginInit();
             SpectrumGeneration.SuspendLayout();
@@ -497,18 +490,14 @@
             // 
             // groupBox4
             // 
-            groupBox4.Controls.Add(numericBox1);
+            groupBox4.Controls.Add(numericBoxModel_EarlyStopping);
+            groupBox4.Controls.Add(numericBoxModel_BatchSize);
+            groupBox4.Controls.Add(numericBoxModel_Epochs);
             groupBox4.Controls.Add(buttonAllSelect);
             groupBox4.Controls.Add(checkedListBoxTrainMinerals);
             groupBox4.Controls.Add(textBoxModel_Evaluation);
-            groupBox4.Controls.Add(label3);
-            groupBox4.Controls.Add(numericUpDownModel_EaryStopping);
             groupBox4.Controls.Add(buttonModel_Train);
-            groupBox4.Controls.Add(numericUpDownModel_Epochs);
-            groupBox4.Controls.Add(numericUpDownModel_BatchSize);
             groupBox4.Controls.Add(label5);
-            groupBox4.Controls.Add(label10);
-            groupBox4.Controls.Add(label9);
             groupBox4.Location = new Point(13, 136);
             groupBox4.Name = "groupBox4";
             groupBox4.Size = new Size(520, 524);
@@ -516,26 +505,72 @@
             groupBox4.TabStop = false;
             groupBox4.Text = "モデル訓練";
             // 
-            // numericBox1
+            // numericBoxModel_EarlyStopping
             // 
-            numericBox1.BackColor = Color.Transparent;
-            numericBox1.Font = new Font("Segoe UI Symbol", 9.75F);
-            numericBox1.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBox1.FooterText = "フッター";
-            numericBox1.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBox1.HeaderText = "エポック数";
-            numericBox1.Location = new Point(19, 221);
-            numericBox1.Margin = new Padding(0);
-            numericBox1.MaximumSize = new Size(1000, 28);
-            numericBox1.MinimumSize = new Size(1, 18);
-            numericBox1.Name = "numericBox1";
-            numericBox1.RadianValue = 1.5707963267948966D;
-            numericBox1.ShowUpDown = true;
-            numericBox1.Size = new Size(144, 26);
-            numericBox1.SmartIncrement = true;
-            numericBox1.TabIndex = 104;
-            numericBox1.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBox1.Value = 90D;
+            numericBoxModel_EarlyStopping.BackColor = Color.Transparent;
+            numericBoxModel_EarlyStopping.DecimalPlaces = 0;
+            numericBoxModel_EarlyStopping.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_EarlyStopping.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_EarlyStopping.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_EarlyStopping.HeaderText = "待機回数";
+            numericBoxModel_EarlyStopping.Location = new Point(48, 170);
+            numericBoxModel_EarlyStopping.Margin = new Padding(0);
+            numericBoxModel_EarlyStopping.MaximumSize = new Size(1000, 28);
+            numericBoxModel_EarlyStopping.Minimum = 0D;
+            numericBoxModel_EarlyStopping.MinimumSize = new Size(1, 18);
+            numericBoxModel_EarlyStopping.Name = "numericBoxModel_EarlyStopping";
+            numericBoxModel_EarlyStopping.RadianValue = 0.17453292519943295D;
+            numericBoxModel_EarlyStopping.ShowUpDown = true;
+            numericBoxModel_EarlyStopping.Size = new Size(144, 26);
+            numericBoxModel_EarlyStopping.SmartIncrement = true;
+            numericBoxModel_EarlyStopping.TabIndex = 106;
+            numericBoxModel_EarlyStopping.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_EarlyStopping.Value = 10D;
+            // 
+            // numericBoxModel_BatchSize
+            // 
+            numericBoxModel_BatchSize.BackColor = Color.Transparent;
+            numericBoxModel_BatchSize.DecimalPlaces = 0;
+            numericBoxModel_BatchSize.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_BatchSize.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_BatchSize.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_BatchSize.HeaderText = "バッチサイズ";
+            numericBoxModel_BatchSize.Location = new Point(229, 121);
+            numericBoxModel_BatchSize.Margin = new Padding(0);
+            numericBoxModel_BatchSize.MaximumSize = new Size(1000, 28);
+            numericBoxModel_BatchSize.Minimum = 1D;
+            numericBoxModel_BatchSize.MinimumSize = new Size(1, 18);
+            numericBoxModel_BatchSize.Name = "numericBoxModel_BatchSize";
+            numericBoxModel_BatchSize.RadianValue = 0.27925268031909273D;
+            numericBoxModel_BatchSize.ShowUpDown = true;
+            numericBoxModel_BatchSize.Size = new Size(144, 26);
+            numericBoxModel_BatchSize.SmartIncrement = true;
+            numericBoxModel_BatchSize.TabIndex = 105;
+            numericBoxModel_BatchSize.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_BatchSize.Value = 16D;
+            // 
+            // numericBoxModel_Epochs
+            // 
+            numericBoxModel_Epochs.BackColor = Color.Transparent;
+            numericBoxModel_Epochs.DecimalPlaces = 0;
+            numericBoxModel_Epochs.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.HeaderText = "エポック数";
+            numericBoxModel_Epochs.Location = new Point(48, 121);
+            numericBoxModel_Epochs.Margin = new Padding(0);
+            numericBoxModel_Epochs.Maximum = 100000D;
+            numericBoxModel_Epochs.MaximumSize = new Size(1000, 28);
+            numericBoxModel_Epochs.Minimum = 1D;
+            numericBoxModel_Epochs.MinimumSize = new Size(1, 18);
+            numericBoxModel_Epochs.Name = "numericBoxModel_Epochs";
+            numericBoxModel_Epochs.RadianValue = 8.7266462599716466D;
+            numericBoxModel_Epochs.ShowUpDown = true;
+            numericBoxModel_Epochs.Size = new Size(144, 26);
+            numericBoxModel_Epochs.SmartIncrement = true;
+            numericBoxModel_Epochs.TabIndex = 104;
+            numericBoxModel_Epochs.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.Value = 500D;
             // 
             // buttonAllSelect
             // 
@@ -568,24 +603,6 @@
             textBoxModel_Evaluation.Size = new Size(480, 221);
             textBoxModel_Evaluation.TabIndex = 0;
             // 
-            // label3
-            // 
-            label3.AutoSize = true;
-            label3.Location = new Point(237, 126);
-            label3.Margin = new Padding(2, 0, 2, 0);
-            label3.Name = "label3";
-            label3.Size = new Size(55, 15);
-            label3.TabIndex = 100;
-            label3.Text = "待機回数";
-            // 
-            // numericUpDownModel_EaryStopping
-            // 
-            numericUpDownModel_EaryStopping.Location = new Point(300, 124);
-            numericUpDownModel_EaryStopping.Name = "numericUpDownModel_EaryStopping";
-            numericUpDownModel_EaryStopping.Size = new Size(42, 23);
-            numericUpDownModel_EaryStopping.TabIndex = 99;
-            numericUpDownModel_EaryStopping.Value = new decimal(new int[] { 10, 0, 0, 0 });
-            // 
             // buttonModel_Train
             // 
             buttonModel_Train.Location = new Point(439, 478);
@@ -596,23 +613,6 @@
             buttonModel_Train.UseVisualStyleBackColor = true;
             buttonModel_Train.Click += buttonModel_Train_Click;
             // 
-            // numericUpDownModel_Epochs
-            // 
-            numericUpDownModel_Epochs.Location = new Point(138, 124);
-            numericUpDownModel_Epochs.Maximum = new decimal(new int[] { 100000, 0, 0, 0 });
-            numericUpDownModel_Epochs.Name = "numericUpDownModel_Epochs";
-            numericUpDownModel_Epochs.Size = new Size(42, 23);
-            numericUpDownModel_Epochs.TabIndex = 96;
-            numericUpDownModel_Epochs.Value = new decimal(new int[] { 500, 0, 0, 0 });
-            // 
-            // numericUpDownModel_BatchSize
-            // 
-            numericUpDownModel_BatchSize.Location = new Point(138, 148);
-            numericUpDownModel_BatchSize.Name = "numericUpDownModel_BatchSize";
-            numericUpDownModel_BatchSize.Size = new Size(42, 23);
-            numericUpDownModel_BatchSize.TabIndex = 94;
-            numericUpDownModel_BatchSize.Value = new decimal(new int[] { 16, 0, 0, 0 });
-            // 
             // label5
             // 
             label5.AutoSize = true;
@@ -622,26 +622,6 @@
             label5.Size = new Size(49, 15);
             label5.TabIndex = 21;
             label5.Text = "訓練ログ";
-            // 
-            // label10
-            // 
-            label10.AutoSize = true;
-            label10.Location = new Point(33, 156);
-            label10.Margin = new Padding(2, 0, 2, 0);
-            label10.Name = "label10";
-            label10.Size = new Size(62, 15);
-            label10.TabIndex = 27;
-            label10.Text = "バッチサイズ";
-            // 
-            // label9
-            // 
-            label9.AutoSize = true;
-            label9.Location = new Point(33, 126);
-            label9.Margin = new Padding(2, 0, 2, 0);
-            label9.Name = "label9";
-            label9.Size = new Size(55, 15);
-            label9.TabIndex = 26;
-            label9.Text = "エポック数";
             // 
             // groupBoxModel_LearningData
             // 
@@ -1189,9 +1169,6 @@
             ModelTrain.ResumeLayout(false);
             groupBox4.ResumeLayout(false);
             groupBox4.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_EaryStopping).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_Epochs).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_BatchSize).EndInit();
             groupBoxModel_LearningData.ResumeLayout(false);
             groupBoxModel_LearningData.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_ValidationSplit).EndInit();
@@ -1268,22 +1245,17 @@
         private TextBox textBoxModelPath;
         private Label label7;
         private Label label13;
-        private Label label10;
-        private Label label9;
+        // 260416Codex: モデル訓練設定は NumericBox 群に置き換えます。
         private NumericUpDown numericUpDownModel_ValidationSplit;
-        private NumericUpDown numericUpDownModel_BatchSize;
-        private NumericUpDown numericUpDownModel_Epochs;
         private Button buttonEndmember_Add;
         private Button buttonEndmember_Delete;
         private Button buttonUpdateList;
-        private NumericUpDown numericUpDownModel_EaryStopping;
         private Button buttonAllDelete;
         private TextBox textBoxMineral_Memo;
         private Label label15;
         private Button buttonModel_SaveFolder;
         private Button buttonModel_Teacher;
         private Button buttonReset;
-        private Label label3;
         private Label labelMineral_Target;
         private NumericUpDown numericUpDownMineral_Target;
         private CheckedListBox checkedListBoxTrainMinerals;
@@ -1296,7 +1268,9 @@
         private CheckBox checkBox1;
         private GroupBox groupBox2;
         private FlowLayoutPanel flowLayoutPanel4;
-        private Crystallography.Controls.NumericBox numericBox1;
+        private Crystallography.Controls.NumericBox numericBoxModel_Epochs;
+        private Crystallography.Controls.NumericBox numericBoxModel_BatchSize;
+        private Crystallography.Controls.NumericBox numericBoxModel_EarlyStopping;
         private TabControl tabControl2;
         private TabPage tabPage5;
         private Button buttonPathDTSA;

@@ -33,9 +33,11 @@ using Crystallography.Controls;
 namespace MineraScope
 {
     [MemoryPackable]
-    public partial struct SimulationPropety
+    // 260416Codex: シミュレーション DTO 自体も正しい綴りへ統一します。
+    public partial struct SimulationProperty
     {
-        public string MineralGropName;
+        // 260416Codex: DTO の公開メンバー名も正しい綴りへ揃えます。
+        public string MineralGroupName;
         public string Atoms;
         //public (string Name, double Mol)[]               Atoms1;
         public (string ElementName, double Weight)[][] Atoms1;
@@ -56,9 +58,9 @@ namespace MineraScope
         //並列回数
         public int ParallelCount;
         //msaファイル出力先
-        public string OutPutFolder;
+        public string OutputFolder;
         [MemoryPackIgnore]
-        public string[] OutputFile;
+        public string[] OutputFiles;
     }
 
 
@@ -112,7 +114,7 @@ namespace MineraScope
             }
 
 
-            
+
 
             //var fs1 = new FileStream(AssemblyPath + "\\MineralDatabase.xml", FileMode.Create);
             //xml.Serialize(fs1, ss);
@@ -561,10 +563,6 @@ namespace MineraScope
             {
                 buttonModel_Train.Enabled = true;
             }
-        }
-        private void optionToolStripMenuItem_CheckedChanged(object sender, EventArgs e)
-        {
-
         }
 
         private void buttonAllSelect_Click(object sender, EventArgs e)

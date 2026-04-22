@@ -11,15 +11,17 @@ namespace MineraScope
         private const double DefaultDensity = 3;
 
         // 260416Codex: UI 状態に触れず、実行 DTO から Python スクリプト文字列を組み立てます。
-        public string Generate(SimulationPropety property, int? parallelIndex = null)
+        public string Generate(SimulationProperty property, int? parallelIndex = null)
         {
             StringBuilder builder = new();
-            string mineralGroupName = property.MineralGropName;
+
+            // 260416Codex: 内部参照は綴りを直した別名プロパティへ寄せます。
+            string mineralGroupName = property.MineralGroupName;
             (string ElementName, double Weight)[][] atoms = property.Atoms1;
-            string[] outputFiles = property.OutputFile;
+            string[] outputFiles = property.OutputFiles;
 
             // 260416Codex: import と実行条件を先に並べ、スクリプト全体の流れを追いやすくします。
-            builder.AppendLine("import dtsa2.mcSimulate3 as mc\r\nimport os\r\noutput_dir = r\"" + property.OutPutFolder + "\"");
+            builder.AppendLine("import dtsa2.mcSimulate3 as mc\r\nimport os\r\noutput_dir = r\"" + property.OutputFolder + "\"");
             builder.AppendLine("det = findDetector(\"" + property.DetectorName + "\")");
             builder.AppendLine("e0 = " + property.BeamEnergy);
             builder.AppendLine("dose =" + property.ProbeCurrent + " *" + property.LiveTime);

@@ -800,19 +800,19 @@ namespace MineraScope
             {
                 solidSolutions = (SolidSolution[])xml.Deserialize(fs);
             }
-            //ターゲットとなる固溶体グループの特定
-            var targetGrop = solidSolutions.FirstOrDefault(ss => ss.Name == targetMineralName);
+            // 260416Codex: ローカル変数の単純な綴りミスを直して読みやすくします。
+            var targetGroup = solidSolutions.FirstOrDefault(ss => ss.Name == targetMineralName);
             var targetElements = new List<string>();
 
-            if (targetGrop == null)
+            if (targetGroup == null)
             {
                 return "";
             }
-            int maxElementCount = targetGrop.Members.Max(ss => ss.Elements.Length);
+            int maxElementCount = targetGroup.Members.Max(ss => ss.Elements.Length);
 
             for (int i = 0; i < maxElementCount; i++)
             {
-                foreach (var member in targetGrop.Members)
+                foreach (var member in targetGroup.Members)
                 {
                     if (i < member.Elements.Length)
                     {
@@ -828,7 +828,7 @@ namespace MineraScope
             //原子数を計算
             var mineralDefinitions = new Dictionary<string, (string Element, double Count)[]>();
 
-            foreach (var member in targetGrop.Members)
+            foreach (var member in targetGroup.Members)
             {
                 var elements = member.Elements.Select(el => (el.Item1, el.Item2)).ToArray();
                 string safeXmlName = member.Name.Trim();

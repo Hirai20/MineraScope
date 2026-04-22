@@ -9,7 +9,7 @@ namespace MineraScope
     internal sealed record SimulationExecutionJob(
         string ScriptPath,
         string DtsaFolder,
-        SimulationPropety Property,
+        SimulationProperty Property,
         int ParallelIndex);
 
     // 260416Codex: Group jobs by solution name so the UI can execute and inspect them batch by batch.
@@ -48,7 +48,7 @@ namespace MineraScope
                 : Path.Combine(spectrumOutputFolder, $"{solution.Name}_{resolutionStep * 100}mol%");
 
         // 260416Codex: Build the DTO directly from the SEM-EDX and simulation settings without passing the whole request.
-        private static SimulationPropety CreateSimulationProperty(
+        private static SimulationProperty CreateSimulationProperty(
             SemEdxCondition semEdxCondition,
             SimulationExecutionSettings simulation,
             string mineralGroupName,
@@ -57,7 +57,8 @@ namespace MineraScope
             string[] outputFiles) =>
             new()
             {
-                MineralGropName = mineralGroupName,
+                // 260416Codex: 内部利用は正しい綴りの別名プロパティへ寄せます。
+                MineralGroupName = mineralGroupName,
                 Atoms1 = atoms,
                 DetectorName = semEdxCondition.DetectorName,
                 CarbonCoatThickness = semEdxCondition.CarbonCoatThickness,
@@ -67,8 +68,8 @@ namespace MineraScope
                 LiveTime = semEdxCondition.LiveTime,
                 ProbeCurrent = semEdxCondition.ProbeCurrent,
                 ParallelCount = simulation.ParallelCount,
-                OutPutFolder = outputFolder,
-                OutputFile = outputFiles
+                OutputFolder = outputFolder,
+                OutputFiles = outputFiles
             };
 
         // 260416Codex: Build one batch per selected solution and skip solutions that do not yield compositions.
