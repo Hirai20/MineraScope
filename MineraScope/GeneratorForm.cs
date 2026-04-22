@@ -16,7 +16,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using System.Xml.Linq;
-using System.Xml.Serialization;
 using Tensorflow;
 using Tensorflow.Keras;
 using Tensorflow.Keras.Callbacks;
@@ -30,7 +29,7 @@ using xFunc.Maths.Expressions;
 using xFunc.Maths.Expressions.Programming;
 using static Tensorflow.Binding;
 using static Tensorflow.KerasApi;
-
+using Crystallography.Controls;
 namespace MineraScope
 {
     [MemoryPackable]
@@ -64,28 +63,39 @@ namespace MineraScope
 
 
 
-    public partial class Form1 : Form
+    // 260416Codex: 生成系の責務が伝わるように Form 名を GeneratorForm へ変更します。
+    public partial class GeneratorForm : Form
     {
-        private static readonly XmlSerializer MineralDatabaseSerializer = new(typeof(SolidSolution[]));
-
         private readonly List<EndmemberControl> endmemberControls = [];
         private readonly DeepLearning _deepLearning;
+        // 260416Codex: 鉱物 DB の入出力を repository に寄せ、Form の責務を UI 側へ戻していきます。
+        private readonly MineralDatabaseRepository _mineralDatabaseRepository;
+        // 260416Codex: 教師データ走査を service 化し、今後の新 UI でも同じロジックを使えるようにします。
+        private readonly TrainingDataScanner _trainingDataScanner;
+        // 260416Codex: 学習開始処理を workflow 化し、ボタンイベントから直接 DeepLearning を叩かない形へ寄せます。
+        private readonly ModelTrainingWorkflow _modelTrainingWorkflow;
 
         private string AssemblyPath { get; } = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) ?? AppContext.BaseDirectory;
         private string DesktopPath { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-        private string MineralDatabasePath => Path.Combine(AssemblyPath, "MineralDatabase.xml");
-        private string OriginalMineralDatabasePath => Path.Combine(AssemblyPath, "MineralDatabaseOriginal.xml");
 
-        public Form1()
+        // 260416Codex: クラス名リネームに合わせてコンストラクタ名も更新します。
+        public GeneratorForm()
         {
+      
+
             InitializeComponent();
             _deepLearning = new(TrainLog);
+            // 260416Codex: 既存 helper を Form 初期化時に束ねておき、以降のイベント処理を薄く保ちます。
+            _mineralDatabaseRepository = new(AssemblyPath);
+            _trainingDataScanner = new(_deepLearning.AnalyzeMineralFolder);
+            _modelTrainingWorkflow = new(_deepLearning);
             textBoxPathEDX.Text = Path.Combine(DesktopPath, "TrainingData");
             textBoxPathPython.Text = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
             textBoxModel_Teacher.Text = Path.Combine(DesktopPath, "TrainingData");
             if (Directory.Exists(textBoxModel_Teacher.Text))
             {
-                ScanMineralFolders(textBoxModel_Teacher.Text);
+                // 260416Codex: 教師データ一覧の初期表示は service 経由で統一します。
+                RefreshTrainingMineralList(textBoxModel_Teacher.Text);
             }
 
 
@@ -117,15 +127,10 @@ namespace MineraScope
             //    ];
 
             //var fs1 = new FileStream(AssemblyPath + "\\MineralDatabase.xml", FileMode.Create);
-
             //xml.Serialize(fs1, ss);
-
             //var data = ss[1].Divide(0.1);
-            if (!File.Exists(MineralDatabasePath))
-            {
-                File.Copy(OriginalMineralDatabasePath, MineralDatabasePath);
-            }
-
+            // 260416Codex: DB 初期化は repository にまとめ、Form からファイル操作の詳細を外します。
+            _mineralDatabaseRepository.EnsureInitialized();
             endmemberControls.AddRange([EndmemberControl1, EndmemberControl2]);
             BindMineralSolutions(LoadSolidSolutions());
 
@@ -139,17 +144,11 @@ namespace MineraScope
 
         }
 
-        private SolidSolution[] LoadSolidSolutions()
-        {
-            using var stream = File.OpenRead(MineralDatabasePath);
-            return (SolidSolution[])MineralDatabaseSerializer.Deserialize(stream)!;
-        }
+        // 260416Codex: XML 読み込みは repository へ移したため、Form 側は委譲だけにします。
+        private SolidSolution[] LoadSolidSolutions() => _mineralDatabaseRepository.Load();
 
-        private void SaveSolidSolutions(SolidSolution[] solutions)
-        {
-            using var stream = File.Create(MineralDatabasePath);
-            MineralDatabaseSerializer.Serialize(stream, solutions);
-        }
+        // 260416Codex: XML 保存も repository に委譲し、UI 変更時の影響範囲を狭めます。
+        private void SaveSolidSolutions(SolidSolution[] solutions) => _mineralDatabaseRepository.Save(solutions);
 
         private void BindMineralSolutions(SolidSolution[] solutions, bool clearSelection = true)
         {
@@ -226,20 +225,21 @@ namespace MineraScope
         // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
         private async void buttonSpectrumGenerationRun_Click(object sender, EventArgs e)
         {
+            // 260416Codex: シミュレーション系も request を入口に使い始め、今後の workflow 化へ備えます。
+            var request = CreateModelCreationRequest();
             // 260416Codex: 選択済み鉱物の取得を共通ヘルパーに寄せる
-            var checkedSolutions = GetCheckedItems<SolidSolution>(checkedListBoxMineral);
-
-            string PythonPath = textBoxPathPython.Text.Trim().Trim('"');
-            var DTSAPath = textBoxPathDTSA.Text;
+            var checkedSolutions = request.SelectedMineralSolutions.ToArray();
+            string PythonPath = request.Paths.ScriptOutputFolder;
+            var DTSAPath = request.Paths.DtsaFolder;
 
             if (checkedSolutions.Length == 0)
                 return;
 
             //チェックされた鉱物について、順番にシミュレーション
-            int targetCount = (int)numericUpDownMineral_Target.Value;
-            double resolution = (double)numericUpDownEndmembers_Resolution.Value / 100;
-            int count = (int)numericUpDownExecution_Count.Value;
-            int parallelCount = (int)numericUpDownExecution_Parallel.Value;
+            int targetCount = request.Simulation.TargetCompositionCount;
+            double resolution = request.Simulation.ResolutionStep;
+            int count = request.Simulation.RunCount;
+            int parallelCount = request.Simulation.ParallelCount;
             var firstCompositions = checkedSolutions[0].Divide(resolution, targetCount);//表示用
 
             // 260416Codex: プレビュー用データ生成の重複をなくす
@@ -248,7 +248,7 @@ namespace MineraScope
             var previewProp = CreateSimulationProperty(
                 checkedSolutions[0].Name,
                 firstElements,
-                textBoxPathEDX.Text,
+                request.Paths.SpectrumOutputFolder,
                 firstOutputFiles,
                 count,
                 parallelCount);
@@ -675,8 +675,12 @@ namespace MineraScope
         // 260416Codex: ItemCheck 後の再計算をメソッドグループで簡潔にする
         private void checkedListBoxMineral_ItemCheck(object sender, ItemCheckEventArgs e)
         {
-            // 260416Codex: 非同期更新の delegate を簡潔にする
-            BeginInvoke(UpdateCompositionCount);
+            // 260416Codex: 生成側のチェック変更後に学習候補への同期もまとめて走らせます。
+            BeginInvoke(new Action(() =>
+            {
+                UpdateCompositionCount();
+                SyncTrainingSelectionFromSelectedMinerals();
+            }));
         }
 
         private void checkedListBoxMineral_SelectedIndexChanged(object sender, EventArgs e)
@@ -686,7 +690,7 @@ namespace MineraScope
         }
 
         #region フォルダ選択ダイアログ
-        // 260416Codex: Form1 固有のボタン名と共通フォルダ選択 helper をつなぐ役目だけに絞ります。
+        // 260416Codex: GeneratorForm 固有のボタン名と共通フォルダ選択 helper をつなぐ役目だけに絞ります。
         private void buttonFolderBrowserDialog_Click(object sender, EventArgs e)
         {
             if (sender is not Button button)
@@ -718,7 +722,8 @@ namespace MineraScope
                 return;
             }
 
-            ScanMineralFolders(textBoxModel_Teacher.Text);
+            // 260416Codex: 教師データ一覧の再構築は service 経由で一元化します。
+            RefreshTrainingMineralList(textBoxModel_Teacher.Text);
         }
         #endregion
         #region リストに追加・更新・削除・初期化メソッド
@@ -776,7 +781,8 @@ namespace MineraScope
         #region 初期化メソッド
         private void buttonMineral_Reset_Click(object sender, EventArgs e)
         {
-            File.Copy(OriginalMineralDatabasePath, MineralDatabasePath, true);
+            // 260416Codex: DB 初期化のファイル操作は repository に閉じ込めます。
+            _mineralDatabaseRepository.Reset();
             BindMineralSolutions(LoadSolidSolutions());
         }
         #endregion
@@ -785,33 +791,8 @@ namespace MineraScope
         #region データ読み込み
         private void ScanMineralFolders(string TrainingPath)
         {
-            checkedListBoxTrainMinerals.Items.Clear();
-
-            if (!Directory.Exists(TrainingPath))
-            {
-                return;
-            }
-            string[] filesInRoot = Directory.EnumerateFiles(TrainingPath, "*.*")
-                .Where(s => s.EndsWith(".msa", StringComparison.OrdinalIgnoreCase) || s.EndsWith(".emsa", StringComparison.OrdinalIgnoreCase)).ToArray();
-
-            if (filesInRoot.Length > 0)
-            {
-                string folderName = Path.GetFileName(TrainingPath);
-                checkedListBoxTrainMinerals.Items.Add(folderName);
-                return;
-            }
-            var mineralFolders = Directory.GetDirectories(TrainingPath);
-
-            foreach (var mineralFolder in mineralFolders)
-            {
-                string mineralName = Path.GetFileName(mineralFolder);
-                var mineralInfo = _deepLearning.AnalyzeMineralFolder(mineralFolder);
-
-                if (mineralInfo != null)
-                {
-                    checkedListBoxTrainMinerals.Items.Add(mineralName);
-                }
-            }
+            // 260416Codex: 既存メソッド名は残しつつ、中身は service ベースの実装へ差し替えます。
+            RefreshTrainingMineralList(TrainingPath);
         }
 
         #endregion
@@ -820,45 +801,32 @@ namespace MineraScope
         //分類モデル
         private async void buttonModel_Train_Click(object sender, EventArgs e)
         {
-            //  学習対象の鉱物リストを作成
-            var targetMinerals = checkedListBoxTrainMinerals.CheckedItems
-                .Cast<object>()
-                .Select(item => item.ToString())
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .Cast<string>()
-                .ToArray();
-
-            if (targetMinerals.Length == 0)
-                return;
-
-
-            string rootPath = textBoxModel_Teacher.Text;
-            string savePath = textBoxModel_Save.Text;
-            int epochs = (int)numericUpDownModel_Epochs.Value;
-            int batchSize = (int)numericUpDownModel_BatchSize.Value;
-            int patience = (int)numericUpDownModel_EaryStopping.Value;
-            float testSplit = (float)numericUpDownModel_ValidationSplit.Value / 100f;
-
-            // パスチェック
-            if (!Directory.Exists(rootPath))
+            // 260416Codex: 学習開始も request -> plan -> workflow の流れに揃え、今後の統合実行へつなげます。
+            var request = CreateModelCreationRequest();
+            var trainingPlan = _modelTrainingWorkflow.CreatePlan(request);
+            var validationMessage = _modelTrainingWorkflow.Validate(trainingPlan);
+            if (validationMessage is not null)
             {
-                MessageBox.Show("訓練データフォルダが見つかりません。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(validationMessage, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            if (string.IsNullOrWhiteSpace(savePath))
-            {
-                // 未指定ならデスクトップにModelsフォルダを作成
-                savePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Models");
-            }
+
+            // 260416Codex: 既定保存先へ解決された結果を UI にも反映し、実行後の保存先が見える状態にします。
+            textBoxModel_Save.Text = trainingPlan.ModelOutputFolder;
 
             //  UIロックとログクリア
             buttonModel_Train.Enabled = false;
             textBoxModel_Evaluation.Clear();
 
-            //  バックグラウンドで学習を実行 (引数で全部渡す)
-            await Task.Run(() => _deepLearning.RunTraining(targetMinerals.ToList(), rootPath, epochs, batchSize, patience, testSplit, savePath));
-            //  完了処理
-            buttonModel_Train.Enabled = true;
+            try
+            {
+                // 260416Codex: 実際の学習本体は workflow に移し、Form は UI 状態管理だけを担当します。
+                await _modelTrainingWorkflow.RunAsync(trainingPlan);
+            }
+            finally
+            {
+                buttonModel_Train.Enabled = true;
+            }
         }
         private void optionToolStripMenuItem_CheckedChanged(object sender, EventArgs e)
         {

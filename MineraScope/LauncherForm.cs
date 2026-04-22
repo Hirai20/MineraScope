@@ -17,8 +17,8 @@ namespace MineraScope
 
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
         {
-            // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに Form1 を残します。
-            var form = new Form1();
+            // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに GeneratorForm を残します。
+            var form = new GeneratorForm();
             form.Show(this);
         }
 

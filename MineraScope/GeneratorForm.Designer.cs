@@ -1,6 +1,7 @@
-namespace MineraScope
+ï»¿namespace MineraScope
 {
-    partial class Form1
+    // 260416Codex: WinForms Designer å´ã® partial class åã‚‚ GeneratorForm ã«æƒãˆã¾ã™ã€‚
+    partial class GeneratorForm
     {
         /// <summary>
         ///  Required designer variable.
@@ -63,6 +64,7 @@ namespace MineraScope
             labelPythonScript = new Label();
             ModelTrain = new GroupBox();
             groupBox4 = new GroupBox();
+            numericBox1 = new Crystallography.Controls.NumericBox();
             flowLayoutPanel1 = new FlowLayoutPanel();
             label16 = new Label();
             numericUpDown5 = new NumericUpDown();
@@ -170,7 +172,7 @@ namespace MineraScope
             buttonSpectrumGenerationRun.Name = "buttonSpectrumGenerationRun";
             buttonSpectrumGenerationRun.Size = new Size(77, 24);
             buttonSpectrumGenerationRun.TabIndex = 0;
-            buttonSpectrumGenerationRun.Text = "Às";
+            buttonSpectrumGenerationRun.Text = "å®Ÿè¡Œ";
             buttonSpectrumGenerationRun.UseVisualStyleBackColor = true;
             buttonSpectrumGenerationRun.Click += buttonSpectrumGenerationRun_Click;
             // 
@@ -204,7 +206,7 @@ namespace MineraScope
             labelEndmembers_Resolution.Name = "labelEndmembers_Resolution";
             labelEndmembers_Resolution.Size = new Size(91, 15);
             labelEndmembers_Resolution.TabIndex = 20;
-            labelEndmembers_Resolution.Text = "‰»Šw‘g¬•ª‰ğ”\";
+            labelEndmembers_Resolution.Text = "åŒ–å­¦çµ„æˆåˆ†è§£èƒ½";
             // 
             // groupBoxMineralInfo
             // 
@@ -220,7 +222,7 @@ namespace MineraScope
             groupBoxMineralInfo.Size = new Size(634, 232);
             groupBoxMineralInfo.TabIndex = 37;
             groupBoxMineralInfo.TabStop = false;
-            groupBoxMineralInfo.Text = "Ú×î•ñ";
+            groupBoxMineralInfo.Text = "è©³ç´°æƒ…å ±";
             // 
             // groupBox2
             // 
@@ -237,7 +239,7 @@ namespace MineraScope
             groupBox2.Size = new Size(317, 181);
             groupBox2.TabIndex = 103;
             groupBox2.TabStop = false;
-            groupBox2.Text = "ƒTƒ“ƒvƒŠƒ“ƒOğŒ";
+            groupBox2.Text = "ã‚µãƒ³ãƒ—ãƒªãƒ³ã‚°æ¡ä»¶";
             // 
             // textBoxEndmembers_Constraints
             // 
@@ -255,7 +257,7 @@ namespace MineraScope
             labelEndmembers_Constraints.Name = "labelEndmembers_Constraints";
             labelEndmembers_Constraints.Size = new Size(43, 15);
             labelEndmembers_Constraints.TabIndex = 94;
-            labelEndmembers_Constraints.Text = "ğŒ®";
+            labelEndmembers_Constraints.Text = "æ¡ä»¶å¼";
             // 
             // labelEndmembers_CompositionLists
             // 
@@ -264,7 +266,7 @@ namespace MineraScope
             labelEndmembers_CompositionLists.Name = "labelEndmembers_CompositionLists";
             labelEndmembers_CompositionLists.Size = new Size(80, 15);
             labelEndmembers_CompositionLists.TabIndex = 96;
-            labelEndmembers_CompositionLists.Text = "‰»Šw‘g¬ƒŠƒXƒg";
+            labelEndmembers_CompositionLists.Text = "åŒ–å­¦çµ„æˆãƒªã‚¹ãƒˆ";
             // 
             // numericUpDownMineral_Target
             // 
@@ -293,7 +295,7 @@ namespace MineraScope
             labelMineral_Target.Name = "labelMineral_Target";
             labelMineral_Target.Size = new Size(87, 15);
             labelMineral_Target.TabIndex = 102;
-            labelMineral_Target.Text = "ƒVƒ~ƒ…ƒŒ[ƒVƒ‡ƒ“”";
+            labelMineral_Target.Text = "ã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³æ•°";
             // 
             // textBoxMineral_Memo
             // 
@@ -318,7 +320,7 @@ namespace MineraScope
             labelMineralInfo_Name.Name = "labelMineralInfo_Name";
             labelMineralInfo_Name.Size = new Size(107, 15);
             labelMineralInfo_Name.TabIndex = 92;
-            labelMineralInfo_Name.Text = "z•¨/z•¨ƒOƒ‹[ƒv–¼";
+            labelMineralInfo_Name.Text = "é‰±ç‰©/é‰±ç‰©ã‚°ãƒ«ãƒ¼ãƒ—å";
             // 
             // textBoxMineral_Name
             // 
@@ -337,7 +339,7 @@ namespace MineraScope
             groupBoxEndmembers.Size = new Size(301, 150);
             groupBoxEndmembers.TabIndex = 90;
             groupBoxEndmembers.TabStop = false;
-            groupBoxEndmembers.Text = "’[¬•ª";
+            groupBoxEndmembers.Text = "ç«¯æˆåˆ†";
             // 
             // panel1
             // 
@@ -360,7 +362,7 @@ namespace MineraScope
             buttonEndmember_Delete.Name = "buttonEndmember_Delete";
             buttonEndmember_Delete.Size = new Size(37, 23);
             buttonEndmember_Delete.TabIndex = 98;
-            buttonEndmember_Delete.Text = "íœ";
+            buttonEndmember_Delete.Text = "å‰Šé™¤";
             buttonEndmember_Delete.UseVisualStyleBackColor = true;
             buttonEndmember_Delete.Click += buttonRemoveEndmemberControl_Click;
             // 
@@ -371,7 +373,7 @@ namespace MineraScope
             buttonEndmember_Add.Name = "buttonEndmember_Add";
             buttonEndmember_Add.Size = new Size(37, 23);
             buttonEndmember_Add.TabIndex = 100;
-            buttonEndmember_Add.Text = "’Ç‰Á";
+            buttonEndmember_Add.Text = "è¿½åŠ ";
             buttonEndmember_Add.UseVisualStyleBackColor = true;
             buttonEndmember_Add.Click += buttonAddEndmemberControl_Click;
             // 
@@ -383,7 +385,7 @@ namespace MineraScope
             labelEndmember_Formula.Name = "labelEndmember_Formula";
             labelEndmember_Formula.Size = new Size(55, 15);
             labelEndmember_Formula.TabIndex = 76;
-            labelEndmember_Formula.Text = "‰»Šw‘g¬";
+            labelEndmember_Formula.Text = "åŒ–å­¦çµ„æˆ";
             // 
             // labelEndmember_Name
             // 
@@ -393,7 +395,7 @@ namespace MineraScope
             labelEndmember_Name.Name = "labelEndmember_Name";
             labelEndmember_Name.Size = new Size(43, 15);
             labelEndmember_Name.TabIndex = 75;
-            labelEndmember_Name.Text = "z•¨–¼";
+            labelEndmember_Name.Text = "é‰±ç‰©å";
             // 
             // flowLayoutPanel3
             // 
@@ -434,7 +436,7 @@ namespace MineraScope
             buttonAddList.Name = "buttonAddList";
             buttonAddList.Size = new Size(75, 25);
             buttonAddList.TabIndex = 96;
-            buttonAddList.Text = "ƒŠƒXƒg‚É’Ç‰Á";
+            buttonAddList.Text = "ãƒªã‚¹ãƒˆã«è¿½åŠ ";
             buttonAddList.UseVisualStyleBackColor = true;
             buttonAddList.Click += buttonAddList_Click;
             // 
@@ -444,7 +446,7 @@ namespace MineraScope
             buttonUpdate.Name = "buttonUpdate";
             buttonUpdate.Size = new Size(105, 24);
             buttonUpdate.TabIndex = 99;
-            buttonUpdate.Text = "ƒŠƒXƒg‚ğXV";
+            buttonUpdate.Text = "ãƒªã‚¹ãƒˆã‚’æ›´æ–°";
             buttonUpdate.UseVisualStyleBackColor = true;
             buttonUpdate.Click += buttonUpdate_Click;
             // 
@@ -456,7 +458,7 @@ namespace MineraScope
             labelCompositionCount.Name = "labelCompositionCount";
             labelCompositionCount.Size = new Size(99, 15);
             labelCompositionCount.TabIndex = 91;
-            labelCompositionCount.Text = "‘ƒVƒ~ƒ…ƒŒ[ƒVƒ‡ƒ“”";
+            labelCompositionCount.Text = "ç·ã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³æ•°";
             // 
             // textBoxCompositionCount
             // 
@@ -492,7 +494,7 @@ namespace MineraScope
             groupBoxComposition.Size = new Size(0, 0);
             groupBoxComposition.TabIndex = 41;
             groupBoxComposition.TabStop = false;
-            groupBoxComposition.Text = "‰»Šw‘g¬ğŒİ’è";
+            groupBoxComposition.Text = "åŒ–å­¦çµ„æˆæ¡ä»¶è¨­å®š";
             // 
             // labelCompositionName
             // 
@@ -501,7 +503,7 @@ namespace MineraScope
             labelCompositionName.Name = "labelCompositionName";
             labelCompositionName.Size = new Size(31, 15);
             labelCompositionName.TabIndex = 42;
-            labelCompositionName.Text = "¬•ª";
+            labelCompositionName.Text = "æˆåˆ†";
             // 
             // labelPythonScript
             // 
@@ -510,7 +512,7 @@ namespace MineraScope
             labelPythonScript.Name = "labelPythonScript";
             labelPythonScript.Size = new Size(88, 15);
             labelPythonScript.TabIndex = 15;
-            labelPythonScript.Text = "PythonƒXƒNƒŠƒvƒg";
+            labelPythonScript.Text = "Pythonã‚¹ã‚¯ãƒªãƒ—ãƒˆ";
             // 
             // ModelTrain
             // 
@@ -522,10 +524,11 @@ namespace MineraScope
             ModelTrain.Size = new Size(540, 666);
             ModelTrain.TabIndex = 87;
             ModelTrain.TabStop = false;
-            ModelTrain.Text = "ƒ‚ƒfƒ‹ì¬";
+            ModelTrain.Text = "ãƒ¢ãƒ‡ãƒ«ä½œæˆ";
             // 
             // groupBox4
             // 
+            groupBox4.Controls.Add(numericBox1);
             groupBox4.Controls.Add(flowLayoutPanel1);
             groupBox4.Controls.Add(buttonAllSelect);
             groupBox4.Controls.Add(checkedListBoxTrainMinerals);
@@ -546,7 +549,28 @@ namespace MineraScope
             groupBox4.Size = new Size(520, 524);
             groupBox4.TabIndex = 43;
             groupBox4.TabStop = false;
-            groupBox4.Text = "ƒ‚ƒfƒ‹ŒP—û";
+            groupBox4.Text = "ãƒ¢ãƒ‡ãƒ«è¨“ç·´";
+            // 
+            // numericBox1
+            // 
+            numericBox1.BackColor = Color.Transparent;
+            numericBox1.Font = new Font("Segoe UI Symbol", 9.75F);
+            numericBox1.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBox1.FooterText = "ãƒ•ãƒƒã‚¿ãƒ¼";
+            numericBox1.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBox1.HeaderText = "ã‚¨ãƒãƒƒã‚¯æ•°";
+            numericBox1.Location = new Point(8, 218);
+            numericBox1.Margin = new Padding(0);
+            numericBox1.MaximumSize = new Size(1000, 28);
+            numericBox1.MinimumSize = new Size(1, 18);
+            numericBox1.Name = "numericBox1";
+            numericBox1.RadianValue = 1.5707963267948966D;
+            numericBox1.ShowUpDown = true;
+            numericBox1.Size = new Size(144, 26);
+            numericBox1.SmartIncrement = true;
+            numericBox1.TabIndex = 104;
+            numericBox1.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBox1.Value = 90D;
             // 
             // flowLayoutPanel1
             // 
@@ -600,7 +624,7 @@ namespace MineraScope
             buttonAllSelect.Name = "buttonAllSelect";
             buttonAllSelect.Size = new Size(85, 23);
             buttonAllSelect.TabIndex = 103;
-            buttonAllSelect.Text = "‘S‘I‘ğ/‰ğœ";
+            buttonAllSelect.Text = "å…¨é¸æŠ/è§£é™¤";
             buttonAllSelect.UseVisualStyleBackColor = true;
             buttonAllSelect.Click += buttonAllSelect_Click;
             // 
@@ -632,7 +656,7 @@ namespace MineraScope
             label3.Name = "label3";
             label3.Size = new Size(55, 15);
             label3.TabIndex = 100;
-            label3.Text = "‘Ò‹@‰ñ”";
+            label3.Text = "å¾…æ©Ÿå›æ•°";
             // 
             // buttonModel_SaveFolder
             // 
@@ -658,7 +682,7 @@ namespace MineraScope
             buttonModel_Train.Name = "buttonModel_Train";
             buttonModel_Train.Size = new Size(68, 25);
             buttonModel_Train.TabIndex = 0;
-            buttonModel_Train.Text = "ŒP—ûŠJn";
+            buttonModel_Train.Text = "è¨“ç·´é–‹å§‹";
             buttonModel_Train.UseVisualStyleBackColor = true;
             buttonModel_Train.Click += buttonModel_Train_Click;
             // 
@@ -669,7 +693,7 @@ namespace MineraScope
             label7.Name = "label7";
             label7.Size = new Size(81, 15);
             label7.TabIndex = 24;
-            label7.Text = "ƒ‚ƒfƒ‹‚Ì•Û‘¶æ";
+            label7.Text = "ãƒ¢ãƒ‡ãƒ«ã®ä¿å­˜å…ˆ";
             // 
             // numericUpDownModel_Epochs
             // 
@@ -703,7 +727,7 @@ namespace MineraScope
             label5.Name = "label5";
             label5.Size = new Size(49, 15);
             label5.TabIndex = 21;
-            label5.Text = "ŒP—ûƒƒO";
+            label5.Text = "è¨“ç·´ãƒ­ã‚°";
             // 
             // label10
             // 
@@ -713,7 +737,7 @@ namespace MineraScope
             label10.Name = "label10";
             label10.Size = new Size(62, 15);
             label10.TabIndex = 27;
-            label10.Text = "ƒoƒbƒ`ƒTƒCƒY";
+            label10.Text = "ãƒãƒƒãƒã‚µã‚¤ã‚º";
             // 
             // label9
             // 
@@ -723,7 +747,7 @@ namespace MineraScope
             label9.Name = "label9";
             label9.Size = new Size(55, 15);
             label9.TabIndex = 26;
-            label9.Text = "ƒGƒ|ƒbƒN”";
+            label9.Text = "ã‚¨ãƒãƒƒã‚¯æ•°";
             // 
             // groupBoxModel_LearningData
             // 
@@ -737,7 +761,7 @@ namespace MineraScope
             groupBoxModel_LearningData.Size = new Size(510, 97);
             groupBoxModel_LearningData.TabIndex = 42;
             groupBoxModel_LearningData.TabStop = false;
-            groupBoxModel_LearningData.Text = "ŠwKƒf[ƒ^İ’è";
+            groupBoxModel_LearningData.Text = "å­¦ç¿’ãƒ‡ãƒ¼ã‚¿è¨­å®š";
             // 
             // label4
             // 
@@ -746,7 +770,7 @@ namespace MineraScope
             label4.Name = "label4";
             label4.Size = new Size(57, 15);
             label4.TabIndex = 2;
-            label4.Text = "‹³tƒf[ƒ^";
+            label4.Text = "æ•™å¸«ãƒ‡ãƒ¼ã‚¿";
             // 
             // numericUpDownModel_ValidationSplit
             // 
@@ -781,7 +805,7 @@ namespace MineraScope
             label13.Name = "label13";
             label13.Size = new Size(111, 15);
             label13.TabIndex = 30;
-            label13.Text = "ƒeƒXƒgƒf[ƒ^‚ÌŠ„‡(%)";
+            label13.Text = "ãƒ†ã‚¹ãƒˆãƒ‡ãƒ¼ã‚¿ã®å‰²åˆ(%)";
             // 
             // buttonMineral_Delete
             // 
@@ -792,7 +816,7 @@ namespace MineraScope
             buttonMineral_Delete.Name = "buttonMineral_Delete";
             buttonMineral_Delete.Size = new Size(39, 23);
             buttonMineral_Delete.TabIndex = 97;
-            buttonMineral_Delete.Text = "íœ";
+            buttonMineral_Delete.Text = "å‰Šé™¤";
             buttonMineral_Delete.UseVisualStyleBackColor = true;
             buttonMineral_Delete.Click += buttonMineral_Delete_Click;
             // 
@@ -812,7 +836,7 @@ namespace MineraScope
             SpectrumGeneration.Size = new Size(661, 666);
             SpectrumGeneration.TabIndex = 88;
             SpectrumGeneration.TabStop = false;
-            SpectrumGeneration.Text = "EDXƒXƒyƒNƒgƒ‹¶¬";
+            SpectrumGeneration.Text = "EDXã‚¹ãƒšã‚¯ãƒˆãƒ«ç”Ÿæˆ";
             // 
             // groupBox1
             // 
@@ -832,7 +856,7 @@ namespace MineraScope
             groupBox1.Size = new Size(637, 67);
             groupBox1.TabIndex = 99;
             groupBox1.TabStop = false;
-            groupBox1.Text = "SEM-EDXğŒ";
+            groupBox1.Text = "SEM-EDXæ¡ä»¶";
             // 
             // numericUpDownProbeCurrent
             // 
@@ -853,7 +877,7 @@ namespace MineraScope
             groupBox5.Size = new Size(0, 0);
             groupBox5.TabIndex = 41;
             groupBox5.TabStop = false;
-            groupBox5.Text = "‰»Šw‘g¬ğŒİ’è";
+            groupBox5.Text = "åŒ–å­¦çµ„æˆæ¡ä»¶è¨­å®š";
             // 
             // label2
             // 
@@ -862,7 +886,7 @@ namespace MineraScope
             label2.Name = "label2";
             label2.Size = new Size(31, 15);
             label2.TabIndex = 42;
-            label2.Text = "¬•ª";
+            label2.Text = "æˆåˆ†";
             // 
             // labelProbeCurrent
             // 
@@ -871,7 +895,7 @@ namespace MineraScope
             labelProbeCurrent.Name = "labelProbeCurrent";
             labelProbeCurrent.Size = new Size(80, 15);
             labelProbeCurrent.TabIndex = 17;
-            labelProbeCurrent.Text = "ÆË“d—¬(nA)";
+            labelProbeCurrent.Text = "ç…§å°„é›»æµ(nA)";
             // 
             // labelDetectorName
             // 
@@ -879,7 +903,7 @@ namespace MineraScope
             labelDetectorName.Name = "labelDetectorName";
             labelDetectorName.Size = new Size(60, 15);
             labelDetectorName.TabIndex = 8;
-            labelDetectorName.Text = "ŒŸoŠí–¼";
+            labelDetectorName.Text = "æ¤œå‡ºå™¨å";
             // 
             // numericUpDownLiveTime
             // 
@@ -908,7 +932,7 @@ namespace MineraScope
             labelLiveTime.Name = "labelLiveTime";
             labelLiveTime.Size = new Size(80, 15);
             labelLiveTime.TabIndex = 15;
-            labelLiveTime.Text = "‘ª’èŠÔ(•b)";
+            labelLiveTime.Text = "æ¸¬å®šæ™‚é–“(ç§’)";
             // 
             // labelCarbonThickness
             // 
@@ -916,7 +940,7 @@ namespace MineraScope
             labelCarbonThickness.Name = "labelCarbonThickness";
             labelCarbonThickness.Size = new Size(122, 15);
             labelCarbonThickness.TabIndex = 12;
-            labelCarbonThickness.Text = "ƒJ[ƒ{ƒ“ö’…‚ÌŒú‚³(nm)";
+            labelCarbonThickness.Text = "ã‚«ãƒ¼ãƒœãƒ³è’¸ç€ã®åšã•(nm)";
             // 
             // labelBeamEnergy
             // 
@@ -925,7 +949,7 @@ namespace MineraScope
             labelBeamEnergy.Name = "labelBeamEnergy";
             labelBeamEnergy.Size = new Size(80, 15);
             labelBeamEnergy.TabIndex = 14;
-            labelBeamEnergy.Text = "‰Á‘¬“dˆ³(kV)";
+            labelBeamEnergy.Text = "åŠ é€Ÿé›»åœ§(kV)";
             // 
             // numericUpDownBeamEnergy
             // 
@@ -961,7 +985,7 @@ namespace MineraScope
             groupBoxMineral.Size = new Size(640, 412);
             groupBoxMineral.TabIndex = 98;
             groupBoxMineral.TabStop = false;
-            groupBoxMineral.Text = "ŒvZ‘ÎÛ";
+            groupBoxMineral.Text = "è¨ˆç®—å¯¾è±¡";
             // 
             // flowLayoutPanel4
             // 
@@ -999,7 +1023,7 @@ namespace MineraScope
             buttonMineral_AllDelete.Name = "buttonMineral_AllDelete";
             buttonMineral_AllDelete.Size = new Size(50, 23);
             buttonMineral_AllDelete.TabIndex = 98;
-            buttonMineral_AllDelete.Text = "‘Síœ";
+            buttonMineral_AllDelete.Text = "å…¨å‰Šé™¤";
             buttonMineral_AllDelete.UseVisualStyleBackColor = true;
             buttonMineral_AllDelete.Click += buttonMineral_AllDelete_Click;
             // 
@@ -1012,7 +1036,7 @@ namespace MineraScope
             buttonMineral_Reset.Name = "buttonMineral_Reset";
             buttonMineral_Reset.Size = new Size(50, 23);
             buttonMineral_Reset.TabIndex = 99;
-            buttonMineral_Reset.Text = "‰Šú‰»";
+            buttonMineral_Reset.Text = "åˆæœŸåŒ–";
             buttonMineral_Reset.UseVisualStyleBackColor = true;
             buttonMineral_Reset.Click += buttonMineral_Reset_Click;
             // 
@@ -1023,7 +1047,7 @@ namespace MineraScope
             checkBox1.Name = "checkBox1";
             checkBox1.Size = new Size(107, 19);
             checkBox1.TabIndex = 100;
-            checkBox1.Text = "Ú×î•ñ‚ğ•\¦";
+            checkBox1.Text = "è©³ç´°æƒ…å ±ã‚’è¡¨ç¤º";
             checkBox1.UseVisualStyleBackColor = true;
             // 
             // tabControl2
@@ -1053,7 +1077,7 @@ namespace MineraScope
             tabPage5.Padding = new Padding(3);
             tabPage5.Size = new Size(306, 114);
             tabPage5.TabIndex = 0;
-            tabPage5.Text = "ƒtƒ@ƒCƒ‹İ’è";
+            tabPage5.Text = "ãƒ•ã‚¡ã‚¤ãƒ«è¨­å®š";
             tabPage5.UseVisualStyleBackColor = true;
             // 
             // buttonPathDTSA
@@ -1115,7 +1139,7 @@ namespace MineraScope
             labelPathDTSA.Name = "labelPathDTSA";
             labelPathDTSA.Size = new Size(105, 15);
             labelPathDTSA.TabIndex = 15;
-            labelPathDTSA.Text = "DTSA-‡Uƒtƒ@ƒCƒ‹ƒpƒX";
+            labelPathDTSA.Text = "DTSA-â…¡ãƒ•ã‚¡ã‚¤ãƒ«ãƒ‘ã‚¹";
             // 
             // labelPathEDX
             // 
@@ -1124,7 +1148,7 @@ namespace MineraScope
             labelPathEDX.Name = "labelPathEDX";
             labelPathEDX.Size = new Size(110, 15);
             labelPathEDX.TabIndex = 15;
-            labelPathEDX.Text = "EDXƒXƒyƒNƒgƒ‹o—Íæ";
+            labelPathEDX.Text = "EDXã‚¹ãƒšã‚¯ãƒˆãƒ«å‡ºåŠ›å…ˆ";
             // 
             // labelPathPython
             // 
@@ -1133,7 +1157,7 @@ namespace MineraScope
             labelPathPython.Name = "labelPathPython";
             labelPathPython.Size = new Size(124, 15);
             labelPathPython.TabIndex = 15;
-            labelPathPython.Text = "PythonƒXƒNƒŠƒvƒg•Û‘¶æ";
+            labelPathPython.Text = "Pythonã‚¹ã‚¯ãƒªãƒ—ãƒˆä¿å­˜å…ˆ";
             // 
             // tabPage6
             // 
@@ -1142,7 +1166,7 @@ namespace MineraScope
             tabPage6.Padding = new Padding(3);
             tabPage6.Size = new Size(306, 114);
             tabPage6.TabIndex = 1;
-            tabPage6.Text = "SEMŒv‘ªğŒ";
+            tabPage6.Text = "SEMè¨ˆæ¸¬æ¡ä»¶";
             tabPage6.UseVisualStyleBackColor = true;
             // 
             // tabPage7
@@ -1156,7 +1180,7 @@ namespace MineraScope
             tabPage7.Padding = new Padding(3);
             tabPage7.Size = new Size(306, 114);
             tabPage7.TabIndex = 2;
-            tabPage7.Text = "ƒVƒ~ƒ…ƒŒ[ƒVƒ‡ƒ“Àsİ’è";
+            tabPage7.Text = "ã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³å®Ÿè¡Œè¨­å®š";
             tabPage7.UseVisualStyleBackColor = true;
             // 
             // numericUpDownExecution_Count
@@ -1175,7 +1199,7 @@ namespace MineraScope
             labelExecution_Count.Name = "labelExecution_Count";
             labelExecution_Count.Size = new Size(35, 15);
             labelExecution_Count.TabIndex = 17;
-            labelExecution_Count.Text = "‰ñ”";
+            labelExecution_Count.Text = "å›æ•°";
             // 
             // numericUpDownExecution_Parallel
             // 
@@ -1192,7 +1216,7 @@ namespace MineraScope
             labelExecution_Parallel.Name = "labelExecution_Parallel";
             labelExecution_Parallel.Size = new Size(66, 15);
             labelExecution_Parallel.TabIndex = 35;
-            labelExecution_Parallel.Text = "•À—ñ”";
+            labelExecution_Parallel.Text = "ä¸¦åˆ—æ•°";
             // 
             // menuStrip1
             // 
@@ -1218,7 +1242,8 @@ namespace MineraScope
             debugModeToolStripMenuItem.Size = new Size(142, 22);
             debugModeToolStripMenuItem.Text = "Debug mode";
             // 
-            // Form1
+            // 260416Codex: Designer ãŒä¿æŒã™ã‚‹ãƒ•ã‚©ãƒ¼ãƒ åã‚‚ GeneratorForm ã«æƒãˆã¾ã™ã€‚
+            // GeneratorForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
@@ -1228,7 +1253,8 @@ namespace MineraScope
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
             Margin = new Padding(3, 2, 3, 2);
-            Name = "Form1";
+            // 260416Codex: Name ãƒ—ãƒ­ãƒ‘ãƒ†ã‚£ã‚‚ã‚¯ãƒ©ã‚¹åå¤‰æ›´ã«åˆã‚ã›ã¦æ›´æ–°ã—ã¾ã™ã€‚
+            Name = "GeneratorForm";
             Padding = new Padding(3);
             ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).EndInit();
             groupBoxMineralInfo.ResumeLayout(false);
@@ -1388,6 +1414,7 @@ namespace MineraScope
         private CheckBox checkBox1;
         private GroupBox groupBox2;
         private FlowLayoutPanel flowLayoutPanel4;
+        private Crystallography.Controls.NumericBox numericBox1;
     }
 }
 

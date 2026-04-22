@@ -11,6 +11,7 @@
     <Product>MineraScope</Product>
     <Title>MineraScope</Title>
     <RootNamespace>MineraScope</RootNamespace>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Crystallograohy.Controls\Crystallography.Controls.csproj" />
     <ProjectReference Include="..\Crystallograohy\Crystallography.csproj" />
   </ItemGroup>
 

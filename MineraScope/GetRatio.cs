@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -37,7 +37,7 @@ namespace MineraScope
         //{
         //    List<List<double>> combinedRatios = ratioGroups[0];
 
-        //    // 2”Ô–ÚˆÈ~‚ÌList‚ğ‡”Ô‚ÉAƒx[ƒX‚É‘Î‚µ‚ÄŒ‹‡
+        //    // 2ç•ªç›®ä»¥é™ã®Listã‚’é †ç•ªã«ã€ãƒ™ãƒ¼ã‚¹ã«å¯¾ã—ã¦çµåˆ
         //    for (int i = 1; i < ratioGroups.Count; i++)
         //    {
         //        var nextGroupRatios = ratioGroups[i];
@@ -58,7 +58,7 @@ namespace MineraScope
         //    return combinedRatios;
         //}
 
-        //’[¬•ª‚Ì”ä—¦ƒŠƒXƒg‚ğ¶¬
+        //ç«¯æˆåˆ†ã®æ¯”ç‡ãƒªã‚¹ãƒˆã‚’ç”Ÿæˆ
         public static List<List<double>> GetRatios(int elementNum, double step)
         {
             double FixZero(double x) => Math.Abs(x) < 1e-10 ? 0.0 : x;

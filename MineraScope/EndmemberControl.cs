@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -20,7 +20,7 @@ namespace MineraScope
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
         public string EndmemberName
         {
-            get =>�@textBoxEndmember_Name.Text; set => textBoxEndmember_Name.Text = value;
+            get =>　textBoxEndmember_Name.Text; set => textBoxEndmember_Name.Text = value;
         }
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
         public string EndmemberFormula

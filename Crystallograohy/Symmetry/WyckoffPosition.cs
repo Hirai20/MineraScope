@@ -5,9 +5,7 @@ using System.Xml.Serialization;
 
 namespace Crystallography;
 
-/// <summary>
-/// ワイコフポジション構造体. SymmetryStaticで初期化される.
-/// </summary>
+/// <summary>ワイコフポジション構造体. SymmetryStaticで初期化される.</summary>
 [Serializable()]
 public readonly struct WyckoffPosition
 {
@@ -17,55 +15,35 @@ public readonly struct WyckoffPosition
     #endregion
 
     #region フィールド、プロパティ
-    /// <summary>
-    /// 空間群の番号
-    /// </summary>
+    /// <summary>空間群の番号</summary>
     public ushort SymmetrySeriesNumber { get; }
 
-    /// <summary>
-    /// 格子のタイプ
-    /// </summary>
+    /// <summary>格子のタイプ</summary>
     public string LatticeType { get; }
 
-    /// <summary>
-    /// 多重度 (整数)
-    /// </summary>
+    /// <summary>多重度 (整数)</summary>
     public byte Multiplicity { get; }
 
-    /// <summary>
-    /// ワイコフ文字
-    /// </summary>
+    /// <summary>ワイコフ文字</summary>
     public string WyckoffLetter { get; }
 
-    /// <summary>
-    /// ワイコフナンバー (一般位置が0, 特殊になるほど数字が大)
-    /// </summary>
+    /// <summary>ワイコフナンバー (一般位置が0, 特殊になるほど数字が大)</summary>
     public byte WyckoffNumber { get; }
 
-    /// <summary>
-    /// サイトシンメトリ
-    /// </summary>
+    /// <summary>サイトシンメトリ</summary>
     public string SiteSymmetry { get; }
 
-    /// <summary>
-    /// 等価位置を生成するFuncの配列
-    /// </summary>
+    /// <summary>等価位置を生成するFuncの配列</summary>
     [XmlIgnore]
     public Func<double, double, double, (double X, double Y, double Z)>[] PositionGenerator { get; }
 
-    /// <summary>
-    /// 等価位置の文字列(x,y,zなど)の配列
-    /// </summary>
+    /// <summary>等価位置の文字列(x,y,zなど)の配列</summary>
     public string[] PositionStr { get; }
 
-    /// <summary>
-    /// 等価位置の対称操作をSymmetryOperationクラスとして格納したもの
-    /// </summary>
+    /// <summary>等価位置の対称操作をSymmetryOperationクラスとして格納したもの</summary>
     public SymmetryOperation[] PositionOperations { get; }
 
-    /// <summary>
-    /// 自由度 (このワイコフ位置がx,y,zなどの変数を含む場合はtrue, 含まない場合はfalse)
-    /// </summary>
+    /// <summary>自由度 (このワイコフ位置がx,y,zなどの変数を含む場合はtrue, 含まない場合はfalse)</summary>
     public (bool X, bool Y, bool Z) Free { get; }
 
     private static readonly char[] separator = [','];
@@ -91,7 +69,9 @@ public readonly struct WyckoffPosition
 
         PositionOperations = operations;
 
-        if (PositionStr == null || PositionStr.Length == 0)
+        //if (PositionStr == null || PositionStr.Length == 0)
+        // (260320Ch) パターンマッチで null/空配列判定を明示する
+        if (PositionStr is not { Length: > 0 })
             Free = (true, true, true);
         else
         {
@@ -105,9 +85,7 @@ public readonly struct WyckoffPosition
     #endregion
 
     #region メソッド
-    /// <summary>
-    /// 与えられたx,y,zで、このワイコフ位置を再生
-    /// </summary>
+    /// <summary>与えられたx,y,zで、このワイコフ位置を再生</summary>
     /// <param name="x"></param>
     /// <param name="y"></param>
     /// <param name="z"></param>
@@ -121,31 +99,50 @@ public readonly struct WyckoffPosition
             var (X, Y, Z) = PositionGenerator[i](x, y, z);
 
             //当たり判定
-            if (pos.Count == 0 || pos.All(p => !chk(Z, p.Z) || !chk(X, p.X) || !chk(Y, p.Y)))
-            {
-                var v = new Vector3D(X, Y, Z, false);
-                //0~1の範囲に収まるかどうかチェックし、修正
-                v.InnerLatticeThis();
-                if (PositionOperations != null)
-                    v.Operation = new SymmetryOperation(PositionOperations[i], SymmetrySeriesNumber);//PositionOperatorsを格納
-                pos.Add(v);
-            }
+            //if (pos.Count == 0 || pos.All(p => !chk(Z, p.Z) || !chk(X, p.X) || !chk(Y, p.Y)))
+            // (260320Ch) LINQ All をループへ置き換えてホットパスの割り当てを減らす
+            if (ContainsPosition(pos, X, Y, Z))
+                continue;
+
+            var v = new Vector3D(X, Y, Z, false);
+            //0~1の範囲に収まるかどうかチェックし、修正
+            v.InnerLatticeThis();
+            if (PositionOperations != null)
+                v.Operation = new SymmetryOperation(PositionOperations[i], SymmetrySeriesNumber);//PositionOperatorsを格納
+            pos.Add(v);
         }
         return [.. pos];
     }
-    /// <summary>
-    /// 与えられたposがこのWykoffPositionかどうかを判定する
-    /// </summary>
+    /// <summary>与えられたposがこのWykoffPositionかどうかを判定する</summary>
     /// <param name="pos"></param>
     /// <returns></returns>
     public readonly bool CheckPosition(double x, double y, double z)
     {
-        return PositionGenerator.Any(g =>
+        //return PositionGenerator.Any(g =>
+        //{
+        //    var (X, Y, Z) = g(x, y, z);
+        //    return chk(X, x) && chk(Y, y) && chk(Z, z);
+        //});
+        // (260320Ch) Any のラムダ割り当てを避ける
+        foreach (var g in PositionGenerator)
         {
             var (X, Y, Z) = g(x, y, z);
-            return chk(X, x) && chk(Y, y) && chk(Z, z);
-        });
+            if (chk(X, x) && chk(Y, y) && chk(Z, z))
+                return true;
+        }
+        return false;
     }
+
+    // (260320Ch) 重複位置の判定をループ化してクロージャ生成を避ける
+    private static bool ContainsPosition(List<Vector3D> positions, double x, double y, double z)
+    {
+        foreach (var p in positions)
+            if (chk(z, p.Z) && chk(x, p.X) && chk(y, p.Y))
+                return true;
+
+        return false;
+    }
+
     static bool chk(in double d1, in double d2)
     {
         var d = Math.Abs(d1 - d2);
@@ -156,9 +153,7 @@ public readonly struct WyckoffPosition
     #endregion
 
     #region static メソッド
-    /// <summary>
-    /// 引数の空間群による対称操作で映る原子位置(pos)の等価な原子位置をクラスAtomsでかえす
-    /// </summary>
+    /// <summary>引数の空間群による対称操作で映る原子位置(pos)の等価な原子位置をクラスAtomsでかえす</summary>
     /// <param name="Pos"></param>
     /// <param name="SymmetrySeriesNumber"></param>
     /// <returns></returns>

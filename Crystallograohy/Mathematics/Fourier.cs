@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Numerics;
 using System.Threading.Tasks;
 
@@ -19,9 +19,7 @@ public class FFTW
     IntPtr plan;
     readonly double coeff;
 
-    /// <summary>
-    ///  Initializes FFTW and all arrays. n: Logical size of the transform
-    /// </summary>
+    /// <summary>Initializes FFTW and all arrays. n: Logical size of the transform</summary>
     /// <param name="width"></param>
     /// <param name="height"></param>
     /// <param name="direction"></param>
@@ -82,12 +80,10 @@ public static class Fourier
     public static event ProgressEventDelegate ProgressEvent;
 
     private static readonly int ThreadTotal = 128;
-    private static readonly int MaxDenominator = 8000;//•K‚¸‹ô”
+    private static readonly int MaxDenominator = 8000;//å¿…ãšå¶æ•°
     private static readonly int MaxCooleyTukeyTable = 13;
 
-    /// <summary>
-    /// •¡‘f”values‚Ìmodulus(’·‚³)‚ğ“¾‚é
-    /// </summary>
+    /// <summary>è¤‡ç´ æ•°valuesã®modulus(é•·ã•)ã‚’å¾—ã‚‹</summary>
     /// <param name="values"></param>
     /// <param name="normarize"></param>
     /// <returns></returns>
@@ -121,9 +117,7 @@ public static class Fourier
         }
     }
 
-    /// <summary>
-    /// •¡‘f”values‚Ìmodulus(’·‚³)‚ğ“¾‚é
-    /// </summary>
+    /// <summary>è¤‡ç´ æ•°valuesã®modulus(é•·ã•)ã‚’å¾—ã‚‹</summary>
     /// <param name="values"></param>
     /// <param name="normarize"></param>
     /// <returns></returns>
@@ -151,9 +145,7 @@ public static class Fourier
         }
     }
 
-    /// <summary>
-    /// 2ŸŒ³FFT
-    /// </summary>
+    /// <summary>2æ¬¡å…ƒFFT</summary>
     /// <param name="values"></param>
     /// <param name="wide"></param>
     /// <returns></returns>
@@ -169,9 +161,7 @@ public static class Fourier
         return FFT(src, FourierDirectionEnum.Forward);
     }
 
-    /// <summary>
-    /// 2ŸŒ³FFT
-    /// </summary>
+    /// <summary>2æ¬¡å…ƒFFT</summary>
     /// <param name="values"></param>
     /// <param name="wide"></param>
     /// <returns></returns>
@@ -192,9 +182,7 @@ public static class Fourier
         return FFT(src, null, direction);
     }
 
-    /// <summary>
-    /// 2ŸŒ³FFT
-    /// </summary>
+    /// <summary>2æ¬¡å…ƒFFT</summary>
     /// <param name="src"></param>
     /// <param name="direction"></param>
     /// <returns></returns>
@@ -203,7 +191,7 @@ public static class Fourier
         if (src == null || src.Length == 0 || src[0] == null || src[0].Length == 0) return null;
         int centerX = src[0].Length / 2, centerY = src.Length / 2;
 
-        //‚Ü‚¸Filter‚ğì—p‚³‚¹‚é && ‚S•ªŠ„‚µ‚Ä‘g‚İ‚È‚¨‚·
+        //ã¾ãšFilterã‚’ä½œç”¨ã•ã›ã‚‹ && ï¼”åˆ†å‰²ã—ã¦çµ„ã¿ãªãŠã™
         Complex[][] src2 = new Complex[src.Length][];
         for (int i = 0; i < src.Length; i++)
             src2[i] = new Complex[src[i].Length];
@@ -222,21 +210,21 @@ public static class Fourier
         for (int i = 0; i < ThreadTotal; i++)
             d[i] = new FFTdelegate(FFT);
 
-        //‚Ü‚¸Šes‚²‚Æ‚ÉFFT
+        //ã¾ãšå„è¡Œã”ã¨ã«FFT
         Complex[][] dest1 = new Complex[src2.Length][];
         for (int i = 0; i < dest1.Length; i++)
         {
             for (int j = 0; j < ThreadTotal && i + j < dest1.Length; j++)
-                ar[j] = d[j].BeginInvoke(src2[i + j], direction, ref dest1[i + j], null, null);//ƒXƒŒƒbƒh‹N“®
+                ar[j] = d[j].BeginInvoke(src2[i + j], direction, ref dest1[i + j], null, null);//ã‚¹ãƒ¬ãƒƒãƒ‰èµ·å‹•
             for (int j = 0; j < ThreadTotal && i + j < dest1.Length; j++)
             {
-                d[j].EndInvoke(ref dest1[i + j], ar[j]);//ƒXƒŒƒbƒhI—¹‘Ò‚¿
+                d[j].EndInvoke(ref dest1[i + j], ar[j]);//ã‚¹ãƒ¬ãƒƒãƒ‰çµ‚äº†å¾…ã¡
                 ProgressEvent?.Invoke();
             }
             i += ThreadTotal - 1;
         }
 
-        //Ÿ‚ÉŠe—ñ‚²‚Æ‚ÉFFT
+        //æ¬¡ã«å„åˆ—ã”ã¨ã«FFT
         Complex[][] dest2 = new Complex[src2[0].Length][];
         for (int i = 0; i < dest2.Length; i++)
         {
@@ -248,16 +236,16 @@ public static class Fourier
         for (int i = 0; i < dest2.Length; i++)
         {
             for (int j = 0; j < ThreadTotal && i + j < dest2.Length; j++)
-                ar[j] = d[j].BeginInvoke(dest2[i + j], direction, ref dest2[i + j], null, null);//ƒXƒŒƒbƒh‹N“®
+                ar[j] = d[j].BeginInvoke(dest2[i + j], direction, ref dest2[i + j], null, null);//ã‚¹ãƒ¬ãƒƒãƒ‰èµ·å‹•
             for (int j = 0; j < ThreadTotal && i + j < dest2.Length; j++)
             {
-                d[j].EndInvoke(ref dest2[i + j], ar[j]);//ƒXƒŒƒbƒhI—¹‘Ò‚¿
+                d[j].EndInvoke(ref dest2[i + j], ar[j]);//ã‚¹ãƒ¬ãƒƒãƒ‰çµ‚äº†å¾…ã¡
                 ProgressEvent?.Invoke();
             }
             i += ThreadTotal - 1;
         }
 
-        //dest2‚Ìs‚Æ—ñ‚ğ“ü‚ê‘Ö‚¦‚Ädest1‚ÉŠi”[‚µ•Ô‚·
+        //dest2ã®è¡Œã¨åˆ—ã‚’å…¥ã‚Œæ›¿ãˆã¦dest1ã«æ ¼ç´ã—è¿”ã™
         for (int i = 0; i < src2.Length; i++)
             for (int j = 0; j < src2[0].Length; j++)
                 dest1[i][j] = dest2[j][i];
@@ -265,7 +253,7 @@ public static class Fourier
 
         if (direction == FourierDirectionEnum.Inverse)
             return dest1;
-        else //ÅŒã‚É“ü‚ê‘Ö‚¦‚é•K—v‚ª‚ ‚é‚Í
+        else //æœ€å¾Œã«å…¥ã‚Œæ›¿ãˆã‚‹å¿…è¦ãŒã‚ã‚‹æ™‚ã¯
         {
             Complex[][] dest3 = new Complex[src2.Length][];
             for (int i = 0; i < dest3.Length; i++)
@@ -285,9 +273,7 @@ public static class Fourier
         dest = FFT(src, direction);
     }
 
-    /// <summary>
-    /// ˆêŸŒ³FFT
-    /// </summary>
+    /// <summary>ä¸€æ¬¡å…ƒFFT</summary>
     /// <param name="src"></param>
     /// <param name="direction"></param>
     /// <returns></returns>
@@ -308,7 +294,7 @@ public static class Fourier
         return fft(src);
     }
 
-    #region fft—pƒTƒuƒ‹[ƒ`ƒ“
+    #region fftç”¨ã‚µãƒ–ãƒ«ãƒ¼ãƒãƒ³
 
     private static int sign = -1;
 
@@ -391,9 +377,9 @@ public static class Fourier
         else return new Complex[] { result[0], result[7], result[6], result[5], result[4], result[3], result[2], result[1] };
     }
 
-    #region CooleyTukey—p‚Ìƒ‹[ƒ`ƒ“
+    #region CooleyTukeyç”¨ã®ãƒ«ãƒ¼ãƒãƒ³
 
-    private static void initializeTable()//Šeíƒe[ƒuƒ‹‰Šú‰»
+    private static void initializeTable()//å„ç¨®ãƒ†ãƒ¼ãƒ–ãƒ«åˆæœŸåŒ–
     {
         bitRev = new int[MaxCooleyTukeyTable][];
         sinTbl = new double[MaxCooleyTukeyTable][];
@@ -409,7 +395,7 @@ public static class Fourier
     private static int[][] bitRev;
     private static double[][] sinTbl;
 
-    private static void make_bitrev(int[] bitrev)//ƒoƒ^ƒtƒ‰ƒC‰‰Z‚Ìƒrƒbƒg”½“]ƒe[ƒuƒ‹ì¬.
+    private static void make_bitrev(int[] bitrev)//ãƒã‚¿ãƒ•ãƒ©ã‚¤æ¼”ç®—ã®ãƒ“ãƒƒãƒˆåè»¢ãƒ†ãƒ¼ãƒ–ãƒ«ä½œæˆ.
     {
         int n = bitrev.Length;
         int n2 = n / 2;
@@ -468,14 +454,14 @@ public static class Fourier
         for (int i = 0; i < n2; i++) tbl[i + n2] = -tbl[i];
     }
 
-    private static Complex[] fftCooleyTukey(Complex[] src)//2‚Ì—İæ‚Ì‚Æ‚«‚ÌƒAƒ‹ƒSƒŠƒYƒ€
+    private static Complex[] fftCooleyTukey(Complex[] src)//2ã®ç´¯ä¹—ã®ã¨ãã®ã‚¢ãƒ«ã‚´ãƒªã‚ºãƒ 
     {
         int order = (int)Math.Log(src.Length, 2), n = src.Length, n4 = n / 4, i, j, k, h = 0, k2 = 0, ik;
         double cos, sin;
-        for (i = 0; i < n; i++)//ƒoƒ^ƒtƒ‰ƒC‰‰Z—pƒrƒbƒg”½“]
+        for (i = 0; i < n; i++)//ãƒã‚¿ãƒ•ãƒ©ã‚¤æ¼”ç®—ç”¨ãƒ“ãƒƒãƒˆåè»¢
             if (i < (j = bitRev[order][i]))
                 (src[j], src[i]) = (src[i], src[j]);
-        for (k = 1; k < n; k = k + k)//Sin,Cos•ÏŠ·
+        for (k = 1; k < n; k = k + k)//Sin,Coså¤‰æ›
         {
             h = 0;
             k2 = k + k;
@@ -496,7 +482,7 @@ public static class Fourier
         return src;
     }
 
-    #endregion CooleyTukey—p‚Ìƒ‹[ƒ`ƒ“
+    #endregion CooleyTukeyç”¨ã®ãƒ«ãƒ¼ãƒãƒ³
 
     private static Complex[] fft(Complex[] src)
     {
@@ -524,7 +510,7 @@ public static class Fourier
         for (n = 2; n < length / 2.0; n += 2)
             if (length % n == 0)
             { even = n; break; }
-        if (odd != 0 || even != 0)//ˆö”•ª‰ğ‚Å‚«‚½ê‡
+        if (odd != 0 || even != 0)//å› æ•°åˆ†è§£ã§ããŸå ´åˆ
         {
             if (even == 0) n = odd;
             else if (odd == 0) n = even;
@@ -534,7 +520,7 @@ public static class Fourier
 
             for (int i = 0; i < n; i++)
             {
-                Complex[] dividedSrc = new Complex[m];//Srcƒf[ƒ^‚ğnŒÂ‚É•ªŠ„‚·‚é
+                Complex[] dividedSrc = new Complex[m];//Srcãƒ‡ãƒ¼ã‚¿ã‚’nå€‹ã«åˆ†å‰²ã™ã‚‹
                 for (int j = 0; j < m; j++)
                     dividedSrc[j] = src[i + j * n];
                 dividedSrc = fft(dividedSrc);
@@ -544,7 +530,7 @@ public static class Fourier
             }
             return dest;
         }
-        else //ˆö”•ª‰ğ‚ª‚Å‚«‚È‚¢ê‡
+        else //å› æ•°åˆ†è§£ãŒã§ããªã„å ´åˆ
         {
             for (int j = 0; j < length; j++)
                 for (int i = 0; i < length; i++)
@@ -555,7 +541,7 @@ public static class Fourier
         }
     }
 
-    #endregion fft—pƒTƒuƒ‹[ƒ`ƒ“
+    #endregion fftç”¨ã‚µãƒ–ãƒ«ãƒ¼ãƒãƒ³
 
     private static Complex[] argument = Array.Empty<Complex>();
     private static int[] denominatorTable = Array.Empty<int>();
@@ -600,7 +586,7 @@ public static class Fourier
         }
     }
 
-    #region ’è”
+    #region å®šæ•°
 
     private static double arg13R = Complex.Exp(2 * Math.PI * Complex.ImaginaryOne * 1.0 / 3.0).Real;
     private static double arg13I = Complex.Exp(2 * Math.PI * Complex.ImaginaryOne * 1.0 / 3.0).Imaginary;
@@ -615,5 +601,5 @@ public static class Fourier
     private static double arg45R = Complex.Exp(2 * Math.PI * Complex.ImaginaryOne * 4.0 / 5.0).Real;
     private static double arg45I = Complex.Exp(2 * Math.PI * Complex.ImaginaryOne * 4.0 / 5.0).Imaginary;
 
-    #endregion ’è”
+    #endregion å®šæ•°
 }

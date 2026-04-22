@@ -13,9 +13,7 @@
         public class MultiSlice
         {
             /*
-            /// <summary>
-            /// Interaction parameter. 2 * PI/rambda/kV*(m0*c^2 + e0*kV*1000) / (2*m0*c^2 + e0*kV*1000). Kirklandの教科書 p79 (5.6)
-            /// </summary>
+            /// <summary>Interaction parameter. 2 * PI/rambda/kV*(m0*c^2 + e0*kV*1000) / (2*m0*c^2 + e0*kV*1000). Kirklandの教科書 p79 (5.6)</summary>
             public double Sigma = 2 * Math.PI * UniversalConstants.e0 * UniversalConstants.h;
 
             BackgroundWorker worker = new BackgroundWorker();
@@ -310,11 +308,12 @@
                 var target = new double[pixels.Length];
                 for (int h = 0; h < height / 2; h++)
                 {
-                    Array.Copy(pixels, h * width * 2, target, (h * 2 + height) * width + width, width);
-                    Array.Copy(pixels, h * width * 2 + width, target, (h * 2 + height) * width, width);
+                    //260317Cl 変更: Array.Copy → Span.CopyTo
+                    pixels.AsSpan(h * width * 2, width).CopyTo(target.AsSpan((h * 2 + height) * width + width, width));
+                    pixels.AsSpan(h * width * 2 + width, width).CopyTo(target.AsSpan((h * 2 + height) * width, width));
 
-                    Array.Copy(pixels, (h * 2 + height) * width, target, h * width * 2 + width, width);
-                    Array.Copy(pixels, (h * 2 + height) * width + width, target, h * width * 2, width);
+                    pixels.AsSpan((h * 2 + height) * width, width).CopyTo(target.AsSpan(h * width * 2 + width, width));
+                    pixels.AsSpan((h * 2 + height) * width + width, width).CopyTo(target.AsSpan(h * width * 2, width));
                 }
                 return target;
             }
@@ -334,9 +333,7 @@
                 return propagator;
             }
 
-            /// <summary>
-            /// 正方形のスライスを想定.
-            /// </summary>
+            /// <summary>正方形のスライスを想定.</summary>
             public class Slice
             {
                 public List<PointD> AtomPosition;

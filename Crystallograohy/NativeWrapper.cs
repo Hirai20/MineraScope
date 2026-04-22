@@ -1,4 +1,5 @@
-﻿#region using, namespace
+﻿#nullable enable //260317Cl 追加
+#region using, namespace
 using MathNet.Numerics.LinearAlgebra.Complex;
 using System;
 using System.Buffers;
@@ -7,11 +8,20 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 namespace Crystallography;
+
+using System.IO;
+using System.Reflection;
+using System.Runtime.Intrinsics.X86;
 #endregion
 
 public static partial class NativeWrapper
 {
+    private const string NativeLibraryFileName = "Crystallography.Native.dll";
+    private static readonly string[] NativeLibraryCandidates = GetNativeLibraryCandidates();
+
     #region LibraryImport
+
+
     public enum Library { None, Eigen, Cuda }
     //[DllImport("msvcrt.dll", EntryPoint = "memcpy", CallingConvention = CallingConvention.Cdecl, SetLastError = false)]
     //public static extern IntPtr Memcpy(IntPtr dest, IntPtr src, UIntPtr count);
@@ -161,30 +171,109 @@ public static partial class NativeWrapper
     [LibraryImport("Crystallography.Native.dll")]
     private static unsafe partial void _STEM_INEL1(int dim, double* rowVec, int* n, double* r, double* sqMat, double* colVec, double* _result);
 
+
+    [LibraryImport("Crystallography.Native.dll")]
+    private static unsafe partial void _EBSDSolver(
+    int bLen, int nAtoms, int tLen,
+    double* eigenValues,
+    double* eigenVectors,
+    double* alpha,
+    double* phaseNG,
+    double* sigma,
+    double[] thicknesses,
+    double* intensity);
+
+    [LibraryImport("Crystallography.Native.dll")]
+    private static unsafe partial void _EBSDSolverWithTDS(
+    int bLen, int nAtoms, int tLen,
+    double* eigenValues,
+    double* eigenVectors,
+    double* alpha,
+    double* phaseNG,
+    double* sigma,
+    double* muBack,
+    double tdsCoeff,
+    double[] thicknesses,
+    double* intensity,
+    double* tdsIntensity);
+
     #endregion
 
     #region Nativeライブラリが有効かどうか
 
-    /// <summary>
-    /// Native ライブラリが有効かどうか
-    /// </summary>
+    /// <summary>Native ライブラリが有効かどうか</summary>
     public static bool Enabled { get; }
+    public static string? LastLoadError { get; private set; }
 
     static NativeWrapper()
     {
+        //var appPath = System.Reflection.Assembly.GetExecutingAssembly().Location.Replace(".dll", ".Native.dll");
+        //if (!System.IO.File.Exists(appPath))
+        NativeLibrary.SetDllImportResolver(typeof(NativeWrapper).Assembly, ResolveNativeLibrary);
 
-        var appPath = System.Reflection.Assembly.GetExecutingAssembly().Location.Replace(".dll", ".Native.dll");
-        if (!System.IO.File.Exists(appPath))
+        var appPath = GetExistingNativeLibraryPath();
+        if (appPath == null)
+        {
+            LastLoadError = $"Native library not found in base directory: {AppContext.BaseDirectory}";
             Enabled = false;
-        else if (System.IO.File.GetCreationTime(appPath).Ticks < new DateTime(2019, 08, 06, 19, 45, 00).Ticks)
-            Enabled = false;
+            return;
+        }
+
         try
         {
             var result = Inverse(2, [new Complex(1, 0), new Complex(0, 0), new Complex(0, 0), new Complex(1, 0)]);
             Enabled = result[0].Real + result[3].Real > 1;
+            if (!Enabled)
+                LastLoadError = "Native self-test returned unexpected result.";
         }
-        catch { Enabled = false; }
+        catch (Exception ex)
+        {
+            LastLoadError = ex.Message;
+            Enabled = false;
+        }
     }
+
+    private static IntPtr ResolveNativeLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        if (!string.Equals(libraryName, NativeLibraryFileName, StringComparison.OrdinalIgnoreCase))
+            return IntPtr.Zero;
+
+        foreach (var candidate in NativeLibraryCandidates)
+        {
+            var absolutePath = Path.Combine(AppContext.BaseDirectory, candidate);
+            if (NativeLibrary.TryLoad(absolutePath, out var handle))
+                return handle;
+
+            if (NativeLibrary.TryLoad(candidate, assembly, searchPath, out handle))
+                return handle;
+        }
+
+        LastLoadError = $"Failed to resolve native library. BaseDir={AppContext.BaseDirectory}, Candidates={string.Join(",", NativeLibraryCandidates)}";
+
+        return IntPtr.Zero;
+    }
+
+    private static string[] GetNativeLibraryCandidates()
+    {
+        if (Avx512F.IsSupported)
+            return ["Crystallography.Native.avx512.dll", "Crystallography.Native.avx2.dll", NativeLibraryFileName];
+        if (Avx2.IsSupported)
+            return ["Crystallography.Native.avx2.dll", NativeLibraryFileName];
+        return [NativeLibraryFileName];
+    }
+
+    private static string? GetExistingNativeLibraryPath()
+    {
+        foreach (var candidate in NativeLibraryCandidates)
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, candidate);
+            if (File.Exists(path))
+                return path;
+        }
+
+        return null;
+    }
+
     #endregion
 
     #region 変換関数
@@ -268,9 +357,7 @@ public static partial class NativeWrapper
     #region 単純な四則演算
 
     #region 行列×行列
-    /// <summary>
-    ///　Eigenライブラリーを利用して、非対称複素行列の乗算を求める
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して、非対称複素行列の乗算を求める</summary>
     /// <param name="dim"></param>
     /// <param name="matrix1"></param>
     /// <param name="matrix2"></param>
@@ -447,9 +534,7 @@ public static partial class NativeWrapper
     #endregion
 
     #region Eigenライブラリーを利用して、非対称複素行列の要素ごとの掛算(アダマール積)を求める
-    /// <summary>
-    ///　Eigenライブラリーを利用して、非対称複素行列の乗算を求める. 
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して、非対称複素行列の乗算を求める.</summary>
     /// <param name="dim"></param>
     /// <param name="matrix1"></param>
     /// <param name="matrix2"></param>
@@ -464,9 +549,7 @@ public static partial class NativeWrapper
     #endregion
 
     #region Eigenライブラリーを利用して、非対称複素行列の乗算を求める
-    /// <summary>
-    ///　Eigenライブラリーを利用して、非対称複素行列の乗算を求める. matrix1の形状は崩れるかもしれない
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して、非対称複素行列の乗算を求める. matrix1の形状は崩れるかもしれない</summary>
     /// <param name="dim"></param>
     /// <param name="matrix1"></param>
     /// <param name="matrix2"></param>
@@ -500,9 +583,7 @@ public static partial class NativeWrapper
     #endregion
 
     #region 逆行列
-    /// <summary>
-    /// Eigenライブラリーを利用して、非対称複素行列の逆行列を求める
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して、非対称複素行列の逆行列を求める</summary>
     /// <param name="mat"></param>
     /// <returns></returns>
     static unsafe public Complex[] Inverse(int dim, Complex[] mat)
@@ -514,20 +595,16 @@ public static partial class NativeWrapper
         return values;
     }
 
-    /// <summary>
-    /// Eigenライブラリーを利用して、非対称複素行列の逆行列を求める
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して、非対称複素行列の逆行列を求める</summary>
     /// <param name="mat"></param>
     /// <returns></returns>
-    static unsafe public Complex[] Inverse(Complex[] mat)
+    static unsafe public Complex[]? Inverse(Complex[] mat) //260317Cl 戻り値をnullable化
     {
         var dim = (int)Math.Sqrt(mat.Length);
         return dim * dim == mat.Length ? Inverse(dim, mat) : null;
     }
 
-    /// <summary>
-    /// Eigenライブラリーを利用して、実数行列の逆行列を求める
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して、実数行列の逆行列を求める</summary>
     /// <param name="mat"></param>
     /// <returns></returns>
     static unsafe public double[] Inverse(int dim, double[] mat)
@@ -539,12 +616,10 @@ public static partial class NativeWrapper
         return values;
     }
 
-    /// <summary>
-    /// Eigenライブラリーを利用して、実数行列の逆行列を求める
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して、実数行列の逆行列を求める</summary>
     /// <param name="mat"></param>
     /// <returns></returns>
-    static unsafe public double[] Inverse(double[] mat)
+    static unsafe public double[]? Inverse(double[] mat) //260317Cl 戻り値をnullable化
     {
         var dim = (int)Math.Sqrt(mat.Length);
         return dim * dim == mat.Length ? Inverse(dim, mat) : null;
@@ -553,7 +628,6 @@ public static partial class NativeWrapper
     #endregion 逆行列
 
     #region 固有値
-
     static unsafe public (Complex[] eigenvalues, Complex[] eigenvectors) EigenSolver(int dim, Complex[] mat)
     {
         var values = GC.AllocateUninitializedArray<Complex>(dim);//new Complex[dim];
@@ -563,6 +637,19 @@ public static partial class NativeWrapper
         fixed (Complex* _mat = mat)
             _EigenSolver(dim, (double*)_mat, (double*)_values, (double*)_vectors);
         return (values, vectors);
+    }
+
+    /// <summary>既存バッファーへ固有値・固有ベクトルを書き込む overload。 (260321Ch)</summary>
+    static unsafe public void EigenSolver(int dim, Complex[] mat, ref Complex[] eigenvalues, ref Complex[] eigenvectors)
+    {
+        if (eigenvalues is null || eigenvalues.Length < dim)
+            eigenvalues = GC.AllocateUninitializedArray<Complex>(dim); // (260321Ch)
+        if (eigenvectors is null || eigenvectors.Length < dim * dim)
+            eigenvectors = GC.AllocateUninitializedArray<Complex>(dim * dim); // (260321Ch)
+        fixed (Complex* _values = eigenvalues)
+        fixed (Complex* _vectors = eigenvectors)
+        fixed (Complex* _mat = mat)
+            _EigenSolver(dim, (double*)_mat, (double*)_values, (double*)_vectors);
     }
 
     #endregion 固有値
@@ -606,9 +693,7 @@ public static partial class NativeWrapper
             _AdJointMul_Mul_Mul(dim, (double*)_mat1, (double*)_mat2, (double*)_mat3, (double*)res);
     }
 
-    /// <summary>
-    /// STEM用の特殊関数。透過係数を求める。
-    /// </summary>
+    /// <summary>STEM用の特殊関数。透過係数を求める。</summary>
     /// <param name="dim"></param>
     /// <param name="thickness"></param>
     /// <param name="kg_z"></param>
@@ -624,17 +709,17 @@ public static partial class NativeWrapper
 
     unsafe static public void GenerateTC1(in int dim, in double thickness, double* _kg_z, Complex* _val, Complex* _vec, Complex* _tc_k)
     {
-        _GenerateTC1(dim, thickness, _kg_z, (double*)_val, (double*)_vec, (double*)_tc_k);
+        if (Enabled)
+            _GenerateTC1(dim, thickness, _kg_z, (double*)_val, (double*)_vec, (double*)_tc_k);
     }
 
     unsafe static public void GenerateTC2(in int dim, in double thickness, double* _kg_z, Complex* _val, Complex* _vec, Complex* _tc_k, Complex* _tc_kq)
     {
-        _GenerateTC2(dim, thickness, _kg_z, (double*)_val, (double*)_vec, (double*)_tc_k, (double*)_tc_kq);
+        if (Enabled)
+            _GenerateTC2(dim, thickness, _kg_z, (double*)_val, (double*)_vec, (double*)_tc_k, (double*)_tc_kq);
     }
 
-    /// <summary>
-    /// 横ベクトル×正方行列×縦ベクトルの掛算. STEMの非弾性散乱を求めるときに使用
-    /// </summary>
+    /// <summary>横ベクトル×正方行列×縦ベクトルの掛算. STEMの非弾性散乱を求めるときに使用</summary>
     /// <param name="dim"></param>
     /// <param name="rowVec"></param>
     /// <param name="sqMtx"></param>
@@ -648,9 +733,7 @@ public static partial class NativeWrapper
 
         return result;
     }
-    /// <summary>
-    /// 横ベクトル×正方行列×縦ベクトルの掛算. STEMの非弾性散乱を求めるときに使用
-    /// </summary>
+    /// <summary>横ベクトル×正方行列×縦ベクトルの掛算. STEMの非弾性散乱を求めるときに使用</summary>
     /// <param name="dim"></param>
     /// <param name="rowVec"></param>
     /// <param name="sqMtx"></param>
@@ -680,9 +763,7 @@ public static partial class NativeWrapper
     #endregion
 
     #region CBED
-    /// <summary>
-    /// Eigenライブラリーを利用して固有値解を求めて、CBEDの解を求める
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用して固有値解を求めて、CBEDの解を求める</summary>
     /// <param name="potential"></param>
     /// <param name="psi0"></param>
     /// <param name="thickness"></param>
@@ -691,9 +772,7 @@ public static partial class NativeWrapper
     unsafe static public Complex[] CBEDSolver_Eigen(Complex[] potential, Complex[] psi0, double[] thickness)
     => CBEDSolver(potential, psi0, thickness, true);
 
-    /// <summary>
-    /// Eigenライブラリーを利用してMatrix exponentialを解いて、CBEDの解を求める. 
-    /// </summary>
+    /// <summary>Eigenライブラリーを利用してMatrix exponentialを解いて、CBEDの解を求める.</summary>
     /// <param name="potential"></param>
     /// <param name="psi0"></param>
     /// <param name="thickness"></param>
@@ -705,7 +784,7 @@ public static partial class NativeWrapper
     unsafe static private Complex[] CBEDSolver(Complex[] potential, Complex[] psi0, double[] thickness, in bool eigen)
     {
         var dim = psi0.Length;
-        var result =  new Complex[dim * thickness.Length];//GC.AllocateUninitializedArray<Complex>(dim * thickness.Length);
+        var result = new Complex[dim * thickness.Length];//GC.AllocateUninitializedArray<Complex>(dim * thickness.Length);
         fixed (Complex* _potential = potential, _psi0 = psi0, _result = result)
         {
             if (eigen)
@@ -719,9 +798,7 @@ public static partial class NativeWrapper
         return result;
     }
 
-    /// <summary>
-    /// STEM用ソルバー
-    /// </summary>
+    /// <summary>STEM用ソルバー</summary>
     /// <param name="potential"></param>
     /// <param name="psi0"></param>
     /// <param name="thickness"></param>
@@ -746,11 +823,15 @@ public static partial class NativeWrapper
     #endregion
 
     #region HRTEM simulation
-    static public double[] HRTEM_Solver(double[] gPsi, double[] gVec, double[] gLenz, double[] rVec, bool quasiMode)
+    static public double[] HRTEM_Solver(double[] gPsi, double[] gVec, double[] gLenz, double[] rVec, bool quasiMode, int rVecLength = -1)
     {
         var gDim = gPsi.Length / 2;
         var lDim = gLenz.Length / gPsi.Length;
-        var rDim = rVec.Length / 2;
+        var validRVecLength = rVecLength < 0 ? rVec.Length : Math.Min(rVecLength, rVec.Length); // (260403Ch) ArrayPool バッファの前半だけを solver に渡せるようにする
+        if ((validRVecLength & 1) != 0)
+            throw new ArgumentException("rVecLength must be even.", nameof(rVecLength)); // (260403Ch)
+        // var rDim = rVec.Length / 2; // (260403Ch) 変更前
+        var rDim = validRVecLength / 2; // (260403Ch)
 
         var results = new double[lDim * rDim];
 
@@ -764,14 +845,141 @@ public static partial class NativeWrapper
 
     static public (double[] gPsi, double[] gVec, double[] gLenz) HRTEM_Helper(IEnumerable<(Complex Psi, PointD Vec, Complex[] Lenz)> g)
     {
-        var gP = g.AsParallel();
-        return (
-            gP.SelectMany(e => new[] { e.Psi.Real, e.Psi.Imaginary }).ToArray(),
-            gP.SelectMany(e => new[] { e.Vec.X, e.Vec.Y }).ToArray(),
-            gP.SelectMany(e => e.Lenz.SelectMany(l => new[] { l.Real, l.Imaginary }).ToArray()).ToArray()
-            );
+        // 260420Cl 変更: 旧実装は AsParallel + SelectMany × 3 + 入れ子 new double[] で、
+        // g の要素数 × Lenz.Length の tiny array アロケーションを大量発生させていた。
+        // 並列化のうまみは無視できる一方、GC 圧力だけが大きかったため、
+        // 一度 IList<T> に具体化して for ループで埋める素朴な実装に戻す。
+        var list = g as IList<(Complex Psi, PointD Vec, Complex[] Lenz)> ?? g.ToArray();
+        var gLen = list.Count;
+        if (gLen == 0)
+            return ([], [], []);
+        var lDim = list[0].Lenz.Length;
+        var gPsi = new double[gLen * 2];
+        var gVec = new double[gLen * 2];
+        var gLenz = new double[gLen * lDim * 2];
+        for (int i = 0; i < gLen; i++)
+        {
+            var (psi, vec, lenz) = list[i];
+            gPsi[2 * i] = psi.Real;
+            gPsi[2 * i + 1] = psi.Imaginary;
+            gVec[2 * i] = vec.X;
+            gVec[2 * i + 1] = vec.Y;
+            var dst = i * lDim * 2;
+            for (int k = 0; k < lDim; k++)
+            {
+                var l = lenz[k];
+                gLenz[dst + 2 * k] = l.Real;
+                gLenz[dst + 2 * k + 1] = l.Imaginary;
+            }
+        }
+        return (gPsi, gVec, gLenz);
+        // 260420Cl 旧実装 (SelectMany チェーン + AsParallel):
+        // var gP = g.AsParallel();
+        // return (
+        //     gP.SelectMany(e => new[] { e.Psi.Real, e.Psi.Imaginary }).ToArray(),
+        //     gP.SelectMany(e => new[] { e.Vec.X, e.Vec.Y }).ToArray(),
+        //     gP.SelectMany(e => e.Lenz.SelectMany(l => new[] { l.Real, l.Imaginary }).ToArray()).ToArray()
+        //     );
     }
     #endregion
+
+
+    #region EBSD
+    /// <summary>EBSD強度を計算する。原子位置でのブロッホ波場に基づく。</summary>
+    /// <param name="eigenValues">固有値 γ_j (bLen個)</param>
+    /// <param name="eigenVectors">固有ベクトル C (bLen×bLen, column-major)</param>
+    /// <param name="alpha">励起振幅 α_j (bLen個)</param>
+    /// <param name="phaseNG">位相因子 P[n,g] (nAtoms×bLen, フィルタ済み)</param>
+    /// <param name="sigma">後方散乱断面積 σ_n (nAtoms個)</param>
+    /// <param name="thicknesses">厚さ配列 (tLen個)</param>
+    /// <returns>各厚さでのEBSD強度 (tLen個)</returns>
+    public static unsafe double[] EBSDSolver(
+        Complex[] eigenValues, Complex[] eigenVectors, Complex[] alpha,
+        Complex[] phaseNG, double[] sigma, double[] thicknesses)
+    {
+        int bLen = eigenValues.Length;
+        int nAtoms = sigma.Length;
+        int tLen = thicknesses.Length;
+        var intensity = new double[tLen];
+
+        fixed (Complex* _vals = eigenValues, _vecs = eigenVectors, _alpha = alpha, _phase = phaseNG)
+        fixed (double* _sigma = sigma, _intensity = intensity)
+        {
+            _EBSDSolver(bLen, nAtoms, tLen,
+                (double*)_vals, (double*)_vecs, (double*)_alpha,
+                (double*)_phase, _sigma, thicknesses, _intensity);
+        }
+        return intensity;
+    }
+
+    /// <summary>bLen を明示し、大きめの作業配列を再利用できるようにした overload。 (260321Ch)</summary>
+    public static unsafe double[] EBSDSolver(
+        int bLen, Complex[] eigenValues, Complex[] eigenVectors, Complex[] alpha,
+        Complex[] phaseNG, double[] sigma, double[] thicknesses)
+    {
+        int nAtoms = sigma.Length;
+        int tLen = thicknesses.Length;
+        var intensity = new double[tLen];
+
+        fixed (Complex* _vals = eigenValues, _vecs = eigenVectors, _alpha = alpha, _phase = phaseNG)
+        fixed (double* _sigma = sigma, _intensity = intensity)
+        {
+            _EBSDSolver(bLen, nAtoms, tLen,
+                (double*)_vals, (double*)_vecs, (double*)_alpha,
+                (double*)_phase, _sigma, thicknesses, _intensity);
+        }
+        return intensity;
+    }
+
+    /// <summary>
+    /// EBSD強度とTDSバックグラウンドを一括計算する。 (260316Cl 追加)
+    /// 弾性信号 (S行列) と TDS (M行列) で同じ F_{jj'}(t) を共有し、
+    /// exp(λt) の重複計算を排除する。C†×U×C は Eigen BLAS で高速に実行。
+    /// </summary>
+    public static unsafe (double[] intensity, double[] tdsIntensity) EBSDSolverWithTDS(
+        Complex[] eigenValues, Complex[] eigenVectors, Complex[] alpha,
+        Complex[] phaseNG, double[] sigma, Complex[] muBack, double tdsCoeff, double[] thicknesses)
+    {
+        int bLen = eigenValues.Length;
+        int nAtoms = sigma.Length;
+        int tLen = thicknesses.Length;
+        var intensity = new double[tLen];
+        var tdsIntensity = new double[tLen];
+
+        fixed (Complex* _vals = eigenValues, _vecs = eigenVectors, _alpha = alpha, _phase = phaseNG, _muBack = muBack)
+        fixed (double* _sigma = sigma, _intensity = intensity, _tds = tdsIntensity)
+        {
+            _EBSDSolverWithTDS(bLen, nAtoms, tLen,
+                (double*)_vals, (double*)_vecs, (double*)_alpha,
+                (double*)_phase, _sigma, (double*)_muBack, tdsCoeff,
+                thicknesses, _intensity, _tds);
+        }
+        return (intensity, tdsIntensity);
+    }
+
+    /// <summary>bLen を明示し、大きめの作業配列を再利用できるようにした overload。 (260321Ch)</summary>
+    public static unsafe (double[] intensity, double[] tdsIntensity) EBSDSolverWithTDS(
+        int bLen, Complex[] eigenValues, Complex[] eigenVectors, Complex[] alpha,
+        Complex[] phaseNG, double[] sigma, Complex[] muBack, double tdsCoeff, double[] thicknesses)
+    {
+        int nAtoms = sigma.Length;
+        int tLen = thicknesses.Length;
+        var intensity = new double[tLen];
+        var tdsIntensity = new double[tLen];
+
+        fixed (Complex* _vals = eigenValues, _vecs = eigenVectors, _alpha = alpha, _phase = phaseNG, _muBack = muBack)
+        fixed (double* _sigma = sigma, _intensity = intensity, _tds = tdsIntensity)
+        {
+            _EBSDSolverWithTDS(bLen, nAtoms, tLen,
+                (double*)_vals, (double*)_vecs, (double*)_alpha,
+                (double*)_phase, _sigma, (double*)_muBack, tdsCoeff,
+                thicknesses, _intensity, _tds);
+        }
+        return (intensity, tdsIntensity);
+    }
+
+    #endregion
+
 
     #region Histogram
     static public (double[] profile, double[] pixels) Histogram(
@@ -804,9 +1012,6 @@ public static partial class NativeWrapper
 
         return (profile, pixels);
     }
-
-
-
-
     #endregion
+
 }

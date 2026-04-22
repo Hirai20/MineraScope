@@ -1,18 +1,20 @@
-﻿using MathNet.Numerics.Integration;
+﻿#region using
+using MathNet.Numerics.Integration;
 using MathNet.Numerics.LinearAlgebra.Double;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Linq;
 using System.Numerics;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using Edge = Crystallography.XrayLineEdge;
-
 namespace Crystallography;
+#endregion
 
-public static class AtomStatic
+// public static class AtomStatic
+public static partial class AtomStatic // (260401Ch) generated NIST elastic sampler データを partial class で追加できるようにする
 {
     #region 静的コンストラクタ
     static AtomStatic()
@@ -28,14 +30,13 @@ public static class AtomStatic
         //			AtomConstantsSub.LinearAbsorptionCoefficient[i][j][k] = new PointD(AtomConstantsSub.MassAbsorptionCoefficient[i][j][k]) * AtomStatic.NominalDensity(i);
         //	}
         //}
+        RegisterGeneratedNistElasticPchip(GeneratedNistElasticPchipElements); // (260401Ch) 開発者ツールで生成した圧縮 elastic sampler を静的初期化時に登録
     }
     #endregion
 
     #region static readonly フィールド
 
-    /// <summary>
-    /// 同位体存在度. IsotopeAbundance[z][a]: z 原子番号, a 質量数
-    /// </summary>
+    /// <summary>同位体存在度. IsotopeAbundance[z][a]: z 原子番号, a 質量数</summary>
     public static readonly Dictionary<int, double>[] IsotopeAbundance = [
 			#region
 			new() {{0,0}},
@@ -467,9 +468,7 @@ public static class AtomStatic
 			#endregion
 		];
 
-    /// <summary>
-    /// 純元素の密度
-    /// </summary>
+    /// <summary>純元素の密度</summary>
     public static readonly double[] NominalDensity = [
             #region
             0 ,
@@ -568,9 +567,7 @@ public static class AtomStatic
             #endregion
         ];
 
-    /// <summary>
-    /// X線による原子散乱因子 XrayScattering[AtomicNumber][SubNumber]
-    /// </summary>
+    /// <summary>X線による原子散乱因子 XrayScattering[AtomicNumber][SubNumber]</summary>
     public static readonly ES[][] XrayScattering =
         [
     
@@ -1642,9 +1639,7 @@ new(1.59158,   2.99874,   0.556367  ,   3.41054,   0.180994  ,   1.01462,   3.81
         #endregion
     ];
 
-    /// <summary>
-    /// 電子線による原子散乱因子 ElectronScatteringKirkrand[AtomicNumber]
-    /// </summary>
+    /// <summary>電子線による原子散乱因子 ElectronScatteringKirkrand[AtomicNumber]</summary>
     public static readonly ES[] ElectronScatteringKirkrand =
     [
 				#region
@@ -2067,9 +2062,7 @@ new(4.86738014,0.319974401,4.58872425,
         #endregion
     ];
 
-    /// <summary>
-    /// 中性子の散乱長 単位はfm
-    /// </summary>
+    /// <summary>中性子の散乱長 単位はfm</summary>
     public static readonly Complex[][] NeutronCoherentScattering =
         [
 			#region 単位はfm
@@ -2481,33 +2474,68 @@ new(4.86738014,0.319974401,4.58872425,
                     #endregion
     ];
 
+
+    /// <summary>(260331Ch) TPP-2M の平均価電子数 Nv。Jablonski / Tanuma / Powell の IMFP 論文の元素表を優先し、未収録元素は後段の簡易推定へフォールバックする</summary>
+    public static readonly Dictionary<int, (double ValenceElectrons, double BandGapEv)> ElementInelasticParameters = new()
+    {
+        [3] = (1.0, 0.0),
+        [4] = (2.0, 0.0),
+        [6] = (4.0, 0.0),
+        [11] = (1.0, 0.0),
+        [12] = (2.0, 0.0),
+        [13] = (3.0, 0.0),
+        [14] = (4.0, 1.1),
+        [19] = (1.0, 0.0),
+        [21] = (3.0, 0.0),
+        [22] = (4.0, 0.0),
+        [23] = (5.0, 0.0),
+        [24] = (6.0, 0.0),
+        [26] = (8.0, 0.0),
+        [27] = (9.0, 0.0),
+        [28] = (10.0, 0.0),
+        [29] = (11.0, 0.0),
+        [32] = (4.0, 0.67),
+        [39] = (3.0, 0.0),
+        [41] = (5.0, 0.0),
+        [42] = (6.0, 0.0),
+        [44] = (8.0, 0.0),
+        [45] = (9.0, 0.0),
+        [46] = (10.0, 0.0),
+        [47] = (11.0, 0.0),
+        [49] = (3.0, 0.0),
+        [50] = (4.0, 0.0),
+        [55] = (1.0, 0.0),
+        [64] = (9.0, 0.0),
+        [65] = (9.0, 0.0),
+        [66] = (9.0, 0.0),
+        [72] = (4.0, 0.0),
+        [73] = (5.0, 0.0),
+        [74] = (6.0, 0.0),
+        [75] = (7.0, 0.0),
+        [76] = (8.0, 0.0),
+        [77] = (9.0, 0.0),
+        [78] = (10.0, 0.0),
+        [79] = (11.0, 0.0),
+        [83] = (5.0, 0.0),
+    };
+
     #endregion
 
     #region ElasticScattering クラス
     public class ES
     {
         #region フィールド、プロパティ
-        /// <summary>
-        /// Valence　価数
-        /// </summary>
+        /// <summary>Valence　価数</summary>
         public readonly int Valence;
 
-        /// <summary>
-        /// 散乱因子の計算方法
-        /// </summary>
+        /// <summary>散乱因子の計算方法</summary>
         public readonly string Method;
 
-        /// <summary>
-        /// 引数がS2 (単位: nm^-2), 戻り値が振幅 (単位: nm)の関数
-        /// </summary>
+        /// <summary>引数がS2 (単位: nm^-2), 戻り値が振幅 (単位: nm)の関数</summary>
         public Func<double, double> Factor { get; }
 
 
-        //public Func<double, double, double, double> FactorImaginary { get; }
-
-        /// <summary>
-        /// 引数が r (原子の中心からの距離)、戻り値(単位: volt * angstrom)が投影ポテンシャルの関数
-        /// </summary>
+        /// <summary>引数が r (原子の中心からの距離)、戻り値(単位: volt * angstrom)が投影ポテンシャルの関数</summary>
         public Func<double, double> ProjectedPotential { get; }
 
         private readonly (double A, double B)[] Prms = [];
@@ -2515,7 +2543,6 @@ new(4.86738014,0.319974401,4.58872425,
         #endregion
 
         #region コンストラクタ
-
         //X線用のコンストラクタ 
 
         public ES(double a1, double b1, double a2, double b2, double a3, double b3, double a4, double b4, double c, int valence, string methods)
@@ -2534,9 +2561,7 @@ new(4.86738014,0.319974401,4.58872425,
             Factor = new Func<double, double>(s2 => (Prms.Sum(p => p.A * Math.Exp(-s2 * 0.01 * p.B)) + c) * 0.1);
         }
 
-        /// <summary>
-        /// 電子線用のコンストラクタ (Five gaussian)
-        /// </summary>
+        /// <summary>電子線用のコンストラクタ (Five gaussian)</summary>
         /// <param name="a1"></param>
         /// <param name="a2"></param>
         /// <param name="a3"></param>
@@ -2557,9 +2582,7 @@ new(4.86738014,0.319974401,4.58872425,
             Factor = new Func<double, double>(s2 => Prms.Sum(p => p.A * Math.Exp(-s2 * 0.01 * p.B)) * 0.1);//0.1倍や0.01倍は単位の修正
         }
 
-        /// <summary>
-        /// 電子線用のコンストラクタ (Eight gaussian)
-        /// </summary>
+        /// <summary>電子線用のコンストラクタ (Eight gaussian)</summary>
         /// <param name="gaussian"></param>
         public ES(double a1, double a2, double a3, double a4, double a5, double a6, double a7, double a8, double b1, double b2, double b3, double b4, double b5, double b6, double b7, double b8)
         {
@@ -2569,179 +2592,7 @@ new(4.86738014,0.319974401,4.58872425,
             Factor = new Func<double, double>(s2 => Prms.Sum(p => p.A * Math.Exp(-s2 * 0.01 * p.B)) * 0.1);//0.1倍や0.01倍は単位の修正
         }
 
-
-        #region 非弾性散乱因子の計算
-
-        /// <summary>
-        /// 局所形式の非弾性散乱因子 (TDS吸収ポテンシャル) 
-        /// </summary>
-        /// <param name="kV">kV(電子のエネルギー)</param>
-        /// <param name="s2">S2 (単位: nm^-2, S = sinθ/λ = 1/2d)</param>
-        /// <param name="m">温度因子 m (単位: nm^2), NaNの場合はゼロにして計算</param>
-        /// <returns> 戻り値が無次元量</returns>
-        public double FactorImaginary(double kV, double s2, double m)
-        {
-            if (double.IsNaN(m) || m == 0)
-                return 0;
-
-            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
-            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
-
-            s2 *= 0.01;//単位を修正
-            m *= 100;//単位を修正
-            return Prms.Sum(p1 => Prms.Sum(p2 =>
-            {
-                var sum = p1.B + p2.B;
-                if (sum == 0) return 0;
-                var product = p1.B * p2.B;
-                var sum2m = sum + 2 * m;
-                return p1.A * p2.A * (Math.Exp(-s2 * product / sum) / sum - Math.Exp(-s2 * (product - m * m) / sum2m) / sum2m);
-            })) * Math.PI * gamma * 2 / k0;
-        }
-       
-
-        /// <summary>
-        /// 局所形式の非弾性散乱因子 FlatEwald近似 未完成
-        /// </summary>
-        /// <param name="kV"></param>
-        /// <param name="g"> g ベクトル 単位は nm </param>
-        /// <param name="h"> hベクトル 単位はnm</param>
-        /// <param name="m"> U ×8×π^2 単位は nm^2 </param>
-        /// <param name="inner"> 検出器の内側 単位はラジアン</param>
-        /// <param name="outer"> 検出器の外側 単位はラジアン</param>
-        /// <returns></returns>
-        public double FactorImaginaryAnnularFlatEwald(double kV, Vector3DBase g, double m, double inner, double outer)
-        {
-            if (double.IsNaN(m)) return 0;
-            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
-            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
-
-            var G = g.ToPointD;
-            var gLen2 = G.Length2;//単位はnm^-2
-
-            var result = GaussLegendreRule.Integrate(R =>
-            {
-                //double sinθ = Math.Sin(θ), kSinθ = k0 * sinθ, kCosθ = k0 * Math.Cos(θ);
-                return GaussLegendreRule.Integrate(φ =>
-                {
-                    var K = R * new PointD(Math.Cos(φ), Math.Sin(φ));
-                    //var K = new Vector3DBase(kSinθ * Math.Cos(φ), kSinθ * Math.Sin(φ), kCosθ - k0);
-                    double kMinusG = (K - G / 2).Length2, kPlusG = (K + G / 2).Length2;//単位はnm^-2
-                    double f_kMinusG = 0, f_kPlusG = 0;
-                    foreach (var (A, B) in Prms)
-                    {
-                        f_kMinusG += A * Math.Exp(-kMinusG / 400 * B);
-                        f_kPlusG += A * Math.Exp(-kPlusG / 400 * B);
-                    }
-                    return f_kMinusG * f_kPlusG * (1 - Math.Exp(m * (gLen2 - kMinusG - kPlusG) / 4));// * sinThetaを外に出して、少しでも早く
-                }, 0, 2 * Math.PI, 30);
-            }, k0 * Math.Sin(inner), k0 * Math.Sin(outer), 80);
-
-            return gamma / Math.PI / Math.PI / k0 * result * 0.01;
-        }
-
-        /// <summary>
-        /// 局所形式の非弾性散乱因子 近軸近似(ビーム径射角ゼロ)
-        /// </summary>
-        /// <param name="kV"></param>
-        /// <param name="g"> g ベクトル 単位は nm </param>
-        /// <param name="h"> hベクトル 単位はnm</param>
-        /// <param name="m"> U ×8×π^2 単位は nm^2 </param>
-        /// <param name="inner"> 検出器の内側 単位はラジアン</param>
-        /// <param name="outer"> 検出器の外側 単位はラジアン</param>
-        /// <returns></returns>
-        public double FactorImaginaryAnnular(double kV, Vector3DBase g, double m, double inner, double outer)
-        {
-            if (double.IsNaN(m)) return 0;
-            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
-            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
-            var gLen2 = g.Length2 / 4;//単位はnm^-2
-
-            var result = GaussLegendreRule.Integrate(θ =>
-            {
-                double sinθ = Math.Sin(θ), kSinθ = k0 * sinθ, kCosθ = k0 * Math.Cos(θ);
-                return GaussLegendreRule.Integrate(φ =>
-                {
-                    var k = new Vector3DBase(kSinθ * Math.Cos(φ), kSinθ * Math.Sin(φ), kCosθ - k0);
-                    double kMinusG = (k - g / 2).Length2 / 4, kPlusG = (k + g / 2).Length2 / 4;//単位はnm^-2
-                    double f_kMinusG = 0, f_kPlusG = 0;
-                    foreach (var (A, B) in Prms)
-                    {
-                        f_kMinusG += A * Math.Exp(-kMinusG * B / 100);
-                        f_kPlusG += A * Math.Exp(-kPlusG * B / 100);
-                    }
-                    return f_kMinusG * f_kPlusG * (1 - Math.Exp(m * (gLen2 - kMinusG - kPlusG))); ;// * sinThetaを外に出して、少しでも早く
-                }, 0, 2 * Math.PI, 20) * sinθ;
-            }, inner, outer, 60);
-            return gamma * k0 / 2 * result * 0.01;
-        }
-
-
-        /// <summary>
-        /// 非局所形式の非弾性散乱因子 近軸近似(ビーム径射角ゼロ)
-        /// </summary>
-        /// <param name="kV"></param>
-        /// <param name="g"></param>
-        /// <param name="h"></param>
-        /// <param name="m"></param>
-        /// <param name="inner"></param>
-        /// <param name="outer"></param>
-        /// <returns></returns>
-        public double FactorImaginaryAnnular(double kV, Vector3DBase g, Vector3DBase h, double m, double inner, double outer)
-        {
-            if (double.IsNaN(m)) return 0;
-            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
-            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
-            var g_h = (g - h).Length2 / 4;
-
-            return gamma * k0 / 2 * GaussLegendreRule.Integrate(θ =>
-            {
-                double sinθ = Math.Sin(θ), kSinθ = k0 * sinθ, kCosθ = k0 * Math.Cos(θ);
-                return GaussLegendreRule.Integrate(φ =>
-                {
-                    var k = new Vector3DBase(kSinθ * Math.Cos(φ), kSinθ * Math.Sin(φ), kCosθ - k0);
-                    double k_g = (k - g).Length2 / 400, k_h = (k - h).Length2 / 400;
-                    double f_k_g = 0, f_k_h = 0;
-                    foreach (var (A, B) in Prms)
-                    {
-                        f_k_g += A * Math.Exp(-k_g * B);
-                        f_k_h += A * Math.Exp(-k_h * B);
-                    }
-                    return f_k_g * f_k_h * 0.01 * (1 - Math.Exp(m * (g_h - k_g * 100 - k_h * 100)));// * sinThetaを外に出して、少しでも早く
-                }, 0, 2 * Math.PI, 20) * sinθ;
-            }, inner, outer, 60);
-        }
-
-        /// <summary>
-        /// 非局所形式の非弾性散乱因子　近軸近似(ビーム径射角ゼロ) Flat Ewald球近似 遅いので、没?
-        /// </summary>
-        /// <param name="kV"></param>
-        /// <param name="g"></param>
-        /// <param name="h"></param>
-        /// <param name="m"></param>
-        /// <param name="inner"></param>
-        /// <param name="outer"></param>
-        /// <returns></returns>
-        public double FactorImaginaryAnnular2(double kV, Vector3DBase g, Vector3DBase h, double m, double inner, double outer)
-        {
-            if (double.IsNaN(m)) m = 0;
-            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
-            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
-            double g_h = (g - h).ToPointD.Length2 / 4;
-            PointD g2 = g.ToPointD, h2 = h.ToPointD;
-            return GaussLegendreRule.Integrate((phi, r) =>
-            {
-                var k = r * new PointD(Math.Cos(phi), Math.Sin(phi));
-                double k_g = (k - g2).Length2 / 4, k_h = (k - h2).Length2 / 4;
-                return Factor(k_g) * Factor(k_h) * (1 - Math.Exp(m * (g_h - k_g - k_h))) * r;
-            }
-            , 0, 2 * Math.PI, k0 * Math.Tan(inner), k0 * Math.Tan(outer), 40) * gamma / k0 / 2;
-        }
-        #endregion
-
-        /// <summary>
-        /// 電子線用のコンストラクタ (3 lorentian, 3 gaussian)
-        /// </summary>
+        /// <summary>電子線用のコンストラクタ (3 lorentian, 3 gaussian)</summary>
         /// <param name="a1"></param>
         /// <param name="a2"></param>
         /// <param name="a3"></param>
@@ -2776,6 +2627,246 @@ new(4.86738014,0.319974401,4.58872425,
         }
 
         #endregion
+
+        #region 非弾性散乱因子の計算
+
+        /// <summary>局所形式の非弾性散乱因子 (TDS吸収ポテンシャル)</summary>
+        /// <param name="kV">kV(電子のエネルギー)</param>
+        /// <param name="s2">S2 (単位: nm^-2, S = sinθ/λ = 1/2d)</param>
+        /// <param name="m">温度因子 m (単位: nm^2), NaNの場合はゼロにして計算</param>
+        /// <returns> 戻り値が無次元量</returns>
+        public double FactorImaginary(double kV, double s2, double m)
+        {
+            if (double.IsNaN(m) || m == 0)
+                return 0;
+
+            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
+            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
+
+            s2 *= 0.01;//単位を修正
+            m *= 100;//単位を修正
+            return Prms.Sum(p1 => Prms.Sum(p2 =>
+            {
+                var sum = p1.B + p2.B;
+                if (sum == 0) return 0;
+                var product = p1.B * p2.B;
+                var sum2m = sum + 2 * m;
+                return p1.A * p2.A * (Math.Exp(-s2 * product / sum) / sum - Math.Exp(-s2 * (product - m * m) / sum2m) / sum2m);
+            })) * Math.PI * gamma * 2 / k0;
+        }
+       
+
+        /// <summary>局所形式の非弾性散乱因子 FlatEwald近似 未完成</summary>
+        /// <param name="kV"></param>
+        /// <param name="g"> g ベクトル 単位は nm </param>
+        /// <param name="h"> hベクトル 単位はnm</param>
+        /// <param name="m"> U ×8×π^2 単位は nm^2 </param>
+        /// <param name="inner"> 検出器の内側 単位はラジアン</param>
+        /// <param name="outer"> 検出器の外側 単位はラジアン</param>
+        /// <returns></returns>
+        public double FactorImaginaryAnnularFlatEwald(double kV, Vector3DBase g, double m, double inner, double outer, int nTheta = 80, int nPhi = 30)
+        {
+            if (double.IsNaN(m)) return 0;
+            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
+            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
+
+            var G = g.ToPointD;
+            var gLen2 = G.Length2;//単位はnm^-2
+
+            var result = GaussLegendreRule.Integrate(R =>
+            {
+                //double sinθ = Math.Sin(θ), kSinθ = k0 * sinθ, kCosθ = k0 * Math.Cos(θ);
+                return GaussLegendreRule.Integrate(φ =>
+                {
+                    var (sin, cos) = Math.SinCos(φ);
+                    var K = R * new PointD(cos, sin);
+                    //var K = new Vector3DBase(kSinθ * Math.Cos(φ), kSinθ * Math.Sin(φ), kCosθ - k0);
+                    double kMinusG = (K - G / 2).Length2, kPlusG = (K + G / 2).Length2;//単位はnm^-2
+                    double f_kMinusG = 0, f_kPlusG = 0;
+                    foreach (var (A, B) in Prms)
+                    {
+                        f_kMinusG += A * Math.Exp(-kMinusG / 400 * B);
+                        f_kPlusG += A * Math.Exp(-kPlusG / 400 * B);
+                    }
+                    return f_kMinusG * f_kPlusG * (1 - Math.Exp(m * (gLen2 - kMinusG - kPlusG) / 4));// * sinThetaを外に出して、少しでも早く
+                }, 0, 2 * Math.PI, nPhi);
+            }, k0 * Math.Sin(inner), k0 * Math.Sin(outer), nTheta);
+
+            return gamma / Math.PI / Math.PI / k0 * result * 0.01;
+        }
+
+        /// <summary>
+        /// 局所形式の非弾性散乱因子 近軸近似(ビーム径射角ゼロ)
+        /// 260316Cl ヒープ割り当て回避のためベクトル演算をスカラーにインライン展開。
+        ///            nTheta/nPhi をデフォルト引数で指定可能に変更。
+        /// </summary>
+        /// <param name="kV"></param>
+        /// <param name="g"> g ベクトル 単位は nm </param>
+        /// <param name="m"> U ×8×π^2 単位は nm^2 </param>
+        /// <param name="inner"> 検出器の内側 単位はラジアン</param>
+        /// <param name="outer"> 検出器の外側 単位はラジアン</param>
+        /// <param name="nTheta"> θ方向の Gauss-Legendre 求積点数 (デフォルト60)</param>
+        /// <param name="nPhi"> φ方向の Gauss-Legendre 求積点数 (デフォルト20)</param>
+        /// <returns></returns>
+        public double FactorImaginaryAnnular(double kV, Vector3DBase g, double m, double inner, double outer, int nTheta = 60, int nPhi = 20)
+        {
+            if (double.IsNaN(m)) return 0;
+            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
+            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
+
+            #region 260316Cl以前のコード (Vector3DBase をループ内で生成していたためヒープ割り当てが多い)
+            //var g2 = g / 2;
+            //var result = GaussLegendreRule.Integrate(θ =>
+            //{
+            //    var sinθ = Math.Sin(θ);
+            //    var cosθ = Math.Cos(θ);
+            //    return GaussLegendreRule.Integrate(φ =>
+            //    {
+            //        var k = new Vector3DBase(k0 * sinθ * Math.Cos(φ), k0 * sinθ * Math.Sin(φ), k0 * cosθ - k0);
+            //        var kMinusG = (k - g2).Length2 / 4;
+            //        var kPlusG = (k + g2).Length2 / 4;
+            //        double f_kMinusG = 0, f_kPlusG = 0;
+            //        foreach (var (A, B) in Prms)
+            //        {
+            //            f_kMinusG += A * Math.Exp(-kMinusG * B / 100);
+            //            f_kPlusG += A * Math.Exp(-kPlusG * B / 100);
+            //        }
+            //        return f_kMinusG * f_kPlusG * (1 - Math.Exp(m * (g2.Length2 - kMinusG - kPlusG)));
+            //    }, 0, 2 * Math.PI, nPhi) * sinθ;
+            //}, inner, outer, nTheta);
+            //return gamma * k0 / 2 * result * 0.01;
+            #endregion
+
+            // 260316Cl ヒープ割り当て回避のためベクトル演算をスカラーにインライン展開
+            // g/2 の各成分を事前計算 (ループ内での Vector3DBase 生成を回避)
+            double gx2 = g.X / 2, gy2 = g.Y / 2, gz2 = g.Z / 2;
+            double gLen2 = (g.X * g.X + g.Y * g.Y + g.Z * g.Z) / 4;
+
+            var result = GaussLegendreRule.Integrate(θ =>
+            {
+                var (sinθ, cosθ) = Math.SinCos(θ);
+                double kSinθ = k0 * sinθ, kCosθmk0 = k0 * cosθ - k0;
+                return GaussLegendreRule.Integrate(φ =>
+                {
+                    var (sinφ, cosφ) = Math.SinCos(φ);
+                    double kx = kSinθ * cosφ, ky = kSinθ * sinφ;
+                    // |k - g/2|² / 4
+                    double dx = kx - gx2, dy = ky - gy2, dz = kCosθmk0 - gz2;
+                    double kMinusG = (dx * dx + dy * dy + dz * dz) / 4;
+                    // |k + g/2|² / 4
+                    double ex = kx + gx2, ey = ky + gy2, ez = kCosθmk0 + gz2;
+                    double kPlusG = (ex * ex + ey * ey + ez * ez) / 4;
+
+                    double f_kMinusG = 0, f_kPlusG = 0;
+                    foreach (var (A, B) in Prms)
+                    {
+                        f_kMinusG += A * Math.Exp(-kMinusG * B / 100);
+                        f_kPlusG += A * Math.Exp(-kPlusG * B / 100);
+                    }
+                    return f_kMinusG * f_kPlusG * (1 - Math.Exp(m * (gLen2 - kMinusG - kPlusG)));
+                }, 0, 2 * Math.PI, nPhi) * sinθ;
+            }, inner, outer, nTheta);
+            return gamma * k0 / 2 * result * 0.01;
+        }
+
+
+        /// <summary>
+        /// 非局所形式の非弾性散乱因子 近軸近似(ビーム径射角ゼロ)
+        /// 260316Cl ヒープ割り当て回避のためベクトル演算をスカラーにインライン展開。
+        ///            nTheta/nPhi をデフォルト引数で指定可能に変更。
+        /// </summary>
+        /// <param name="kV"></param>
+        /// <param name="g"></param>
+        /// <param name="h"></param>
+        /// <param name="m"></param>
+        /// <param name="inner"></param>
+        /// <param name="outer"></param>
+        /// <param name="nTheta"> θ方向の Gauss-Legendre 求積点数 (デフォルト60)</param>
+        /// <param name="nPhi"> φ方向の Gauss-Legendre 求積点数 (デフォルト20)</param>
+        /// <returns></returns>
+        public double FactorImaginaryAnnular(double kV, Vector3DBase g, Vector3DBase h, double m, double inner, double outer, int nTheta = 60, int nPhi = 20)
+        {
+            if (double.IsNaN(m)) return 0;
+            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
+            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
+
+            #region 260316Cl以前のコード (Vector3DBase をループ内で生成していたためヒープ割り当てが多い)
+            //var g_h = ((g - h) / 2).Length2;
+            //return gamma * k0 / 2 * GaussLegendreRule.Integrate(θ =>
+            //{
+            //    var sinθ = Math.Sin(θ);
+            //    var cosθ = Math.Cos(θ);
+            //    return GaussLegendreRule.Integrate(φ =>
+            //    {
+            //        var k = new Vector3DBase(k0 * sinθ * Math.Cos(φ), k0 * sinθ * Math.Sin(φ), k0 * cosθ - k0);
+            //        var k_g = (k - g).Length2 / 400;
+            //        var k_h = (k - h).Length2 / 400;
+            //        double f_k_g = 0, f_k_h = 0;
+            //        foreach (var (A, B) in Prms)
+            //        {
+            //            f_k_g += A * Math.Exp(-k_g * B);
+            //            f_k_h += A * Math.Exp(-k_h * B);
+            //        }
+            //        return f_k_g * f_k_h * 0.01 * (1 - Math.Exp(m * (g_h - k_g * 100 - k_h * 100)));
+            //    }, 0, 2 * Math.PI, nPhi) * sinθ;
+            //}, inner, outer, nTheta);
+            #endregion
+
+            // 260316Cl ヒープ割り当て回避のためベクトル演算をスカラーにインライン展開
+            double gx = g.X, gy = g.Y, gz = g.Z;
+            double hx = h.X, hy = h.Y, hz = h.Z;
+            double dgx = gx - hx, dgy = gy - hy, dgz = gz - hz;
+            double g_h = (dgx * dgx + dgy * dgy + dgz * dgz) / 4;
+
+            return gamma * k0 / 2 * GaussLegendreRule.Integrate(θ =>
+            {
+                var (sinθ, cosθ) = Math.SinCos(θ);
+                double kSinθ = k0 * sinθ, kCosθmk0 = k0 * cosθ - k0;
+                return GaussLegendreRule.Integrate(φ =>
+                {
+                    var (sinφ, cosφ) = Math.SinCos(φ);
+                    double kx = kSinθ * cosφ, ky = kSinθ * sinφ;
+                    double dx1 = kx - gx, dy1 = ky - gy, dz1 = kCosθmk0 - gz;
+                    double k_g = (dx1 * dx1 + dy1 * dy1 + dz1 * dz1) / 400;
+                    double dx2 = kx - hx, dy2 = ky - hy, dz2 = kCosθmk0 - hz;
+                    double k_h = (dx2 * dx2 + dy2 * dy2 + dz2 * dz2) / 400;
+                    double f_k_g = 0, f_k_h = 0;
+                    foreach (var (A, B) in Prms)
+                    {
+                        f_k_g += A * Math.Exp(-k_g * B);
+                        f_k_h += A * Math.Exp(-k_h * B);
+                    }
+                    return f_k_g * f_k_h * 0.01 * (1 - Math.Exp(m * (g_h - k_g * 100 - k_h * 100)));
+                }, 0, 2 * Math.PI, nPhi) * sinθ;
+            }, inner, outer, nTheta);
+        }
+
+        /// <summary>非局所形式の非弾性散乱因子　近軸近似(ビーム径射角ゼロ) Flat Ewald球近似 遅いので、没?</summary>
+        /// <param name="kV"></param>
+        /// <param name="g"></param>
+        /// <param name="h"></param>
+        /// <param name="m"></param>
+        /// <param name="inner"></param>
+        /// <param name="outer"></param>
+        /// <returns></returns>
+        public double FactorImaginaryAnnular2(double kV, Vector3DBase g, Vector3DBase h, double m, double inner, double outer)
+        {
+            if (double.IsNaN(m)) m = 0;
+            var gamma = 1 + UniversalConstants.e0 * kV * 1E3 / UniversalConstants.m0 / UniversalConstants.c2;
+            var k0 = UniversalConstants.Convert.EnergyToElectronWaveNumber(kV);
+            double g_h = (g - h).ToPointD.Length2 / 4;
+            PointD g2 = g.ToPointD, h2 = h.ToPointD;
+            return GaussLegendreRule.Integrate((phi, r) =>
+            {
+                var (sinφ, cosφ) = Math.SinCos(phi);
+                var k = r * new PointD(cosφ, sinφ);
+                double k_g = (k - g2).Length2 / 4, k_h = (k - h2).Length2 / 4;
+                return Factor(k_g) * Factor(k_h) * (1 - Math.Exp(m * (g_h - k_g - k_h))) * r;
+            }
+            , 0, 2 * Math.PI, k0 * Math.Tan(inner), k0 * Math.Tan(outer), 40) * gamma / k0 / 2;
+        }
+        #endregion
+       
     }
     #endregion
 
@@ -2885,9 +2976,7 @@ new(4.86738014,0.319974401,4.58872425,
     #endregion
 
     #region　原子量
-    /// <summary>
-    /// 原子量を返す　引数は原子番号
-    /// </summary>
+    /// <summary>原子量を返す　引数は原子番号</summary>
     /// <param name="z"></param>
     /// <returns></returns>
     public static double AtomicWeight(int z) => z switch
@@ -3001,9 +3090,7 @@ new(4.86738014,0.319974401,4.58872425,
         #endregion
     };
 
-    /// <summary>
-    /// 原子量を返す　引数は原子名
-    /// </summary>
+    /// <summary>原子量を返す　引数は原子名</summary>
     /// <param name="atomicName"></param>
     /// <returns></returns>
     public static double AtomicWeight(string atomicName)
@@ -3013,9 +3100,7 @@ new(4.86738014,0.319974401,4.58872425,
     #endregion
 
     #region 原子名 <=> 原子番号
-    /// <summary>
-    /// 原子名を与えて、原子番号を返す. 文字列textから適宜原子名を抽出する.
-    /// </summary>
+    /// <summary>原子名を与えて、原子番号を返す. 文字列textから適宜原子名を抽出する.</summary>
     /// <param name="text"></param>
     /// <returns></returns>
     public static int AtomicNumber2(string text)
@@ -3037,9 +3122,7 @@ new(4.86738014,0.319974401,4.58872425,
         return number;
     }
 
-    /// <summary>
-    /// 原子名を与えて、原子番号を返す
-    /// </summary>
+    /// <summary>原子名を与えて、原子番号を返す</summary>
     /// <param name="atomicName"></param>
     /// <returns></returns>
     public static int AtomicNumber(string atomicName, bool caseSensitive = true)
@@ -3161,9 +3244,7 @@ new(4.86738014,0.319974401,4.58872425,
         #endregion
     }
 
-    /// <summary>
-    /// 原子番号を与えて、原子名を返す
-    /// </summary>
+    /// <summary>原子番号を与えて、原子名を返す</summary>
     /// <param name="z"></param>
     /// <returns></returns>
     public static string AtomicName(int z) => z switch
@@ -3280,9 +3361,7 @@ new(4.86738014,0.319974401,4.58872425,
     #endregion
 
     #region イオン半径
-    /// <summary>
-    /// イオン半径
-    /// </summary>
+    /// <summary>イオン半径</summary>
     /// <param name="z"></param>
     /// <returns></returns>
     public static double AtomicRadius(int z) => z switch
@@ -3396,9 +3475,7 @@ new(4.86738014,0.319974401,4.58872425,
         #endregion
     };
 
-    /// <summary>
-    /// イオン半径
-    /// </summary>
+    /// <summary>イオン半径</summary>
     /// <param name="AtomicName"></param>
     /// <returns></returns>
     public static double AtomicRadius(string AtomicName) => AtomicName switch
@@ -3513,18 +3590,14 @@ new(4.86738014,0.319974401,4.58872425,
     #endregion
 
     #region 特性X線エネルギー、波長、吸収端エネルギー
-    /// <summary>
-    /// 原子番号 z, 線種 line を入力すると 特性X線エネルギー (kev) を返す。 対応する原子、線種がない場合はNaNを返す
-    /// </summary>
+    /// <summary>原子番号 z, 線種 line を入力すると 特性X線エネルギー (kev) を返す。 対応する原子、線種がない場合はNaNを返す</summary>
     /// <param name="z"></param>
     /// <param name="line"></param>
     /// <returns></returns>
     public static double CharacteristicXrayEnergy(int z, XrayLine line)
         => UniversalConstants.Convert.WavelengthToXrayEnergy(CharacteristicXrayWavelength(z, line) * 0.1) / 1000;
 
-    /// <summary>
-    /// 原子番号 z, 線種 line を入力すると X線吸収端エネルギー (kev) を返す。 対応する原子、線種がない場合はNaNを返す
-    /// </summary>
+    /// <summary>原子番号 z, 線種 line を入力すると X線吸収端エネルギー (kev) を返す。 対応する原子、線種がない場合はNaNを返す</summary>
     /// <param name="z"></param>
     /// <param name="line"></param>
     /// <returns></returns>
@@ -5248,9 +5321,7 @@ new(4.86738014,0.319974401,4.58872425,
         #endregion
     }
 
-    /// <summary>
-    /// 原子番号 z, 線種 line を入力すると 波長 (Å) を返す。 対応する原子、線種がない場合はNaNを返す
-    /// </summary>
+    /// <summary>原子番号 z, 線種 line を入力すると 波長 (Å) を返す。 対応する原子、線種がない場合はNaNを返す</summary>
     /// <param name="z"></param>
     /// <param name="line"></param>
     /// <returns></returns>
@@ -7313,21 +7384,35 @@ new(4.86738014,0.319974401,4.58872425,
 
     private static readonly Lock lockObjForMassAbsorption = new();
 
-    /// <summary>
-    /// 質量吸収係数を覚えておく
-    /// </summary>
-    private static readonly Dictionary<double, double>[] massAbsorption = new Dictionary<double, double>[100];
+    /// <summary>質量吸収係数を覚えておく</summary>
+    //private static readonly Dictionary<double, double>[] massAbsorption = new Dictionary<double, double>[100];
+    // (260320Ch) 並列参照時の安全性を上げるため ConcurrentDictionary を利用する
+    private static readonly ConcurrentDictionary<double, double>[] massAbsorption = new ConcurrentDictionary<double, double>[100];
 
-    /// <summary>
-    /// エネルギー(keV)と吸収体元素を与えて、質量吸収係数を返す
-    /// </summary>
+    // (260320Ch) キャッシュの初期化を一箇所にまとめる
+    private static ConcurrentDictionary<double, double> GetMassAbsorptionCache(int z)
+    {
+        if (massAbsorption[z] != null)
+            return massAbsorption[z];
+
+        lock (lockObjForMassAbsorption)
+            return massAbsorption[z] ??= new ConcurrentDictionary<double, double>();
+    }
+
+    /// <summary>エネルギー(keV)と吸収体元素を与えて、質量吸収係数を返す</summary>
     /// <param name="energy"></param>
     /// <param name="z"></param>
     /// <returns></returns>
     public static double MassAbsorption(double energy, int z)
     {
-        if (z < 1 || z > AtomStaticSub.MassAbsorptionCoefficient.Length || energy <= 0) return double.NaN;
-        if (massAbsorption[z] != null && massAbsorption[z].TryGetValue(energy, out double val))
+        //if (z < 1 || z > AtomStaticSub.MassAbsorptionCoefficient.Length || energy <= 0) return double.NaN;
+        //if (massAbsorption[z] != null && massAbsorption[z].TryGetValue(energy, out double val))
+        //    return val;
+        // (260320Ch) 境界チェックを修正し、ConcurrentDictionary 経由でキャッシュを参照する
+        if (z < 1 || z >= AtomStaticSub.MassAbsorptionCoefficient.Length || energy <= 0) return double.NaN;
+
+        var cache = massAbsorption[z];
+        if (cache != null && cache.TryGetValue(energy, out double val))
             return val;
 
         //どのセグメントに属するかを決める
@@ -7347,10 +7432,12 @@ new(4.86738014,0.319974401,4.58872425,
             for (int i = 0; i < coef.Length && position == int.MinValue; i++)
                 if (energy == coef[i].X)
                 {
-                    if (massAbsorption[z] == null)
-                        massAbsorption[z] = [];
-                    lock (lockObjForMassAbsorption)
-                        massAbsorption[z].Add(energy, coef[i].Y);
+                    //if (massAbsorption[z] == null)
+                    //    massAbsorption[z] = [];
+                    //lock (lockObjForMassAbsorption)
+                    //    massAbsorption[z].Add(energy, coef[i].Y);
+                    // (260320Ch) 重複計算や競合時も例外にしない
+                    _ = GetMassAbsorptionCache(z).TryAdd(energy, coef[i].Y);
                     return coef[i].Y;
                 }
                 else if (i < coef.Length - 1 && energy > coef[i].X && energy < coef[i + 1].X)
@@ -7393,12 +7480,16 @@ new(4.86738014,0.319974401,4.58872425,
         for (int j = 0; j < order + 1; j++)
             value += a[j, 0] * Math.Pow(c1 * energy + c2, j);
 
-        if (massAbsorption[z] == null)
-            massAbsorption[z] = [];
-
-        if (massAbsorption[z].Count < 1E4)
-            lock (lockObjForMassAbsorption)
-                massAbsorption[z].Add(energy, value);
+        //if (massAbsorption[z] == null)
+        //    massAbsorption[z] = [];
+        //
+        //if (massAbsorption[z].Count < 1E4)
+        //    lock (lockObjForMassAbsorption)
+        //        massAbsorption[z].Add(energy, value);
+        // (260320Ch) キャッシュ件数を抑えつつ、重複追加は TryAdd で吸収する
+        cache = GetMassAbsorptionCache(z);
+        if (cache.Count < 1E4)
+            _ = cache.TryAdd(energy, value);
 
         return value;
     }
@@ -7406,9 +7497,7 @@ new(4.86738014,0.319974401,4.58872425,
     #endregion
 
     #region MeanExcitationEnergy
-    /// <summary>
-    /// 平均イオン化エネルギー(keV), mode 1: Ducumb et al. 1968, mode 2: Berger 1964, mode 3: Pouchou and Pichoir 1991
-    /// </summary>
+    /// <summary>平均イオン化エネルギー(keV), mode 1: Ducumb et al. 1968, mode 2: Berger 1964, mode 3: Pouchou and Pichoir 1991</summary>
     /// <param name="z"></param>
     /// <returns></returns>
     public static double MeanExcitationEnergy(int z, int mode = 0) => mode switch
@@ -7420,9 +7509,7 @@ new(4.86738014,0.319974401,4.58872425,
     #endregion
 
     #region Stopping Power Factor
-    /// <summary>
-    /// Stopping Power Factor
-    /// </summary>
+    /// <summary>Stopping Power Factor</summary>
     /// <param name="z"></param>
     /// <param name="line"></param>
     /// <param name="incidentEnergy"></param>
@@ -7432,9 +7519,7 @@ new(4.86738014,0.319974401,4.58872425,
     #endregion
 
     #region Back Scattered Factor
-    /// <summary>
-    /// Back Scattered Factor
-    /// </summary> Ec臨界励起エネルギー, E0入射エネルギー, z原子番号
+    /// <summary>Back Scattered Factor</summary> Ec臨界励起エネルギー, E0入射エネルギー, z原子番号
     /// <param name="z"></param>
     /// <param name="line"></param>
     /// <param name="incidentEnergy"></param>
@@ -7470,9 +7555,7 @@ new(4.86738014,0.319974401,4.58872425,
 
 
     #region デバッグ用 http://www.nist.gov/pml/data/ffast/index.cfm のデータを読み込んで、コードを吐き出す関数
-    /// <summary>
-    /// http://www.nist.gov/pml/data/ffast/index.cfm のデータを読み込んで、コードを吐き出す関数
-    /// </summary>
+    /// <summary>http://www.nist.gov/pml/data/ffast/index.cfm のデータを読み込んで、コードを吐き出す関数</summary>
     public static void ReadChantlerData(string[] fileNames)
     {
         #region
@@ -7495,10 +7578,12 @@ new(4.86738014,0.319974401,4.58872425,
             reader.Close();
 
             int i = 0;
-            int z = Convert.ToInt32(str[1].Split([','])[0].Replace("<b>Z=", ""));//2行目から原子番号を読み取る
+            //260317Cl 変更: Convert.ToInt32 → int.Parse
+            int z = int.Parse(str[1].Split([','])[0].Replace("<b>Z=", ""));//2行目から原子番号を読み取る
                                                                                  //edgeの値を読み取る
             while (!str[i].Contains("edge")) i++;
-            var edgeNo = Convert.ToInt32(str[i].Split([' '], StringSplitOptions.RemoveEmptyEntries)[0]);
+            //260317Cl 変更: Convert.ToInt32 → int.Parse
+            var edgeNo = int.Parse(str[i].Split([' '], StringSplitOptions.RemoveEmptyEntries)[0]);
             i += 2;
 
             var edge = new List<PointD>();
@@ -7528,10 +7613,11 @@ new(4.86738014,0.319974401,4.58872425,
                         {
                             sbEdgeEnergy.AppendLine("case XrayLineEdge." + temp[j] + ": return " + temp[j + 1] + ";");
                             //edge.Add(new PointD(Convert.ToDouble(temp[j + 1]), -((temp[j][0] - 'J') * 10 + (temp[j].Length > 1 ? temp[j][1] - '0' : 0))));
-                            if (edge.Count == 0 || (edge.Count != 0 && edge[^1].X != Convert.ToDouble(temp[j + 1])))
+                            //260317Cl 変更: Convert.ToDouble → double.Parse
+                            if (edge.Count == 0 || (edge.Count != 0 && edge[^1].X != double.Parse(temp[j + 1])))
                             {
-                                edge.Add(new PointD(Convert.ToDouble(temp[j + 1]), double.PositiveInfinity));
-                                edge.Add(new PointD(Convert.ToDouble(temp[j + 1]), double.NegativeInfinity));
+                                edge.Add(new PointD(double.Parse(temp[j + 1]), double.PositiveInfinity));
+                                edge.Add(new PointD(double.Parse(temp[j + 1]), double.NegativeInfinity));
                             }
                         }
                     i++;
@@ -7544,7 +7630,11 @@ new(4.86738014,0.319974401,4.58872425,
             var absorp = new List<PointD>([.. edge]);
             sbAbsorption.AppendLine("new PointD[][]{");
             for (; i < str.Count - 1; i++)
-                absorp.Add(new PointD(Convert.ToDouble(str[i].Split([' '], StringSplitOptions.RemoveEmptyEntries)[0]), Convert.ToDouble(str[i].Split([' '], StringSplitOptions.RemoveEmptyEntries)[1])));
+                //260317Cl 変更: Convert.ToDouble → double.Parse、Splitの重複呼出しを解消
+                {
+                    var parts = str[i].Split([' '], StringSplitOptions.RemoveEmptyEntries);
+                    absorp.Add(new PointD(double.Parse(parts[0]), double.Parse(parts[1])));
+                }
             //sbAbsorption.AppendLine("new PointD(" + str[i].Replace("  ", ",") + ")" + (i == str.Count - 2 ? "" : ","));
             absorp.Sort();
             var pf = new List<Profile> { new() };

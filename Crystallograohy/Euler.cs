@@ -1,33 +1,35 @@
-using MathNet.Numerics;
+ï»¿using MathNet.Numerics;
+using MathNet.Numerics.Distributions;
 using MathNet.Numerics.LinearAlgebra;
 using OpenTK.Mathematics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+//using Windows.Networking.BackgroundTransfer; //260405Cl æœªä½¿ç”¨ã®WinRTå‚ç…§ã‚’å‰Šé™¤
 using DVec = MathNet.Numerics.LinearAlgebra.Double.DenseVector;
 
 namespace Crystallography;
 
-/// <summary>
-/// Euler ‚ÌŠT—v‚Ìà–¾‚Å‚·B
-/// </summary>
+/// <summary>Euler ã®æ¦‚è¦ã®èª¬æ˜ã§ã™ã€‚</summary>
 public class Euler
 {
     public Euler()
     {
         //
-        // TODO: ƒRƒ“ƒXƒgƒ‰ƒNƒ^ ƒƒWƒbƒN‚ğ‚±‚±‚É’Ç‰Á‚µ‚Ä‚­‚¾‚³‚¢B
+        // TODO: ã‚³ãƒ³ã‚¹ãƒˆãƒ©ã‚¯ã‚¿ ãƒ­ã‚¸ãƒƒã‚¯ã‚’ã“ã“ã«è¿½åŠ ã—ã¦ãã ã•ã„ã€‚
         //
     }
 
-    //za‚ªtilt,azimuth‚Éˆê’v‚·‚é‚æ‚¤‚ÈƒIƒCƒ‰[Šp‚ğ•Ô‚·
+    //zaãŒtilt,azimuthã«ä¸€è‡´ã™ã‚‹ã‚ˆã†ãªã‚ªã‚¤ãƒ©ãƒ¼è§’ã‚’è¿”ã™
     public static Matrix3D SerchEulerAngleFromZoneAxes(ZoneAxis za, Crystal cry)
     {
         double tilt1 = za.tilt1;
         double tilt2 = za.tilt2;
         var v = Vector3D.Normarize(za.u * cry.A_Axis + za.v * cry.B_Axis + za.w * cry.C_Axis);
 
-        Vector3D V = new(-Math.Sin(tilt1), -Math.Cos(tilt1) * Math.Sin(tilt2), Math.Cos(tilt1) * Math.Cos(tilt2));
+        var (sinTilt1, cosTilt1) = Math.SinCos(tilt1);
+        var (sinTilt2, cosTilt2) = Math.SinCos(tilt2);
+        Vector3D V = new(-sinTilt1, -cosTilt1 * sinTilt2, cosTilt1 * cosTilt1);
 
         double Phi, phi1, phi2, PhiStart, PhiEnd, phi1Start, phi1End, phi2Start, phi2End, step, PhiBest, phi1Best, phi2Best;
         double dev, devTemp;
@@ -48,12 +50,9 @@ public class Euler
                 for (phi1 = phi1Start; phi1 <= phi1End; phi1 += step)
                     for (phi2 = phi2Start; phi2 <= phi2End; phi2 += step)
                     {
-                        cosP = Math.Cos(Phi);
-                        sinP = Math.Sin(Phi);
-                        cosP1 = Math.Cos(phi1);
-                        sinP1 = Math.Sin(phi1);
-                        cosP2 = Math.Cos(phi2);
-                        sinP2 = Math.Sin(phi2);
+                        (sinP, cosP) = Math.SinCos(Phi);
+                        (sinP1, cosP1) = Math.SinCos(phi1);
+                        (sinP2, cosP2) = Math.SinCos(phi2);
                         m = new Matrix3D(
                             cosP2 * cosP1 - cosP * sinP1 * sinP2, -sinP2 * cosP1 - cosP * sinP1 * cosP2, sinP * sinP1,
                             cosP2 * sinP1 + cosP * cosP1 * sinP2, -sinP2 * sinP1 + cosP * cosP1 * cosP2, -sinP * cosP1,
@@ -98,12 +97,9 @@ public class Euler
             else phi2Best -= Math.PI;
         }
 
-        cosP = Math.Cos(PhiBest);
-        sinP = Math.Sin(PhiBest);
-        cosP1 = Math.Cos(phi1Best);
-        sinP1 = Math.Sin(phi1Best);
-        cosP2 = Math.Cos(phi2Best);
-        sinP2 = Math.Sin(phi2Best);
+        (sinP,cosP)  = Math.SinCos(PhiBest);
+        (sinP1,cosP1) = Math.SinCos(phi1Best);
+        (sinP2, cosP2) = Math.SinCos(phi2Best);
         return new Matrix3D(
                             cosP2 * cosP1 - cosP * sinP1 * sinP2, -sinP2 * cosP1 - cosP * sinP1 * cosP2, sinP * sinP1,
                             cosP2 * sinP1 + cosP * cosP1 * sinP2, -sinP2 * sinP1 + cosP * cosP1 * cosP2, -sinP * cosP1,
@@ -111,7 +107,7 @@ public class Euler
                             );
     }
 
-    //za1‚ªtilt1,azimuth1‚ÉAza2‚ªtilt2,azimuth2‚É‚È‚é‚×‚­ˆê’v‚·‚é‚æ‚¤‚ÈƒIƒCƒ‰[Šp‚ğ•Ô‚·
+    //za1ãŒtilt1,azimuth1ã«ã€za2ãŒtilt2,azimuth2ã«ãªã‚‹ã¹ãä¸€è‡´ã™ã‚‹ã‚ˆã†ãªã‚ªã‚¤ãƒ©ãƒ¼è§’ã‚’è¿”ã™
     public static Matrix3D SerchEulerAngleFromZoneAxes(ZoneAxis za1, ZoneAxis za2, Crystal cry)
     {
         double tilt1 = za1.tilt1;
@@ -122,8 +118,14 @@ public class Euler
         var v1 = Vector3DBase.Normarize(za1.u * cry.A_Axis + za1.v * cry.B_Axis + za1.w * cry.C_Axis);
         var v2 = Vector3DBase.Normarize(za2.u * cry.A_Axis + za2.v * cry.B_Axis + za2.w * cry.C_Axis);
 
-        var V1 = new Vector3D(-Math.Sin(tilt1), -Math.Cos(tilt1) * Math.Sin(azimuth1), Math.Cos(tilt1) * Math.Cos(azimuth1));
-        var V2 = new Vector3D(-Math.Sin(tilt2), -Math.Cos(tilt2) * Math.Sin(azimuth2), Math.Cos(tilt2) * Math.Cos(azimuth2));
+        var (sinTilt1, cosTilt1) = Math.SinCos(tilt1);
+        var (sinAzimuth1, cosAzimuth1) = Math.SinCos(azimuth1);
+        var V1 = new Vector3D(-sinTilt1, -cosTilt1 * sinAzimuth1, cosTilt1 * cosAzimuth1);
+
+
+        var (sinTilt2, cosTilt2) = Math.SinCos(tilt2);
+        var (sinAzimuth2, cosAzimuth2) = Math.SinCos(azimuth2);
+        var V2 = new Vector3D(-sinTilt2, -cosTilt2 * sinAzimuth2, cosTilt2 * cosAzimuth2);
 
         double Phi, phi1, phi2, PhiStart, PhiEnd, phi1Start, phi1End, phi2Start, phi2End, step, PhiBest, phi1Best, phi2Best;
         double dev, devTemp;
@@ -144,12 +146,9 @@ public class Euler
                 for (phi1 = phi1Start; phi1 <= phi1End; phi1 += step)
                     for (phi2 = phi2Start; phi2 <= phi2End; phi2 += step)
                     {
-                        cosP = Math.Cos(Phi);
-                        sinP = Math.Sin(Phi);
-                        cosP1 = Math.Cos(phi1);
-                        sinP1 = Math.Sin(phi1);
-                        cosP2 = Math.Cos(phi2);
-                        sinP2 = Math.Sin(phi2);
+                        (sinP, cosP) = Math.SinCos(Phi);
+                        (sinP1, cosP1) = Math.SinCos(phi1);
+                        (sinP2, cosP2) = Math.SinCos(phi2);
                         m = new Matrix3D(
                             cosP2 * cosP1 - cosP * sinP1 * sinP2, -sinP2 * cosP1 - cosP * sinP1 * cosP2, sinP * sinP1,
                             cosP2 * sinP1 + cosP * cosP1 * sinP2, -sinP2 * sinP1 + cosP * cosP1 * cosP2, -sinP * cosP1,
@@ -194,12 +193,9 @@ public class Euler
             else phi2Best -= Math.PI;
         }
 
-        cosP = Math.Cos(PhiBest);
-        sinP = Math.Sin(PhiBest);
-        cosP1 = Math.Cos(phi1Best);
-        sinP1 = Math.Sin(phi1Best);
-        cosP2 = Math.Cos(phi2Best);
-        sinP2 = Math.Sin(phi2Best);
+         (sinP, cosP) = Math.SinCos(PhiBest);
+         (sinP1, cosP1) = Math.SinCos(phi1Best);
+         (sinP2, cosP2) = Math.SinCos(phi2Best);
         return new Matrix3D(
                             cosP2 * cosP1 - cosP * sinP1 * sinP2, -sinP2 * cosP1 - cosP * sinP1 * cosP2, sinP * sinP1,
                             cosP2 * sinP1 + cosP * cosP1 * sinP2, -sinP2 * sinP1 + cosP * cosP1 * cosP2, -sinP * cosP1,
@@ -207,7 +203,7 @@ public class Euler
                             );
     }
 
-    //za1‚ªtilt1,azimuth1‚ÉAza2‚ªtilt2,azimuth2‚ÉAza3‚ª‚È‚é‚×‚­tilt3,azimuth3‚Éˆê’v‚·‚é‚æ‚¤‚ÈƒIƒCƒ‰[Šp‚ğ•Ô‚·
+    //za1ãŒtilt1,azimuth1ã«ã€za2ãŒtilt2,azimuth2ã«ã€za3ãŒãªã‚‹ã¹ãtilt3,azimuth3ã«ä¸€è‡´ã™ã‚‹ã‚ˆã†ãªã‚ªã‚¤ãƒ©ãƒ¼è§’ã‚’è¿”ã™
     public static Matrix3D SerchEulerAngleFromZoneAxes(ZoneAxis za1, ZoneAxis za2, ZoneAxis za3, Crystal cry)
     {
         double tilt1 = za1.tilt1;
@@ -221,9 +217,17 @@ public class Euler
         var v2 = Vector3DBase.Normarize(za2.u * cry.A_Axis + za2.v * cry.B_Axis + za2.w * cry.C_Axis);
         var v3 = Vector3DBase.Normarize(za3.u * cry.A_Axis + za3.v * cry.B_Axis + za3.w * cry.C_Axis);
 
-        Vector3D V1 = new(-Math.Sin(tilt1), -Math.Cos(tilt1) * Math.Sin(azimuth1), Math.Cos(tilt1) * Math.Cos(azimuth1));
-        Vector3D V2 = new(-Math.Sin(tilt2), -Math.Cos(tilt2) * Math.Sin(azimuth2), Math.Cos(tilt2) * Math.Cos(azimuth2));
-        Vector3D V3 = new(-Math.Sin(tilt3), -Math.Cos(tilt3) * Math.Sin(azimuth3), Math.Cos(tilt3) * Math.Cos(azimuth3));
+        var (sinTilt1, cosTilt1) = Math.SinCos(tilt1);
+        var (sinAzimuth1, cosAzimuth1) = Math.SinCos(azimuth1);
+        Vector3D V1 = new(-sinTilt1, -cosTilt1 * sinAzimuth1, cosTilt1 * cosAzimuth1);
+
+        var (sinTilt2, cosTilt2) = Math.SinCos(tilt2);
+        var (sinAzimuth2, cosAzimuth2) = Math.SinCos(azimuth2);
+        Vector3D V2 = new(-sinTilt2, -cosTilt2 * sinAzimuth2, cosTilt2 * cosAzimuth2);
+
+        var (sinTilt3, cosTilt3) = Math.SinCos(tilt3);
+        var (sinAzimuth3, cosAzimuth3) = Math.SinCos(azimuth3);
+        Vector3D V3 = new(-sinTilt3, -cosTilt3 * sinAzimuth3, cosTilt3 * cosAzimuth3);
 
         double Phi, phi1, phi2, PhiStart, PhiEnd, phi1Start, phi1End, phi2Start, phi2End, step, PhiBest, phi1Best, phi2Best;
         double dev, devTemp;
@@ -244,12 +248,9 @@ public class Euler
                 for (phi1 = phi1Start; phi1 <= phi1End; phi1 += step)
                     for (phi2 = phi2Start; phi2 <= phi2End; phi2 += step)
                     {
-                        cosP = Math.Cos(Phi);
-                        sinP = Math.Sin(Phi);
-                        cosP1 = Math.Cos(phi1);
-                        sinP1 = Math.Sin(phi1);
-                        cosP2 = Math.Cos(phi2);
-                        sinP2 = Math.Sin(phi2);
+                        (sinP, cosP) = Math.SinCos(Phi);
+                        (sinP1,cosP1) = Math.SinCos(phi1);
+                        (sinP2,cosP2) = Math.SinCos(phi2);
                         m = new Matrix3D(
                             cosP2 * cosP1 - cosP * sinP1 * sinP2, -sinP2 * cosP1 - cosP * sinP1 * cosP2, sinP * sinP1,
                             cosP2 * sinP1 + cosP * cosP1 * sinP2, -sinP2 * sinP1 + cosP * cosP1 * cosP2, -sinP * cosP1,
@@ -294,12 +295,9 @@ public class Euler
             else phi2Best -= Math.PI;
         }
 
-        cosP = Math.Cos(PhiBest);
-        sinP = Math.Sin(PhiBest);
-        cosP1 = Math.Cos(phi1Best);
-        sinP1 = Math.Sin(phi1Best);
-        cosP2 = Math.Cos(phi2Best);
-        sinP2 = Math.Sin(phi2Best);
+        (sinP,cosP) = Math.SinCos(PhiBest);
+        (sinP1,cosP1) = Math.SinCos(phi1Best);
+        (sinP2,cosP2) = Math.SinCos(phi2Best);
         return new Matrix3D(
                             cosP2 * cosP1 - cosP * sinP1 * sinP2, -sinP2 * cosP1 - cosP * sinP1 * cosP2, sinP * sinP1,
                             cosP2 * sinP1 + cosP * cosP1 * sinP2, -sinP2 * sinP1 + cosP * cosP1 * cosP2, -sinP * cosP1,
@@ -307,9 +305,7 @@ public class Euler
                             );
     }
 
-    /// <summary>
-    /// ‰ñ“]s—ñ‚ğEulerŠp(Z-X-ZƒZƒbƒeƒBƒ“ƒO)‚É•ÏŠ·
-    /// </summary>
+    /// <summary>å›è»¢è¡Œåˆ—ã‚’Eulerè§’(Z-X-Zã‚»ãƒƒãƒ†ã‚£ãƒ³ã‚°)ã«å¤‰æ›</summary>
     /// <param name="EulerMatrix"></param>
     /// <returns></returns>
     public static (double Phi, double Theta, double Psi) FromMatrix(Matrix3D EulerMatrix)
@@ -348,18 +344,16 @@ public class Euler
         return (phi, theta, psi);
     }
 
-    /// <summary>
-    /// EulerŠp(Z-X-ZƒZƒbƒeƒBƒ“ƒO)‚ğ‰ñ“]s—ñ‚É•ÏŠ·
-    /// </summary>
+    /// <summary>Eulerè§’(Z-X-Zã‚»ãƒƒãƒ†ã‚£ãƒ³ã‚°)ã‚’å›è»¢è¡Œåˆ—ã«å¤‰æ›</summary>
     /// <param name="phi"></param>
     /// <param name="theta"></param>
     /// <param name="psi"></param>
     /// <returns></returns>
     public static Matrix3D ToMatrix(double phi, double theta, double psi)
     {
-        double cosPhi = Math.Cos(phi), sinPhi = Math.Sin(phi);
-        double cosTheta = Math.Cos(theta), sinTheta = Math.Sin(theta);
-        double cosPsi = Math.Cos(psi), sinPsi = Math.Sin(psi);
+        var (sinPhi,cosPhi) = Math.SinCos(phi);
+        var (sinTheta, cosTheta) = Math.SinCos(theta);
+        var (sinPsi, cosPsi) = Math.SinCos(psi);
 
         return new Matrix3D(
             cosPhi * cosPsi - cosTheta * sinPhi * sinPsi,
@@ -376,11 +370,9 @@ public class Euler
             );
     }
 
-    /// <summary>
-    /// rot‚ÉÅ‚à‹ß‚¢A”CˆÓ‚ÌƒZƒbƒeƒBƒ“ƒO‚ÌƒIƒCƒ‰[Šp‚É•ª‰ğ‚·‚é.
-    /// </summary>
+    /// <summary>rotã«æœ€ã‚‚è¿‘ã„ã€ä»»æ„ã®ã‚»ãƒƒãƒ†ã‚£ãƒ³ã‚°ã®ã‚ªã‚¤ãƒ©ãƒ¼è§’ã«åˆ†è§£ã™ã‚‹.</summary>
     /// <param name="targetRotation"></param>
-    /// <param name="settings">settings”z—ñ‚Ì’·‚³‚ÍÅ‘å‚Å3. V: ‰ñ“]²AAngle: ‰Šú(‚ ‚é‚¢‚ÍŒÅ’è)Šp“xAVariable: True‚Å•Ï”AFalse‚ÅŒÅ’è</param>
+    /// <param name="settings">settingsé…åˆ—ã®é•·ã•ã¯æœ€å¤§ã§3. V: å›è»¢è»¸ã€Angle: åˆæœŸ(ã‚ã‚‹ã„ã¯å›ºå®š)è§’åº¦ã€Variable: Trueã§å¤‰æ•°ã€Falseã§å›ºå®š</param>
     /// <returns></returns>
     public static double[] DecomposeMatrix2(Matrix3D targetRotation, params (Vector3d Vec, double Angle, bool Variable)[] settings)
     {

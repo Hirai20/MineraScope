@@ -2,31 +2,23 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using static System.Windows.Forms.AxHost;
 
 namespace Crystallography;
 
 public class IntegralProperty
 {
     //光学系全体に関係するところ
-    /// <summary>
-    /// 線源の波長
-    /// </summary>
+    /// <summary>線源の波長</summary>
     public double WaveLength;
 
     public WaveProperty WaveProperty;
 
-    /// <summary>
-    /// カメラ長1 (サンプルからダイレクトスポットまでの距離)
-    /// </summary>
+    /// <summary>カメラ長1 (サンプルからダイレクトスポットまでの距離)</summary>
     public double FilmDistance;//カメラ長
 
-    /// <summary>
-    /// カメラ長1 (サンプルからダイレクトスポットまでの距離)
-    /// </summary>
+    /// <summary>カメラ長1 (サンプルからダイレクトスポットまでの距離)</summary>
     public double CameraLength1 => FilmDistance;//カメラ長
 
     public enum CameraEnum { FlatPanel, Gandolfi }
@@ -35,68 +27,44 @@ public class IntegralProperty
 
     //IPの性質に関するところ
 
-    /// <summary>
-    /// ソース画像の幅
-    /// </summary>
+    /// <summary>ソース画像の幅</summary>
     public int SrcWidth;
 
-    /// <summary>
-    /// ソース画像の高さ
-    /// </summary>
+    /// <summary>ソース画像の高さ</summary>
     public int SrcHeight;
 
-    /// <summary>
-    /// センター(Direct Spot)のx位置
-    /// </summary>
+    /// <summary>センター(Direct Spot)のx位置</summary>
     public double CenterX;
 
-    /// <summary>
-    /// センター(Direct Spot)のy位置
-    /// </summary>
+    /// <summary>センター(Direct Spot)のy位置</summary>
     public double CenterY;
 
-    /// <summary>
-    /// ピクセルサイズ
-    /// </summary>
+    /// <summary>ピクセルサイズ</summary>
     public double PixSizeX, PixSizeY;
 
-    /// <summary>
-    /// ピクセルの歪み角度
-    /// </summary>
+    /// <summary>ピクセルの歪み角度</summary>
     public double ksi = 0;
 
-    /// <summary>
-    /// IPの回転角度
-    /// </summary>
+    /// <summary>IPの回転角度</summary>
     public double phi;
 
-    /// <summary>
-    /// IPの回転軸の角度;
-    /// </summary>
+    /// <summary>IPの回転軸の角度;</summary>
     public double tau;
 
     public double GandolfiRadius { get; set; }
 
-    /// <summary>
-    /// 湾曲パラメータ
-    /// </summary>
+    /// <summary>湾曲パラメータ</summary>
     public double SpericalRadiusInverse { get; set; } = 0;
 
     //一次元化の方法
 
-    /// <summary>
-    /// trueの場合はコンセントリックモード　falseの場合はラディアルモード
-    /// </summary>
+    /// <summary>trueの場合はコンセントリックモード　falseの場合はラディアルモード</summary>
     public bool ConcentricMode;
 
-    /// <summary>
-    /// コンセントリックモードの場合、start, end ,stepがアングルモードかd値モードか。　ラディアルモードの場合, RadiusとRadiusRangeがアングルモードか角度モードか
-    /// </summary>
+    /// <summary>コンセントリックモードの場合、start, end ,stepがアングルモードかd値モードか。　ラディアルモードの場合, RadiusとRadiusRangeがアングルモードか角度モードか</summary>
     public HorizontalAxis Mode;
 
-    /// <summary>
-    /// コンセントリック、ラディアルモード両方で、積分対象となる角度範囲を表示するかどうか
-    /// </summary>
+    /// <summary>コンセントリック、ラディアルモード両方で、積分対象となる角度範囲を表示するかどうか</summary>
 
     public double StepAngle, StartAngle, EndAngle;
     public double StepLength, StartLength, EndLength;
@@ -106,9 +74,7 @@ public class IntegralProperty
     public double RadialRadiusAngle, RadialRadiusAngleRange;
     public double RadialRadiusDspacing, RadialRadiusDspacingRange;
 
-    /// <summary>
-    /// trueの場合は矩形モード falseの場合はセクターモード
-    /// </summary>
+    /// <summary>trueの場合は矩形モード falseの場合はセクターモード</summary>
     public bool IsRectangle;
 
     public int ThresholdMax, ThresholdMin;//閾値
@@ -137,9 +103,7 @@ public class IntegralProperty
     }
 }
 
-/// <summary>
-/// DebyeScherrer の概要の説明です。
-/// </summary>
+/// <summary>DebyeScherrer の概要の説明です。</summary>
 public static class Ring
 {
     #region フィールド、メソッド、enum
@@ -168,61 +132,41 @@ public static class Ring
         Rigaku_RAxis_IV_Osc,//RAxisIVの揺動
         Tiff,//Tiff
 
-        /// <summary>
-        /// MarresearchのMARファイル
-        /// </summary>
+        /// <summary>MarresearchのMARファイル</summary>
         MAR,
 
-        /// <summary>
-        /// MarresearchのCCD
-        /// </summary>
+        /// <summary>MarresearchのCCD</summary>
         MCCD,
 
-        /// <summary>
-        /// Perkin Elmer社のフラットパネル
-        /// </summary>
+        /// <summary>Perkin Elmer社のフラットパネル</summary>
         HIS,
 
-        /// <summary>
-        /// HDF5形式 (SACLAのbl3)
-        /// </summary>
+        /// <summary>HDF5形式 (SACLAのbl3)</summary>
         HDF5,
 
-        /// <summary>
-        /// DigitalMicrograph
-        /// </summary>
+        /// <summary>DigitalMicrograph</summary>
         DM,
 
-        /// <summary>
-        /// ADSC社
-        /// </summary>
+        /// <summary>ADSC社</summary>
         ADSC,
 
-        /// <summary>
-        /// RadIcon社 (拡張子raw)
-        /// </summary>
+        /// <summary>RadIcon社 (拡張子raw)</summary>
         RadIcon,
 
-        /// <summary>
-        /// Dexela社, (拡張子SMV)
-        /// </summary>
+        /// <summary>Dexela社, (拡張子SMV)</summary>
         SMV,
 
-        /// <summary>
-        /// RadIcon社、PFで使用されている (references\ImageExsample\BL18c 柴咲さん )
-        /// </summary>
+        /// <summary>RadIcon社、PFで使用されている (references\ImageExsample\BL18c 柴咲さん )</summary>
         RadIconPF,
 
-        /// <summary>
-        /// MRC2014ファイル. FEI社のTEMのカメラで使われる. http://www.ccpem.ac.uk/mrc_format/mrc_format.php および \references\TalosF200\Manual を参照
-        /// </summary>
+        /// <summary>MRC2014ファイル. FEI社のTEMのカメラで使われる. http://www.ccpem.ac.uk/mrc_format/mrc_format.php および \references\TalosF200\Manual を参照</summary>
         MRC,
 
-        /// <summary>
-        /// PILATUSで出力されたcbfファイルを、ADXVというソフトで変換したフォーマット (拡張子img). (references\ImageExsample\ADXV 柴咲さん )
-        /// </summary>
-        ADXV
+        /// <summary>PILATUSで出力されたcbfファイルを、ADXVというソフトで変換したフォーマット (拡張子img). (references\ImageExsample\ADXV 柴咲さん )</summary>
+        ADXV,
 
+        /// <summary>NeXus Data Format (拡張子nxs), X-Spectrum社　LAMBDAX線検出器　. (\references\ImageExsample\LAMBDA (20250516平尾さんより))</summary>
+        NXS,
 
 
         #endregion 画像タイプ
@@ -266,15 +210,11 @@ public static class Ring
     public static bool[] IsThresholdUnder = [];//飽和しているかどうか
 
 
-    /// <summary>
-    /// 指定された積分領域(矩形、セクター)の範囲外の場合はtrue
-    /// </summary>
+    /// <summary>指定された積分領域(矩形、セクター)の範囲外の場合はtrue</summary>
     public static bool[] IsOutsideOfIntegralRegion = [];//積分エリアの外(或いは選択領域の外)
 
 
-    /// <summary>
-    /// 指定された積分対象角度の範囲外の場合はtrue
-    /// </summary>
+    /// <summary>指定された積分対象角度の範囲外の場合はtrue</summary>
     public static bool[] IsOutsideOfIntegralProperty = [];//エリアの外(或いは選択領域の外)
                                                               //public static ParallelQuery<bool> IsOutsideOfIntegralPropertyP;
 
@@ -294,13 +234,9 @@ public static class Ring
     public static IntegralProperty IP;
 
     /*
-		/// <summary>
-		/// 1ピクセルが相当する実空間(あるいは逆空間)の長さ (単位は PixelUnitで指定)
-		/// </summary>
+		/// <summary>1ピクセルが相当する実空間(あるいは逆空間)の長さ (単位は PixelUnitで指定)</summary>
 		public static double PixelScale;
-		/// <summary>
-		/// 1ピクセルが相当する実空間(あるいは逆空間)の単位
-		/// </summary>
+		/// <summary>1ピクセルが相当する実空間(あるいは逆空間)の単位</summary>
 		public static PixelUnitEnum PixelUnit;
 		*/
 
@@ -312,9 +248,7 @@ public static class Ring
 
     public static double TIA_PixelSize;
 
-    /// <summary>
-    /// 生データのピクセルあたりのビット数
-    /// </summary>
+    /// <summary>生データのピクセルあたりのビット数</summary>
     public static int BitsPerPixels = 4;
 
     private static double TanKsi, SinTau, CosTau, SinPhi, CosPhi, Numer1, Numer2, Numer3, Denom1, Denom2;
@@ -351,16 +285,26 @@ public static class Ring
             {
                 uint value = (uint)Math.Pow(unit, (uint)Math.Log(Intensity[j], unit));
 
-                if (freq.ContainsKey(value))
-                    freq[value] += 1;
+                //260317Cl 変更: ContainsKey+indexer → TryGetValue
+                //if (freq.ContainsKey(value))
+                //    freq[value] += 1;
+                //else
+                //    freq.Add(value, 1);
+                if (freq.TryGetValue(value, out var cnt))
+                    freq[value] = cnt + 1;
                 else
                     freq.Add(value, 1);
             }
+            //260317Cl 変更: ContainsKey+indexer → TryGetValue
             lock (lockObj)
             {
                 foreach (uint j in freq.Keys)
-                    if (Frequency.ContainsKey(j))
-                        Frequency[j] += freq[j];
+                    //if (Frequency.ContainsKey(j))
+                    //    Frequency[j] += freq[j];
+                    //else
+                    //    Frequency.Add(j, freq[j]);
+                    if (Frequency.TryGetValue(j, out var fv))
+                        Frequency[j] = fv + freq[j];
                     else
                         Frequency.Add(j, freq[j]);
             }
@@ -372,10 +316,12 @@ public static class Ring
     public static void SetTiltParameter()
     {
         TanKsi = Math.Tan(IP.ksi);
-        SinTau = Math.Sin(IP.tau);
-        CosTau = Math.Cos(IP.tau);
-        SinPhi = Math.Sin(IP.phi);
-        CosPhi = Math.Cos(IP.phi);
+        var (sinTau, cosTau) = Math.SinCos(IP.tau);
+        var (sinPhi, cosPhi) = Math.SinCos(IP.phi);
+        SinTau = sinTau;
+        CosTau = cosTau;
+        SinPhi = sinPhi;
+        CosPhi = cosPhi;
         Numer1 = CosPhi * SinPhi - CosPhi * CosTau * SinPhi;
         Numer2 = CosPhi * CosPhi + CosTau * SinPhi * SinPhi;
         Numer3 = CosPhi * CosPhi * CosTau + SinPhi * SinPhi;
@@ -548,9 +494,7 @@ public static class Ring
     #endregion
 
     #region 画像の回転・反転
-    /// <summary>
-    /// 画像を、反転、回転させる. rotateは0: 無回転、1:90度回転, 2: 180度回転、 3: 270度回転
-    /// </summary>
+    /// <summary>画像を、反転、回転させる. rotateは0: 無回転、1:90度回転, 2: 180度回転、 3: 270度回転</summary>
     /// <param name="src"></param>
     /// <param name="width"></param>
     /// <param name="flipV"></param>
@@ -731,8 +675,7 @@ public static class Ring
                 {
                     bool IsXY = false;
                     double tan = Math.Tan(IP.RectangleAngle);
-                    double sin = Math.Sin(IP.RectangleAngle);
-                    double cos = Math.Cos(IP.RectangleAngle);
+                    var (sin, cos) = Math.SinCos(IP.RectangleAngle);
                     double wx = Math.Abs(Band / sin);
                     double wy = Math.Abs(IP.RectangleBand / cos);
                     double cx, cy;
@@ -889,8 +832,10 @@ public static class Ring
                     while (endAngle < -Math.PI || endAngle < startAngle) endAngle += 2 * Math.PI;
 
                     //ピクセル座標x,yを 球面座標に変換するFuncを定義
-                    double X1 = Math.Cos(startAngle), Y1 = Math.Sin(startAngle);
-                    double X2 = Math.Cos(endAngle), Y2 = Math.Sin(endAngle);
+                    var (sinStartAngle, cosStartAngle) = Math.SinCos(startAngle);
+                    var (sinEndAngle, cosEndAngle) = Math.SinCos(endAngle);
+                    double X1 = cosStartAngle, Y1 = sinStartAngle;
+                    double X2 = cosEndAngle, Y2 = sinEndAngle;
                     Func<double, double, bool> func = endAngle - startAngle < Math.PI ?
                          func = (x, y) => x * Y1 - y * X1 < 0 && x * Y2 - y * X2 > 0 :
                         func = (x, y) => x * Y1 - y * X1 < 0 || x * Y2 - y * X2 > 0;
@@ -994,7 +939,8 @@ public static class Ring
 
                 int width = IP.SrcWidth, height = IP.SrcHeight;
 
-                Parallel.For(0, height, j =>
+                for(int j=0; j<height; j++)
+                //Parallel.For(0, height, j =>
                 {
                     var tempY = (j - centerY) * pixSizeY;//IP平面上の座標系におけるY位置
                     var tempY2TanKsi = tempY * TanKsi;
@@ -1006,7 +952,7 @@ public static class Ring
                     for (int i = 0; i < width; i++)
                     {
                         var tempX = (i - centerX) * pixSizeX + tempY2TanKsi;//IP平面上の座標系におけるX位置
-                                                                            //以下のx,y,zがピクセル中心の空間位置
+                        //以下のx,y,zがピクセル中心の空間位置
                         var x = Numer2 * tempX + numer1TempY;
                         var y = Numer1 * tempX + numer3TempY;
                         var z = Denom2 * tempX + denom1tempYFD;
@@ -1016,7 +962,8 @@ public static class Ring
                         if (startCos2 < cos2 || cos2 < endCos2)
                             IsOutsideOfIntegralProperty[i + jWidth] = true;
                     }
-                });
+                }
+                //);
             }//フラットパネルモードここまで
              //Gandolfiモードの時
             else
@@ -1058,21 +1005,23 @@ public static class Ring
 
         #endregion 積分角度範囲を除去するとき
     }
-    /// <summary>
-    /// ピクセル座標(detX, detY)を実空間座標(X,Y,Z)に変換する。事前にピクセルサイズや、SetTiltParameterが設定されている必要がある。
-    /// </summary>
+    /// <summary>ピクセル座標(detX, detY)を実空間座標(X,Y,Z)に変換する。事前にピクセルサイズや、SetTiltParameterが設定されている必要がある。</summary>
     /// <param name="detX"></param>
     /// <param name="detY"></param>
     /// <returns></returns>
     public static (double X, double Y, double Z) ConvertCoordinateFromDetectorToRealSpace(double detX, double detY)
     {
         var tempY = (detY - IP.CenterY) * IP.PixSizeY;//IP平面上の座標系におけるY位置
-        var tempX = (detX - IP.CenterX) * IP.PixSizeX + tempY * TanKsi;//IP平面上の座標系におけるX位置
+        // var tempX = (detX - IP.CenterX) * IP.PixSizeX + tempY * TanKsi;
+        var tempX = Math.FusedMultiplyAdd(detX - IP.CenterX, IP.PixSizeX, tempY * TanKsi);//IP平面上の座標系におけるX位置
 
         //以下のx,y,zが空間位置
-        var realX = Numer2 * tempX + Numer1 * tempY;
-        var realY = Numer1 * tempX + Numer3 * tempY;
-        var realZ = Denom2 * tempX + Denom1 * tempY + IP.FilmDistance;
+        // var realX = Numer2 * tempX + Numer1 * tempY;
+        // var realY = Numer1 * tempX + Numer3 * tempY;
+        // var realZ = Denom2 * tempX + Denom1 * tempY + IP.FilmDistance;
+        var realX = Math.FusedMultiplyAdd(Numer2, tempX, Numer1 * tempY);
+        var realY = Math.FusedMultiplyAdd(Numer1, tempX, Numer3 * tempY);
+        var realZ = Math.FusedMultiplyAdd(Denom2, tempX, Math.FusedMultiplyAdd(Denom1, tempY, IP.FilmDistance));
 
         if (IP.SpericalRadiusInverse != 0) //球面補正が必要な場合
         {
@@ -1081,14 +1030,16 @@ public static class Ring
             (double X, double Y, double Z) detector_normal = (Denom2, Denom1, -CosTau);
             //検出器中心(0,0,FD)からピクセルまでの距離
             double distance2 = realX * realX + realY * realY + (realZ - fd) * (realZ - fd), distance = Math.Sqrt(distance2);
+            double angle = distance * IP.SpericalRadiusInverse;
+            var (sinAngle, cosAngle) = Math.SinCos(angle);
             //検出器のダイレクトスポット方向に縮める割合
-            double coeff_detector_palallel = Math.Sin(distance * IP.SpericalRadiusInverse) / distance / IP.SpericalRadiusInverse;
+            double coeff_detector_palallel = sinAngle / distance / IP.SpericalRadiusInverse;
             //検出器の法線方向に進む距離
-            double slide_detector_normal = (1 - Math.Cos(distance * IP.SpericalRadiusInverse)) / IP.SpericalRadiusInverse;
+            double slide_detector_normal = (1 - cosAngle) / IP.SpericalRadiusInverse;
             //(0,0,FD)から(X,Y,Z)のベクトルにcoeff_detector_palalleをかけた後、detector_normalの方向にslide_detector_normalだけ進める。
-            realX = realX * coeff_detector_palallel + detector_normal.X * slide_detector_normal;
-            realY = realY * coeff_detector_palallel + detector_normal.Y * slide_detector_normal;
-            realZ = (realZ - fd) * coeff_detector_palallel + fd + detector_normal.Z * slide_detector_normal;
+            realX = Math.FusedMultiplyAdd(realX, coeff_detector_palallel, detector_normal.X * slide_detector_normal);
+            realY = Math.FusedMultiplyAdd(realY, coeff_detector_palallel, detector_normal.Y * slide_detector_normal);
+            realZ = Math.FusedMultiplyAdd(realZ - fd, coeff_detector_palallel, fd + detector_normal.Z * slide_detector_normal);
         }
         return (realX, realY, realZ);
     }
@@ -1096,9 +1047,7 @@ public static class Ring
     #endregion
 
     #region CircumferentialBlur 円周方向ににじませた画像を作成
-    /// <summary>
-    /// 円周方向ににじませた画像を作成(完全に歪んでいない正方形ピクセルを仮定)
-    /// </summary>
+    /// <summary>円周方向ににじませた画像を作成(完全に歪んでいない正方形ピクセルを仮定)</summary>
     /// <param name="angle"></param>
     public static void CircumferentialBlur(double theta)
     {
@@ -1164,9 +1113,7 @@ public static class Ring
     #endregion
 
     #region GetCorrectedImageArray 傾き補正やピクセル補正を除去して正確なイメージを作り出す
-    /// <summary>
-    /// 傾き補正やピクセル補正を除去して正確なイメージを作り出すメソッド
-    /// </summary>
+    /// <summary>傾き補正やピクセル補正を除去して正確なイメージを作り出すメソッド</summary>
     /// <param name="iP"></param>
     /// <param name="newPixelSize"></param>
     /// <param name="width"></param>
@@ -1266,9 +1213,7 @@ public static class Ring
     #endregion
 
 
-    /// <summary>
-    /// 傾き補正やピクセル補正を除去して切り開き画像を作り出すメソッド
-    /// </summary>
+    /// <summary>傾き補正やピクセル補正を除去して切り開き画像を作り出すメソッド</summary>
     /// <param name="iP"></param>
     /// <param name="sweepDivision"></param>
     /// <param name="width"></param>
@@ -1445,9 +1390,7 @@ public static class Ring
     #endregion
 
     #region お蔵入り GetUnrolledImageArrayThread
-    /// <summary>
-    /// 傾き補正やピクセル補正を除去して切り開き画像を作り出すメソッドのスレッド
-    /// </summary>
+    /// <summary>傾き補正やピクセル補正を除去して切り開き画像を作り出すメソッドのスレッド</summary>
     /// <param name="iP"></param>
     /// <param name="sweepDivision"></param>
     /// <param name="width"></param>
@@ -1566,10 +1509,14 @@ public static class Ring
                                 else
                                 {
                                     //まずpixXで定義される放射状の2本の直線の定義
-                                    a1 = -Math.Sin((pixY - 0.5) * sectorStep);
-                                    b1 = Math.Cos((pixY - 0.5) * sectorStep);
-                                    a2 = Math.Sin((pixY + 0.5) * sectorStep);
-                                    b2 = -Math.Cos((pixY + 0.5) * sectorStep);
+                                    double lowerAngle = (pixY - 0.5) * sectorStep;
+                                    double upperAngle = (pixY + 0.5) * sectorStep;
+                                    var (sinLower, cosLower) = Math.SinCos(lowerAngle);
+                                    var (sinUpper, cosUpper) = Math.SinCos(upperAngle);
+                                    a1 = -sinLower;
+                                    b1 = cosLower;
+                                    a2 = sinUpper;
+                                    b2 = -cosUpper;
                                     pixelVertex1 = Geometriy.GetPolygonDividedByLine(pixelVertex, a1, b1, 0);
                                     pixelVertex1 = Geometriy.GetPolygonDividedByLine(pixelVertex1, a2, b2, 0);
                                 }
@@ -1581,8 +1528,9 @@ public static class Ring
                                     else
                                     {
                                         //さらに2θ範囲の上限、下限を表す同心円状の2直線の定義
-                                        a1 = Math.Cos(pixY * sectorStep);
-                                        b1 = Math.Sin(pixY * sectorStep);
+                                        var (sinCenter, cosCenter) = Math.SinCos(pixY * sectorStep);
+                                        a1 = cosCenter;
+                                        b1 = sinCenter;
 
                                         PointD[] pixelVertex2;
                                         double beforeArea = 0;
@@ -1689,14 +1637,19 @@ public static class Ring
                     {
                         PointD[] tempPixelVertex;
                         //まずindexで定義される放射状の2本の直線の定義
-                        double a1 = -Math.Sin((index - 0.5) * step), b1 = Math.Cos((index - 0.5) * step);
-                        double a2 = Math.Sin((index + 0.5) * step), b2 = -Math.Cos((index + 0.5) * step);
+                        double lowerAngle = (index - 0.5) * step;
+                        double upperAngle = (index + 0.5) * step;
+                        var (sinLower, cosLower) = Math.SinCos(lowerAngle);
+                        var (sinUpper, cosUpper) = Math.SinCos(upperAngle);
+                        double a1 = -sinLower, b1 = cosLower;
+                        double a2 = sinUpper, b2 = -cosUpper;
                         tempPixelVertex = Geometry.GetPolygonDividedByLine(pixelVertex, a1, b1, 0);
                         tempPixelVertex = Geometry.GetPolygonDividedByLine(tempPixelVertex, a2, b2, 0);
 
                         //さらに角度範囲の上限、下限を表す同心円状の2直線
-                        a1 = Math.Cos(index * step);
-                        b1 = Math.Sin(index * step);
+                        var (sinCenter, cosCenter) = Math.SinCos(index * step);
+                        a1 = cosCenter;
+                        b1 = sinCenter;
                         tempPixelVertex = Geometry.GetPolygonDividedByLine(tempPixelVertex, a1, b1, minR);
                         tempPixelVertex = Geometry.GetPolygonDividedByLine(tempPixelVertex, -a1, -b1, -maxR);
 
@@ -1751,9 +1704,7 @@ public static class Ring
     }
     #endregion
 
-    /// <summary>
-    /// 2theta-intensity histogram
-    /// </summary>
+    /// <summary>2theta-intensity histogram</summary>
     /// <param name="iP"></param>
     /// <returns></returns>
     private static Profile GetConcenrticProfile(IntegralProperty iP)
@@ -2068,9 +2019,7 @@ public static class Ring
     }
 
     #region GetProfile　Gandlfi用
-    /// <summary>
-    /// ガンドルフィーカメラ用の計算
-    /// </summary>
+    /// <summary>ガンドルフィーカメラ用の計算</summary>
     /// <param name="xMin"></param>
     /// <param name="xMax"></param>
     /// <param name="yMin"></param>
@@ -2183,7 +2132,7 @@ public static class Ring
                             var v2 = realVertex[x - xMin + 1 + (y - yMin) * (xMax - xMin + 1)];
 
                             var arc = (x - centerX) * pixSizeX;
-                            double cosAR = Math.Cos(arc / r), sinAR = Math.Sin(arc / r);
+                            var (sinAR, cosAR) = Math.SinCos(arc / r);
                             double sinGamma = CosTau * cosAR + SinTau * sinAR, cosGamma = SinTau * cosAR - CosTau * sinAR;
 
                             double CLplusZ = CL + v.Z;
@@ -2244,9 +2193,7 @@ public static class Ring
     #endregion
 
     #region GetProfile 旧バージョン  FindParameterで使う
-    /// <summary>
-    /// TiltCorrectionの時にのみ呼ばれる 
-    /// </summary>
+    /// <summary>TiltCorrectionの時にのみ呼ばれる</summary>
     /// <param name="iP"></param>
     /// <returns></returns>
     public static Profile GetProfileForFindTiltCorrection(IntegralProperty iP)
@@ -2295,9 +2242,7 @@ public static class Ring
 
     private delegate void GetProfileThreadDelegateWithTiltCorrection(int xMin, int xMax, int yMin, int yMax, ref double[] profile, ref double[] pixels);
 
-    /// <summary>
-    /// 2theta-intensity histgram (旧バージョン)
-    /// </summary>
+    /// <summary>2theta-intensity histgram (旧バージョン)</summary>
     /// <param name="xMin"></param>
     /// <param name="xMax"></param>
     /// <param name="yMin"></param>
@@ -2392,9 +2337,10 @@ public static class Ring
             tempY2denom1plusFD = tempY2 * Denom1 + FD;
             j1width1 = (j + 1) * width1;
 
-            Array.Copy(IntersectionPointX, width1, IntersectionPointX, 0, width1);
-            Array.Copy(IntersectionPointY, width1, IntersectionPointY, 0, width1);
-            Array.Copy(IntersectionPointR2, width1, IntersectionPointR2, 0, width1);
+            //260317Cl 変更: Array.Copy → Span.CopyTo
+            IntersectionPointX.AsSpan(width1, width1).CopyTo(IntersectionPointX.AsSpan(0, width1));
+            IntersectionPointY.AsSpan(width1, width1).CopyTo(IntersectionPointY.AsSpan(0, width1));
+            IntersectionPointR2.AsSpan(width1, width1).CopyTo(IntersectionPointR2.AsSpan(0, width1));
 
             for (m = xMin; m < xMax1; m++)
                 if (IsCalcPosition[j1width1 + m])
@@ -2604,9 +2550,7 @@ public static class Ring
     #endregion
 
     #region GetProfile新バージョン
-    /// <summary>
-    ///  2theta-intensity histgram (新バージョン)
-    /// </summary>
+    /// <summary>2theta-intensity histgram (新バージョン)</summary>
     /// <param name="xMin"></param>
     /// <param name="xMax"></param>
     /// <param name="yMin"></param>
@@ -2667,23 +2611,28 @@ public static class Ring
                 {
                     var tempX = (i - centerX) * pixSizeX + tempY2TanKsi;//IP平面上の座標系におけるX位置
                                                                         //以下のx,y,zがピクセル中心の空間位置
-                    var x = Numer2 * tempX + numer1TempY;
-                    var y = Numer1 * tempX + numer3TempY;
-                    var z = Denom2 * tempX + denom1tempYFD;
+                    var x = Math.FusedMultiplyAdd(Numer2, tempX, numer1TempY);
+                    var y = Math.FusedMultiplyAdd(Numer1, tempX, numer3TempY);
+                    var z = Math.FusedMultiplyAdd(Denom2, tempX, denom1tempYFD);
+                    // var x = Numer2 * tempX + numer1TempY;
+                    // var y = Numer1 * tempX + numer3TempY;
+                    // var z = Denom2 * tempX + denom1tempYFD;
 
                     #region 球面補正が必要な場合
                     if (IP.SpericalRadiusInverse != 0) //球面補正が必要な場合
                     {
                         //検出器中心(0,0,FD)からピクセルまでの距離
                         var distance = Math.Sqrt(x * x + y * y + (z - fd) * (z - fd));
+                        var angle = distance * IP.SpericalRadiusInverse;
+                        var (sinAngle, cosAngle) = Math.SinCos(angle);
                         //検出器のダイレクトスポット方向に縮める割合
-                        var coeff_detector_palallel = Math.Sin(distance * IP.SpericalRadiusInverse) / distance / IP.SpericalRadiusInverse;
+                        var coeff_detector_palallel = sinAngle / distance / IP.SpericalRadiusInverse;
                         //検出器の法線方向に進む距離
-                        var slide_detector_normal = (1 - Math.Cos(distance * IP.SpericalRadiusInverse)) / IP.SpericalRadiusInverse;
+                        var slide_detector_normal = (1 - cosAngle) / IP.SpericalRadiusInverse;
                         //(0,0,FD)から(X,Y,Z)のベクトルにcoeff_detector_palallelをかけた後、detector_normalの方向にslide_detector_normalだけ進める。
-                        x = x * coeff_detector_palallel + detector_normal.X * slide_detector_normal;
-                        y = y * coeff_detector_palallel + detector_normal.Y * slide_detector_normal;
-                        z = (z - fd) * coeff_detector_palallel + fd + detector_normal.Z * slide_detector_normal;
+                        x = Math.FusedMultiplyAdd(x, coeff_detector_palallel, detector_normal.X * slide_detector_normal);
+                        y = Math.FusedMultiplyAdd(y, coeff_detector_palallel, detector_normal.Y * slide_detector_normal);
+                        z = Math.FusedMultiplyAdd(z - fd, coeff_detector_palallel, fd + detector_normal.Z * slide_detector_normal);
                     }
                     #endregion
 
@@ -2845,9 +2794,7 @@ public static class Ring
         return (profile, pixels);
     }
 
-    /// <summary>
-    /// ポリゴンの面積を求める
-    /// </summary>
+    /// <summary>ポリゴンの面積を求める</summary>
     /// <param name="n"></param>
     /// <param name="pt"></param>
     /// <returns></returns>
@@ -3033,16 +2980,17 @@ public static class Ring
     #endregion
 
     #region バッググラウンド減算
+    //260317Cl 変更: .Count()による全列挙を回避、引数をToArrayで具体化
+    //public static double[] SubtractBackground(IEnumerable<double> src, IEnumerable<double> bg, double coeff = 1)
     public static double[] SubtractBackground(IEnumerable<double> src,
     IEnumerable<double> bg, double coeff = 1)
     {
-        if (src.Count() != bg.Count())
-            return [..src];
+        var srcArray = src as double[] ?? src.ToArray();
+        var bgArray = bg as double[] ?? bg.ToArray();
+        if (srcArray.Length != bgArray.Length)
+            return [..srcArray];
         else
-        {
-            var bgArray = bg.ToArray();
-            return [.. src.Select((s, i) => s - bgArray[i] * coeff)];
-        }
+            return [.. srcArray.Select((s, i) => s - bgArray[i] * coeff)];
     }
     #endregion
 
@@ -3072,8 +3020,9 @@ public static class Ring
 				for (int j = 0; j < 360; j++)
 				{
 					angle += Math.PI / 180;
-					PosX = (int)(IP.CenterX + r * Math.Cos(angle) + 0.5);
-					PosY = (int)(IP.CenterY + r * Math.Sin(angle) + 0.5);
+					var (sinAngle, cosAngle) = Math.SinCos(angle);
+					PosX = (int)(IP.CenterX + r * cosAngle + 0.5);
+					PosY = (int)(IP.CenterY + r * sinAngle + 0.5);
 					bool flag = true;
 					for (int k = pt.Count - 20; k < pt.Count && flag; k++)
 					{
