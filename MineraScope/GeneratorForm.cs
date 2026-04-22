@@ -76,6 +76,8 @@ namespace MineraScope
         private readonly ModelTrainingWorkflow _modelTrainingWorkflow;
         // 260416Codex: シミュレーション実行計画の組み立てを service 化し、完成 UI へ向けた差し替え点を明確にします。
         private readonly SimulationPlanBuilder _simulationPlanBuilder;
+        // 260416Codex: 計算済み plan の出力と実行を Form から分離し、UI は起動トリガーだけを担当します。
+        private readonly SimulationExecutionService _simulationExecutionService;
 
         private string AssemblyPath { get; } = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) ?? AppContext.BaseDirectory;
         private string DesktopPath { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -97,6 +99,8 @@ namespace MineraScope
             _trainingDataScanner = new(_deepLearning.AnalyzeMineralFolder);
             _modelTrainingWorkflow = new(_deepLearning);
             _simulationPlanBuilder = new();
+            // 260416Codex: スクリプト生成と外部実行は専用 service へまとめ、Form から I/O 詳細を隠します。
+            _simulationExecutionService = new(new SimulationScriptGenerator());
             textBoxPathEDX.Text = Path.Combine(DesktopPath, "TrainingData");
             // 260416Codex: 固定保存先を事前作成し、設定 UI には表示しないようにします。
             Directory.CreateDirectory(PythonScriptOutputPath);
@@ -161,7 +165,6 @@ namespace MineraScope
         private static T[] GetCheckedItems<T>(CheckedListBox listBox) =>
             listBox.CheckedItems.Cast<T>().ToArray();
 
-        private static string ToLowerInvariant(string value) => value.ToLowerInvariant();
         // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
         private async void buttonSpectrumGenerationRun_Click(object sender, EventArgs e)
         {
@@ -172,168 +175,9 @@ namespace MineraScope
             {
                 return;
             }
-            foreach (var batch in plan.Batches)
-            {
-                var tasks = batch.Jobs
-                    .Select(job => Task.Run(() =>
-                    {
-                        Directory.CreateDirectory(job.Property.OutPutFolder);
-                        File.WriteAllText(job.ScriptPath, GenerateScriptText(job.Property, job.ParallelIndex));
-                        RunCommand(job.DtsaFolder, job.ScriptPath);
-                    }))
-                    .ToArray();
-
-                await Task.WhenAll(tasks);
-            }
+            // 260416Codex: 実行時の計算結果出力と DTSA 起動は service に委譲し、Form 側は非同期制御に専念します。
+            await _simulationExecutionService.RunAsync(plan);
         }
-
-        // <param name="atom"> Nameは大文字で始めること。Molは実数 </param>
-        // <returns></returns>
-        //public string GenerateScriptText((string Name, double Mol)[] str, string Detectorname)
-        #region Pythonスクリプト生成
-        // 260416Codex: Python スクリプト生成時のローカル変数を読みやすく整理
-        public string GenerateScriptText(SimulationPropety prop, int? parallelIndex = null)
-        {
-            // 260416Codex: ローカル変数名の綴りと意味を揃えて読みやすくする
-            //int div = 10;
-            //var ratios = Enumerable.Range(0, 10).Select(e => (double)e).Select(e => (E1: e / (div - 1), E2: (div - e - 1) / (div - 1))).ToArray();
-            var mineralGroupName = prop.MineralGropName;
-            var atoms = prop.Atoms1;
-            var detectorName = prop.DetectorName;
-            var carbonCoatThickness = prop.CarbonCoatThickness;
-            double density = 3;
-            var beamEnergy = prop.BeamEnergy;
-            var liveTime = prop.LiveTime;
-            var probeCurrent = prop.ProbeCurrent;
-            var count = prop.Count;
-            var outputFolder = prop.OutPutFolder;
-            var outputFiles = prop.OutputFile;
-            var sb = new StringBuilder();
-
-
-            #region import部分
-            //import dtsa2.mcSimulate3 as mc
-            //import os
-            //output_dir = r"C:\Users\mineral\Desktop\TrainingData\Quartz"
-            //det = findDetector("test")
-            //e0 = 20
-            //probe_current = 0.5
-            //live_time = 0.1
-            //my_dose = probe_current * live_time
-            //cThickness = 0.02
-            //c = epq.MaterialFactory.createPureElement(epq.Element.C)
-            //sb.AppendLine("import sys\r\nsys.path.append(\"Z:\\members\\hirai\\DTSAII\\DTSA-II-master\\Lib\")");
-            //sb.AppendLine("import dtsa2\r\nimport dtsa2.mcSimulate3 as mc\r\nfrom dtsa2 import findDetector \r\nfrom dtsa2 import wrap \r\nimport gov.nist.microanalysis.EPQLibrary as epq  \r\nimport os\r\nimport java.lang.System as System\r\ndesktop_path = os.path.join(os.path.expanduser(\"~\"), \"Desktop\")");
-            sb.AppendLine("import dtsa2.mcSimulate3 as mc\r\nimport os\r\noutput_dir = r\"" + outputFolder + "\"");
-            sb.AppendLine("det = findDetector(\"" + detectorName + "\")");
-            sb.AppendLine("e0 = " + beamEnergy);
-            //sb.AppendLine("probe_current =" + probeCurrent);
-            //sb.AppendLine("liveTime =" + liveTime);
-            sb.AppendLine("dose =" + probeCurrent + " *" + liveTime);
-            sb.AppendLine("cThickness = " + carbonCoatThickness);
-            sb.AppendLine("carbonCoating = epq.MaterialFactory.createPureElement(epq.Element.C)");
-            #endregion
-            #region 組成、ファイル名リスト作成部分
-            //Weights = [
-            //[0.346, 0.200, 0.455, 0.000],
-            //[0.000, 0.138, 0.314, 0.548],
-            //]
-            //FileNames = [
-            //  "Olivine_Forsterite1.000Fayarite0.000",
-            //  "Olivine_Forsterite0.000Fayarite1.000",
-            //]
-            sb.AppendLine("Weights = [");
-            foreach (var atom in atoms)
-            {
-                var joined = string.Join(", ", atom.Select(x => x.Weight.ToString("F3")));
-                sb.AppendLine($"  [{joined}],");
-            }
-            sb.AppendLine("]");
-            sb.AppendLine("FileNames = [");
-            foreach (var fileName in outputFiles)
-            {
-                var joined = string.Join(", ", fileName);
-                sb.AppendLine($" \"{mineralGroupName}_ {joined}\",");
-            }
-            sb.AppendLine("]");
-            #endregion
-            #region　シミュレーションループと元素重量の定義部分
-            //for i in range(10):  #()の数字が繰り返す回数
-            //  for idx, (Mg_mol, Fe_mol,) in enumerate(ratios):
-            //      mg = Mg_mol * epq.Element.Mg.getAtomicWeight()
-            //      fe = Fe_mol * epq.Element.Fe.getAtomicWeight()
-            //      si = 1.00 * epq.Element.Si.getAtomicWeight()
-            //      o = 4.00 * epq.Element.O.getAtomicWeight()
-
-            sb.AppendLine("for i in range(" + count + "):");
-            sb.Append("\tfor idx, (");
-            var elementNames = atoms[0].Select(x => x.ElementName).ToArray();
-            sb.Append(string.Join(", ", elementNames.Select(e => $"{e}_weight")));
-            sb.AppendLine(") in enumerate(Weights):");
-            foreach (var name in elementNames)
-            {
-                sb.AppendLine($"\r\n\t\t{ToLowerInvariant(name)} = {name}_weight");
-            }
-            sb.Append($"\r\n\t\t{mineralGroupName} = epq.Material(epq.Composition([");
-            #endregion
-            #region epq.Materialを設定する部分
-            //Opx = epq.Material(epq.Composition([epq.Element.Fe, epq.Element.Mg, epq.Element.Si, epq.Element.O],
-            //                        [fe / sum, mg / sum, si / sum, o / sum]),epq.ToSI.gPerCC(3.2))}
-            //sb.Append("\r\n\tOpx = epq.Material(epq.Composition([");
-
-            foreach (var name in elementNames)
-            {
-                sb.Append($"epq.Element.{name}, ");
-            }
-            sb.Remove(sb.Length - 2, 2);
-            sb.Append("],[");
-            foreach (var name in elementNames)
-            {
-                sb.Append(ToLowerInvariant(name) + ",");
-            }
-            sb.Remove(sb.Length - 1, 1);
-            sb.Append("] ),");
-            sb.AppendLine("epq.ToSI.gPerCC(" + density + "))");
-            #endregion
-            #region シミュレーション実行と保存の設定部分
-            //print("Starting simulation {0}(mix {1})...".format(i + 1, idx + 1))
-            //sd = mc.coatedSubstrate(c, cThickness, Opx, det)
-            //sd.rename("Fe2SiO4 Au6 Dead0.2")
-            //dtsa2.display(sd)
-            //output_file = os.path.join(desktop_path, "Mg{:.2f}Fe{:.2f}(Mg,Fe)2SiO4_mix{}_run{}_.msa".format(Mg_mol, Fe_mol, idx + 1, i + 1))
-            //sd.save(output_file)
-            //print("Simulation {0} saved to {1}".format(i + 1, output_file))
-            //System.exit(0)
-            sb.AppendLine("\t\tprint(\"Starting simulation {0}(mix {1})...\".format(i + 1, idx + 1))");
-            sb.AppendLine("\t\tsd = mc.coatedSubstrate(carbonCoating, cThickness," + mineralGroupName + " , det,dose = dose)");
-            //sb.AppendLine("\t\tdisplay(sd)");
-            sb.AppendLine($"\t\toutName = \"{{}}_{{}}run_{{}}_" + parallelIndex + ".emsa\".format(FileNames[idx],idx+1,i+1)");
-            sb.AppendLine($"\t\toutput_file = os.path.join(output_dir, outName)");
-            sb.AppendLine("\t\tsd.rename(FileNames[idx])");
-            sb.AppendLine("\r\n\t\tprint(\"Simulation {0} saved to {1}\".format(i + 1, output_file))");
-            sb.AppendLine("\t\tsd.save(output_file)");
-            sb.AppendLine("exit()");
-            #endregion
-            return sb.ToString();
-        }
-        #endregion
-        #region DTSA-Ⅱコマンド実行
-        private void RunCommand(string DTSAPath, string scriptPath)
-        {
-            //string arguments = @$"/c C:\pleiades\2025-06\java\21\bin\javaw.exe --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.desktop/java.awt=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED -Dfile.encoding=UTF-8 -Dstdout.encoding=UTF-8 -Dstderr.encoding=UTF-8 -classpath ""Z:\members\hirai\DTSAII\DTSA-II-master\target\classes;Z:\members\hirai\DTSAII\EPQ-master\target\classes;Z:\members\hirai\DTSAII\.m2\repository\org\apache\commons\commons-math\2.2\commons-math-2.2.jar;Z:\members\hirai\DTSAII\.m2\repository\org\apache\derby\derbynet\10.17.1.0\derbynet-10.17.1.0.jar;Z:\members\hirai\DTSAII\.m2\repository\org\apache\derby\derby\10.17.1.0\derby-10.17.1.0.jar;Z:\members\hirai\DTSAII\.m2\repository\org\apache\derby\derbyshared\10.17.1.0\derbyshared-10.17.1.0.jar;Z:\members\hirai\DTSAII\.m2\repository\org\apache\derby\derbytools\10.17.1.0\derbytools-10.17.1.0.jar;Z:\members\hirai\DTSAII\.m2\repository\org\apache\derby\derbyclient\10.17.1.0\derbyclient-10.17.1.0.jar;Z:\members\hirai\DTSAII\.m2\repository\com\github\jai-imageio\jai-imageio-core\1.4.0\jai-imageio-core-1.4.0.jar;Z:\members\hirai\DTSAII\.m2\repository\gov\nist\math\jama\1.0.3\jama-1.0.3.jar;Z:\members\hirai\DTSAII\.m2\repository\com\jgoodies\jgoodies-common\1.8.0\jgoodies-common-1.8.0.jar;Z:\members\hirai\DTSAII\.m2\repository\com\jgoodies\jgoodies-forms\1.8.0\jgoodies-forms-1.8.0.jar;Z:\members\hirai\DTSAII\.m2\repository\net\java\dev\jna\jna\5.12.1\jna-5.12.1.jar;Z:\members\hirai\DTSAII\.m2\repository\junit\junit\4.13.2\junit-4.13.2.jar;Z:\members\hirai\DTSAII\.m2\repository\org\hamcrest\hamcrest-core\1.3\hamcrest-core-1.3.jar;Z:\members\hirai\DTSAII\.m2\repository\org\python\jython-standalone\2.7.4\jython-standalone-2.7.4.jar;Z:\members\hirai\DTSAII\.m2\repository\com\thoughtworks\xstream\xstream\1.4.19\xstream-1.4.19.jar;Z:\members\hirai\DTSAII\.m2\repository\io\github\x-stream\mxparser\1.2.2\mxparser-1.2.2.jar;Z:\members\hirai\DTSAII\.m2\repository\xmlpull\xmlpull\1.1.3.1\xmlpull-1.1.3.1.jar;Z:\members\hirai\DTSAII\.m2\repository\com\formdev\flatlaf\3.0\flatlaf-3.0.jar;Z:\members\hirai\DTSAII\.m2\repository\com\toedter\jcalendar\1.4 jcalendar-1.4.jar;Z:\members\hirai\DTSAII\.m2\repository\com\thoughtworks\xstream\xstream\1.4.21\xstream-1.4.21.jar"" -XX:+ShowCodeDetailsInExceptionMessages gov.nist.microanalysis.dtsa2.DTSA2 /ExecuteScript ""{scriptPath}""";
-            string arguments = $"/c cd /d \"{DTSAPath}\" && java-runtime\\bin\\java -jar dtsa2-15.1.44.jar -- --script \"{scriptPath}\"";
-
-
-            ProcessStartInfo psi = new()
-            {
-                FileName = "cmd.exe",
-                Arguments = arguments,
-                WindowStyle = System.Diagnostics.ProcessWindowStyle.Minimized
-            };
-            using var process = Process.Start(psi);
-            process?.WaitForExit();
-        }
-        #endregion
         #region EndmemberControl
         // EndmemberControlに端成分の情報を設定
         // 端成分数に応じてコントロールを追加/削除      
