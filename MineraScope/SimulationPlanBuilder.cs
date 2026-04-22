@@ -19,7 +19,6 @@ namespace MineraScope
 
     // 260416Codex: シミュレーション実行前のプレビューと実行計画を 1 つにまとめ、将来の不足分判定を差し込みやすくします。
     internal sealed record SimulationExecutionPlan(
-        SimulationPropety? PreviewProperty,
         IReadOnlyList<SimulationExecutionBatch> Batches);
 
     // 260416Codex: request から現在のシミュレーション実行計画を組み立て、Form は plan を使うだけに寄せます。
@@ -73,11 +72,10 @@ namespace MineraScope
         {
             if (request.SelectedMineralSolutions.Count == 0)
             {
-                return new SimulationExecutionPlan(null, []);
+                return new SimulationExecutionPlan([]);
             }
 
             var batches = new List<SimulationExecutionBatch>();
-            SimulationPropety? previewProperty = null;
 
             foreach (var solution in request.SelectedMineralSolutions)
             {
@@ -96,7 +94,6 @@ namespace MineraScope
                     var outputFolder = GetSimulationOutputFolder(request, solution);
                     var property = CreateSimulationProperty(request, solution.Name, elements, outputFolder, outputFiles);
 
-                    previewProperty ??= property;
                     jobs.Add(new SimulationExecutionJob(
                         Path.Combine(request.Paths.ScriptOutputFolder, $"test{i + 1}.py"),
                         request.Paths.DtsaFolder,
@@ -107,7 +104,7 @@ namespace MineraScope
                 batches.Add(new SimulationExecutionBatch(solution.Name, jobs));
             }
 
-            return new SimulationExecutionPlan(previewProperty, batches);
+            return new SimulationExecutionPlan(batches);
         }
 
         // 260416Codex: 現在の分割規則をそのまま維持しつつ、builder 単体で計画を立てられるようにします。

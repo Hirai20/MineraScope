@@ -198,14 +198,7 @@ namespace MineraScope
                 return;
             }
 
-            // 260416Codex: Nullable な preview 値はパターン一致で非 null に展開してからスクリプト生成へ渡します。
-            if (plan.PreviewProperty is { } previewProperty)
-            {
-                // 260416Codex: 先頭 batch の preview を表示し、現行 UI のスクリプト確認用途を維持します。
-                textBoxPythonScript.Text = GenerateScriptText(previewProperty, 0);
-            }
-
-            // 260416Codex: 実行は plan に従って行い、batch 間は順次・batch 内は並列という現状の振る舞いを保ちます。
+            // 260416Codex: Python スクリプトのデバッグ用プレビュー表示は廃止し、実行に必要な処理だけ残します。
             foreach (var batch in plan.Batches)
             {
                 var tasks = batch.Jobs

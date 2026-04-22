@@ -30,7 +30,6 @@
         private void InitializeComponent()
         {
             buttonSpectrumGenerationRun = new Button();
-            textBoxPythonScript = new TextBox();
             numericUpDownEndmembers_Resolution = new NumericUpDown();
             labelEndmembers_Resolution = new Label();
             groupBoxMineralInfo = new GroupBox();
@@ -61,7 +60,6 @@
             checkedListBoxMineral = new CheckedListBox();
             groupBoxComposition = new GroupBox();
             labelCompositionName = new Label();
-            labelPythonScript = new Label();
             ModelTrain = new GroupBox();
             groupBox4 = new GroupBox();
             numericBox1 = new Crystallography.Controls.NumericBox();
@@ -171,19 +169,6 @@
             buttonSpectrumGenerationRun.Text = "実行";
             buttonSpectrumGenerationRun.UseVisualStyleBackColor = true;
             buttonSpectrumGenerationRun.Click += buttonSpectrumGenerationRun_Click;
-            // 
-            // textBoxPythonScript
-            // 
-            textBoxPythonScript.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
-            textBoxPythonScript.Location = new Point(214, 647);
-            textBoxPythonScript.Margin = new Padding(3, 2, 3, 2);
-            textBoxPythonScript.Multiline = true;
-            textBoxPythonScript.Name = "textBoxPythonScript";
-            textBoxPythonScript.ScrollBars = ScrollBars.Both;
-            textBoxPythonScript.ShortcutsEnabled = false;
-            textBoxPythonScript.Size = new Size(162, 63);
-            textBoxPythonScript.TabIndex = 1;
-            // 
             // numericUpDownEndmembers_Resolution
             // 
             numericUpDownEndmembers_Resolution.Location = new Point(102, 69);
@@ -500,16 +485,6 @@
             labelCompositionName.Size = new Size(31, 15);
             labelCompositionName.TabIndex = 42;
             labelCompositionName.Text = "成分";
-            // 
-            // labelPythonScript
-            // 
-            labelPythonScript.AutoSize = true;
-            labelPythonScript.Location = new Point(37, 661);
-            labelPythonScript.Name = "labelPythonScript";
-            labelPythonScript.Size = new Size(88, 15);
-            labelPythonScript.TabIndex = 15;
-            labelPythonScript.Text = "Pythonスクリプト";
-            // 
             // ModelTrain
             // 
             ModelTrain.Controls.Add(groupBox4);
@@ -820,8 +795,7 @@
             // 
             SpectrumGeneration.Controls.Add(groupBox1);
             SpectrumGeneration.Controls.Add(groupBoxMineral);
-            SpectrumGeneration.Controls.Add(labelPythonScript);
-            SpectrumGeneration.Controls.Add(textBoxPythonScript);
+            // 260416Codex: Python スクリプトのデバッグ表示欄を外し、生成画面は実行操作に絞ります。
             SpectrumGeneration.Controls.Add(tabControl2);
             SpectrumGeneration.Controls.Add(buttonSpectrumGenerationRun);
             SpectrumGeneration.Controls.Add(labelCompositionCount);
@@ -1338,8 +1312,6 @@
         private CheckedListBox checkedListBoxTrainMinerals;
         private Button buttonAllSelect;
         private ProgressBar progressBar1;
-        private TextBox textBoxPythonScript;
-        private Label labelPythonScript;
         private NumericUpDown numericUpDownLiveTime;
         private Label labelLiveTime;
         private NumericUpDown numericUpDownProbeCurrent;
