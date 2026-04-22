@@ -20,9 +20,10 @@ namespace MineraScope
         // 260416Codex: 画面上の入力値を request に変換し、今後の workflow 化の共通入口にします。
         private ModelCreationRequest CreateModelCreationRequest() =>
             new(
+                // 260416Codex: Python スクリプト保存先は LocalAppData 配下の固定パスへ統一します。
                 new ModelCreationPaths(
                     textBoxPathEDX.Text.Trim(),
-                    textBoxPathPython.Text.Trim().Trim('"'),
+                    PythonScriptOutputPath,
                     textBoxPathDTSA.Text.Trim(),
                     textBoxModel_Teacher.Text.Trim(),
                     textBoxModel_Save.Text.Trim()),

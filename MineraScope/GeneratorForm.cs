@@ -74,14 +74,21 @@ namespace MineraScope
         private readonly TrainingDataScanner _trainingDataScanner;
         // 260416Codex: 学習開始処理を workflow 化し、ボタンイベントから直接 DeepLearning を叩かない形へ寄せます。
         private readonly ModelTrainingWorkflow _modelTrainingWorkflow;
+        // 260416Codex: シミュレーション実行計画の組み立てを service 化し、完成 UI へ向けた差し替え点を明確にします。
+        private readonly SimulationPlanBuilder _simulationPlanBuilder;
 
         private string AssemblyPath { get; } = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) ?? AppContext.BaseDirectory;
         private string DesktopPath { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        // 260416Codex: Python スクリプトはユーザーに見せない固定保存先へ集約します。
+        private string PythonScriptOutputPath { get; } = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MineraScope",
+            "PythonScripts");
 
         // 260416Codex: クラス名リネームに合わせてコンストラクタ名も更新します。
         public GeneratorForm()
         {
-      
+
 
             InitializeComponent();
             _deepLearning = new(TrainLog);
@@ -89,8 +96,10 @@ namespace MineraScope
             _mineralDatabaseRepository = new(AssemblyPath);
             _trainingDataScanner = new(_deepLearning.AnalyzeMineralFolder);
             _modelTrainingWorkflow = new(_deepLearning);
+            _simulationPlanBuilder = new();
             textBoxPathEDX.Text = Path.Combine(DesktopPath, "TrainingData");
-            textBoxPathPython.Text = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
+            // 260416Codex: 固定保存先を事前作成し、設定 UI には表示しないようにします。
+            Directory.CreateDirectory(PythonScriptOutputPath);
             textBoxModel_Teacher.Text = Path.Combine(DesktopPath, "TrainingData");
             if (Directory.Exists(textBoxModel_Teacher.Text))
             {
@@ -178,123 +187,39 @@ namespace MineraScope
             listBox.CheckedItems.Cast<T>().ToArray();
 
         private static string ToLowerInvariant(string value) => value.ToLowerInvariant();
-        // 260416Codex: 単一組成時の複製と通常分割を1か所に集約
-        private static T[][] CreateSimulationChunks<T>(T[] source, int parallelCount) =>
-            source.Length == 1
-                ? Enumerable.Range(0, parallelCount).Select(_ => new[] { source[0] }).ToArray()
-                : SplitIntoChunks(source, parallelCount);
-
-        // 260416Codex: チャンクからスクリプト生成に必要な配列をまとめて取り出す
-        private static ((string ElementName, double Weight)[][] Elements, string[] OutputFiles) GetChunkData(
-            (string FileName, (string ElementName, double Weight)[] Compositions)[] chunk) =>
-            (
-                chunk.Select(item => item.Compositions).ToArray(),
-                chunk.Select(item => item.FileName).ToArray()
-            );
-
-        // 260416Codex: シミュレーション設定の組み立てを共通化
-        private SimulationPropety CreateSimulationProperty(
-            string mineralGroupName,
-            (string ElementName, double Weight)[][] atoms,
-            string outputFolder,
-            string[] outputFiles,
-            double count,
-            int parallelCount) =>
-            new()
-            {
-                MineralGropName = mineralGroupName,
-                Atoms1 = atoms,
-                DetectorName = textBoxDetectorName.Text,
-                CarbonCoatThickness = (double)numericUpDownCarbonThichness.Value,
-                BeamEnergy = (double)numericUpDownBeamEnergy.Value,
-                Count = count,
-                Division = (int)numericUpDownEndmembers_Resolution.Value,
-                LiveTime = (double)numericUpDownLiveTime.Value,
-                ProbeCurrent = (double)numericUpDownProbeCurrent.Value,
-                ParallelCount = parallelCount,
-                OutPutFolder = outputFolder,
-                OutputFile = outputFiles
-            };
-
-        // 260416Codex: 出力先の分岐をイベントハンドラから切り出す
-        private string GetSimulationOutputFolder(SolidSolution solution, double resolution) =>
-            solution.Members.Length == 1
-                ? Path.Combine(textBoxPathEDX.Text, solution.Name)
-                : Path.Combine(textBoxPathEDX.Text, $"{solution.Name}_{resolution * 100}mol%");
-
         // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
         private async void buttonSpectrumGenerationRun_Click(object sender, EventArgs e)
         {
-            // 260416Codex: シミュレーション系も request を入口に使い始め、今後の workflow 化へ備えます。
             var request = CreateModelCreationRequest();
-            // 260416Codex: 選択済み鉱物の取得を共通ヘルパーに寄せる
-            var checkedSolutions = request.SelectedMineralSolutions.ToArray();
-            string PythonPath = request.Paths.ScriptOutputFolder;
-            var DTSAPath = request.Paths.DtsaFolder;
-
-            if (checkedSolutions.Length == 0)
-                return;
-
-            //チェックされた鉱物について、順番にシミュレーション
-            int targetCount = request.Simulation.TargetCompositionCount;
-            double resolution = request.Simulation.ResolutionStep;
-            int count = request.Simulation.RunCount;
-            int parallelCount = request.Simulation.ParallelCount;
-            var firstCompositions = checkedSolutions[0].Divide(resolution, targetCount);//表示用
-
-            // 260416Codex: プレビュー用データ生成の重複をなくす
-            var firstChunk = CreateSimulationChunks(firstCompositions, parallelCount)[0];
-            var (firstElements, firstOutputFiles) = GetChunkData(firstChunk);
-            var previewProp = CreateSimulationProperty(
-                checkedSolutions[0].Name,
-                firstElements,
-                request.Paths.SpectrumOutputFolder,
-                firstOutputFiles,
-                count,
-                parallelCount);
-            textBoxPythonScript.Text = GenerateScriptText(previewProp, 0);
-
-            //Pythonスクリプトを保存、実行
-            foreach (var solution in checkedSolutions)
+            // 260416Codex: plan を先に作っておき、後から不足分判定や追加アクションを差し込みやすくします。
+            var plan = _simulationPlanBuilder.CreatePlan(request);
+            if (plan.Batches.Count == 0)
             {
-                var compositions = solution.Divide(resolution, targetCount);
-                var chunks = CreateSimulationChunks(compositions, parallelCount);
-                var tasks = new Task[chunks.Length];
-                for (int i = 0; i < chunks.Length; i++)
-                {
-                    int parallelIndex = i;
+                return;
+            }
 
-                    tasks[parallelIndex] = Task.Run(() =>
+            // 260416Codex: Nullable な preview 値はパターン一致で非 null に展開してからスクリプト生成へ渡します。
+            if (plan.PreviewProperty is { } previewProperty)
+            {
+                // 260416Codex: 先頭 batch の preview を表示し、現行 UI のスクリプト確認用途を維持します。
+                textBoxPythonScript.Text = GenerateScriptText(previewProperty, 0);
+            }
+
+            // 260416Codex: 実行は plan に従って行い、batch 間は順次・batch 内は並列という現状の振る舞いを保ちます。
+            foreach (var batch in plan.Batches)
+            {
+                var tasks = batch.Jobs
+                    .Select(job => Task.Run(() =>
                     {
-                        var chunk = chunks[parallelIndex];
-                        var (elementsList, outputFiles) = GetChunkData(chunk);
-                        var outputFolder = GetSimulationOutputFolder(solution, resolution);
+                        Directory.CreateDirectory(job.Property.OutPutFolder);
+                        File.WriteAllText(job.ScriptPath, GenerateScriptText(job.Property, job.ParallelIndex));
+                        RunCommand(job.DtsaFolder, job.ScriptPath);
+                    }))
+                    .ToArray();
 
-                        Directory.CreateDirectory(outputFolder);
-                        var filePath = Path.Combine(PythonPath, $"test{parallelIndex + 1}.py");
-
-                        var prop = CreateSimulationProperty(
-                            solution.Name,
-                            elementsList,
-                            outputFolder,
-                            outputFiles,
-                            count,
-                            parallelCount);
-                        File.WriteAllText(filePath, GenerateScriptText(prop, parallelIndex));
-                        RunCommand(DTSAPath, filePath);
-                    });
-                }
                 await Task.WhenAll(tasks);
             }
         }
-        #region 並列用に組成リストを分解
-        public static T[][] SplitIntoChunks<T>(T[] source, int chunkCount) =>
-            source
-                .Select((value, index) => new { value, index })
-                .GroupBy(x => x.index % chunkCount)
-                .Select(g => g.Select(x => x.value).ToArray())
-                .ToArray();
-        #endregion
 
         // <param name="atom"> Nameは大文字で始めること。Molは実数 </param>
         // <returns></returns>
@@ -701,7 +626,6 @@ namespace MineraScope
             var targetTextBox = button.Name switch
             {
                 nameof(buttonPathEDX) => textBoxPathEDX,
-                nameof(buttonPathPython) => textBoxPathPython,
                 nameof(buttonPathDTSA) => textBoxPathDTSA,
                 nameof(buttonModel_Teacher) => textBoxModel_Teacher,
                 nameof(buttonModel_SaveFolder) => textBoxModel_Save,

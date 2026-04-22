@@ -114,14 +114,10 @@
             tabPage5 = new TabPage();
             buttonPathDTSA = new Button();
             buttonPathEDX = new Button();
-            buttonPathPython = new Button();
             textBoxPathDTSA = new TextBox();
             textBoxPathEDX = new TextBox();
-            textBoxPathPython = new TextBox();
             labelPathDTSA = new Label();
             labelPathEDX = new Label();
-            labelPathPython = new Label();
-            tabPage6 = new TabPage();
             tabPage7 = new TabPage();
             numericUpDownExecution_Count = new NumericUpDown();
             labelExecution_Count = new Label();
@@ -179,13 +175,13 @@
             // textBoxPythonScript
             // 
             textBoxPythonScript.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
-            textBoxPythonScript.Location = new Point(330, 540);
+            textBoxPythonScript.Location = new Point(214, 647);
             textBoxPythonScript.Margin = new Padding(3, 2, 3, 2);
             textBoxPythonScript.Multiline = true;
             textBoxPythonScript.Name = "textBoxPythonScript";
             textBoxPythonScript.ScrollBars = ScrollBars.Both;
             textBoxPythonScript.ShortcutsEnabled = false;
-            textBoxPythonScript.Size = new Size(162, 83);
+            textBoxPythonScript.Size = new Size(162, 63);
             textBoxPythonScript.TabIndex = 1;
             // 
             // numericUpDownEndmembers_Resolution
@@ -217,9 +213,9 @@
             groupBoxMineralInfo.Controls.Add(textBoxMineral_Name);
             groupBoxMineralInfo.Controls.Add(groupBoxEndmembers);
             groupBoxMineralInfo.Dock = DockStyle.Bottom;
-            groupBoxMineralInfo.Location = new Point(3, 177);
+            groupBoxMineralInfo.Location = new Point(3, 149);
             groupBoxMineralInfo.Name = "groupBoxMineralInfo";
-            groupBoxMineralInfo.Size = new Size(634, 232);
+            groupBoxMineralInfo.Size = new Size(634, 260);
             groupBoxMineralInfo.TabIndex = 37;
             groupBoxMineralInfo.TabStop = false;
             groupBoxMineralInfo.Text = "詳細情報";
@@ -453,7 +449,7 @@
             // labelCompositionCount
             // 
             labelCompositionCount.AutoSize = true;
-            labelCompositionCount.Location = new Point(516, 517);
+            labelCompositionCount.Location = new Point(527, 680);
             labelCompositionCount.Margin = new Padding(2, 0, 2, 0);
             labelCompositionCount.Name = "labelCompositionCount";
             labelCompositionCount.Size = new Size(99, 15);
@@ -463,7 +459,7 @@
             // textBoxCompositionCount
             // 
             textBoxCompositionCount.BackColor = Color.White;
-            textBoxCompositionCount.Location = new Point(498, 541);
+            textBoxCompositionCount.Location = new Point(378, 635);
             textBoxCompositionCount.Margin = new Padding(3, 2, 3, 2);
             textBoxCompositionCount.Multiline = true;
             textBoxCompositionCount.Name = "textBoxCompositionCount";
@@ -481,7 +477,7 @@
             checkedListBoxMineral.MultiColumn = true;
             checkedListBoxMineral.Name = "checkedListBoxMineral";
             checkedListBoxMineral.ScrollAlwaysVisible = true;
-            checkedListBoxMineral.Size = new Size(634, 98);
+            checkedListBoxMineral.Size = new Size(634, 70);
             checkedListBoxMineral.TabIndex = 86;
             checkedListBoxMineral.ItemCheck += checkedListBoxMineral_ItemCheck;
             checkedListBoxMineral.SelectedIndexChanged += checkedListBoxMineral_SelectedIndexChanged;
@@ -508,7 +504,7 @@
             // labelPythonScript
             // 
             labelPythonScript.AutoSize = true;
-            labelPythonScript.Location = new Point(367, 517);
+            labelPythonScript.Location = new Point(37, 661);
             labelPythonScript.Name = "labelPythonScript";
             labelPythonScript.Size = new Size(88, 15);
             labelPythonScript.TabIndex = 15;
@@ -833,7 +829,7 @@
             SpectrumGeneration.Dock = DockStyle.Left;
             SpectrumGeneration.Location = new Point(3, 27);
             SpectrumGeneration.Name = "SpectrumGeneration";
-            SpectrumGeneration.Size = new Size(661, 666);
+            SpectrumGeneration.Size = new Size(661, 710);
             SpectrumGeneration.TabIndex = 88;
             SpectrumGeneration.TabStop = false;
             SpectrumGeneration.Text = "EDXスペクトル生成";
@@ -980,7 +976,7 @@
             groupBoxMineral.Controls.Add(flowLayoutPanel4);
             groupBoxMineral.Controls.Add(flowLayoutPanel2);
             groupBoxMineral.Controls.Add(groupBoxMineralInfo);
-            groupBoxMineral.Location = new Point(5, 99);
+            groupBoxMineral.Location = new Point(5, 218);
             groupBoxMineral.Name = "groupBoxMineral";
             groupBoxMineral.Size = new Size(640, 412);
             groupBoxMineral.TabIndex = 98;
@@ -994,7 +990,7 @@
             flowLayoutPanel4.Controls.Add(buttonAddList);
             flowLayoutPanel4.Dock = DockStyle.Bottom;
             flowLayoutPanel4.FlowDirection = FlowDirection.RightToLeft;
-            flowLayoutPanel4.Location = new Point(3, 146);
+            flowLayoutPanel4.Location = new Point(3, 118);
             flowLayoutPanel4.Name = "flowLayoutPanel4";
             flowLayoutPanel4.Size = new Size(634, 31);
             flowLayoutPanel4.TabIndex = 105;
@@ -1053,29 +1049,25 @@
             // tabControl2
             // 
             tabControl2.Controls.Add(tabPage5);
-            tabControl2.Controls.Add(tabPage6);
             tabControl2.Controls.Add(tabPage7);
-            tabControl2.Location = new Point(6, 517);
+            tabControl2.Location = new Point(11, 105);
             tabControl2.Name = "tabControl2";
             tabControl2.SelectedIndex = 0;
-            tabControl2.Size = new Size(314, 142);
+            tabControl2.Size = new Size(634, 131);
             tabControl2.TabIndex = 95;
             // 
             // tabPage5
             // 
             tabPage5.Controls.Add(buttonPathDTSA);
             tabPage5.Controls.Add(buttonPathEDX);
-            tabPage5.Controls.Add(buttonPathPython);
             tabPage5.Controls.Add(textBoxPathDTSA);
             tabPage5.Controls.Add(textBoxPathEDX);
-            tabPage5.Controls.Add(textBoxPathPython);
             tabPage5.Controls.Add(labelPathDTSA);
             tabPage5.Controls.Add(labelPathEDX);
-            tabPage5.Controls.Add(labelPathPython);
             tabPage5.Location = new Point(4, 24);
             tabPage5.Name = "tabPage5";
             tabPage5.Padding = new Padding(3);
-            tabPage5.Size = new Size(306, 114);
+            tabPage5.Size = new Size(626, 103);
             tabPage5.TabIndex = 0;
             tabPage5.Text = "ファイル設定";
             tabPage5.UseVisualStyleBackColor = true;
@@ -1100,16 +1092,6 @@
             buttonPathEDX.UseVisualStyleBackColor = true;
             buttonPathEDX.Click += buttonFolderBrowserDialog_Click;
             // 
-            // buttonPathPython
-            // 
-            buttonPathPython.Location = new Point(268, 20);
-            buttonPathPython.Name = "buttonPathPython";
-            buttonPathPython.Size = new Size(36, 26);
-            buttonPathPython.TabIndex = 1;
-            buttonPathPython.Text = "...";
-            buttonPathPython.UseVisualStyleBackColor = true;
-            buttonPathPython.Click += buttonFolderBrowserDialog_Click;
-            // 
             // textBoxPathDTSA
             // 
             textBoxPathDTSA.Location = new Point(130, 77);
@@ -1124,13 +1106,6 @@
             textBoxPathEDX.Name = "textBoxPathEDX";
             textBoxPathEDX.Size = new Size(138, 23);
             textBoxPathEDX.TabIndex = 0;
-            // 
-            // textBoxPathPython
-            // 
-            textBoxPathPython.Location = new Point(130, 22);
-            textBoxPathPython.Name = "textBoxPathPython";
-            textBoxPathPython.Size = new Size(138, 23);
-            textBoxPathPython.TabIndex = 0;
             // 
             // labelPathDTSA
             // 
@@ -1150,25 +1125,6 @@
             labelPathEDX.TabIndex = 15;
             labelPathEDX.Text = "EDXスペクトル出力先";
             // 
-            // labelPathPython
-            // 
-            labelPathPython.AutoSize = true;
-            labelPathPython.Location = new Point(5, 25);
-            labelPathPython.Name = "labelPathPython";
-            labelPathPython.Size = new Size(124, 15);
-            labelPathPython.TabIndex = 15;
-            labelPathPython.Text = "Pythonスクリプト保存先";
-            // 
-            // tabPage6
-            // 
-            tabPage6.Location = new Point(4, 24);
-            tabPage6.Name = "tabPage6";
-            tabPage6.Padding = new Padding(3);
-            tabPage6.Size = new Size(306, 114);
-            tabPage6.TabIndex = 1;
-            tabPage6.Text = "SEM計測条件";
-            tabPage6.UseVisualStyleBackColor = true;
-            // 
             // tabPage7
             // 
             tabPage7.Controls.Add(numericUpDownExecution_Count);
@@ -1178,7 +1134,7 @@
             tabPage7.Location = new Point(4, 24);
             tabPage7.Name = "tabPage7";
             tabPage7.Padding = new Padding(3);
-            tabPage7.Size = new Size(306, 114);
+            tabPage7.Size = new Size(626, 103);
             tabPage7.TabIndex = 2;
             tabPage7.Text = "シミュレーション実行設定";
             tabPage7.UseVisualStyleBackColor = true;
@@ -1242,18 +1198,16 @@
             debugModeToolStripMenuItem.Size = new Size(142, 22);
             debugModeToolStripMenuItem.Text = "Debug mode";
             // 
-            // 260416Codex: Designer が保持するフォーム名も GeneratorForm に揃えます。
             // GeneratorForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1197, 696);
+            ClientSize = new Size(1197, 740);
             Controls.Add(ModelTrain);
             Controls.Add(SpectrumGeneration);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
             Margin = new Padding(3, 2, 3, 2);
-            // 260416Codex: Name プロパティもクラス名変更に合わせて更新します。
             Name = "GeneratorForm";
             Padding = new Padding(3);
             ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).EndInit();
@@ -1339,20 +1293,12 @@
         private GroupBox groupBoxMineral;
         private Label labelMineralInfo_Name;
         private TextBox textBoxMineral_Name;
-        private TabControl tabControl2;
-        private TabPage tabPage5;
-        private TabPage tabPage6;
         private Label labelDetectorName;
         private NumericUpDown numericUpDownCarbonThichness;
         private Label labelBeamEnergy;
         private NumericUpDown numericUpDownBeamEnergy;
         private Label labelCarbonThickness;
         private TextBox textBoxDetectorName;
-        private TabPage tabPage7;
-        private NumericUpDown numericUpDownExecution_Count;
-        private Label labelExecution_Count;
-        private NumericUpDown numericUpDownExecution_Parallel;
-        private Label labelExecution_Parallel;
         private GroupBox groupBoxModel_LearningData;
         private GroupBox groupBox4;
         private Label label4;
@@ -1380,15 +1326,6 @@
         private Label label16;
         private NumericUpDown numericUpDown5;
         private Label label17;
-        private Button buttonPathDTSA;
-        private Button buttonPathEDX;
-        private Button buttonPathPython;
-        private TextBox textBoxPathDTSA;
-        private TextBox textBoxPathEDX;
-        private TextBox textBoxPathPython;
-        private Label labelPathDTSA;
-        private Label labelPathEDX;
-        private Label labelPathPython;
         private Button buttonModel_SaveFolder;
         private Button buttonModel_Teacher;
         private Button buttonMineral_Reset;
@@ -1415,6 +1352,19 @@
         private GroupBox groupBox2;
         private FlowLayoutPanel flowLayoutPanel4;
         private Crystallography.Controls.NumericBox numericBox1;
+        private TabControl tabControl2;
+        private TabPage tabPage5;
+        private Button buttonPathDTSA;
+        private Button buttonPathEDX;
+        private TextBox textBoxPathDTSA;
+        private TextBox textBoxPathEDX;
+        private Label labelPathDTSA;
+        private Label labelPathEDX;
+        private TabPage tabPage7;
+        private NumericUpDown numericUpDownExecution_Count;
+        private Label labelExecution_Count;
+        private NumericUpDown numericUpDownExecution_Parallel;
+        private Label labelExecution_Parallel;
     }
 }
 
