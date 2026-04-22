@@ -63,10 +63,6 @@
             ModelTrain = new GroupBox();
             groupBox4 = new GroupBox();
             numericBox1 = new Crystallography.Controls.NumericBox();
-            flowLayoutPanel1 = new FlowLayoutPanel();
-            label16 = new Label();
-            numericUpDown5 = new NumericUpDown();
-            label17 = new Label();
             buttonAllSelect = new Button();
             checkedListBoxTrainMinerals = new CheckedListBox();
             textBoxModel_Evaluation = new TextBox();
@@ -82,11 +78,11 @@
             label10 = new Label();
             label9 = new Label();
             groupBoxModel_LearningData = new GroupBox();
-            label4 = new Label();
             numericUpDownModel_ValidationSplit = new NumericUpDown();
-            buttonModel_Teacher = new Button();
-            textBoxModel_Teacher = new TextBox();
             label13 = new Label();
+            labelPathTeacher = new Label();
+            buttonModel_Teacher = new Button();
+            textBoxPathTeacher = new TextBox();
             buttonMineral_Delete = new Button();
             SpectrumGeneration = new GroupBox();
             groupBox1 = new GroupBox();
@@ -110,20 +106,21 @@
             checkBox1 = new CheckBox();
             tabControl2 = new TabControl();
             tabPage5 = new TabPage();
+            panel4 = new Panel();
+            panelPathEDX = new Panel();
+            labelPathEDX = new Label();
+            textBoxPathEDX = new TextBox();
             buttonPathDTSA = new Button();
+            panelPathDTSA = new Panel();
             buttonPathEDX = new Button();
             textBoxPathDTSA = new TextBox();
-            textBoxPathEDX = new TextBox();
             labelPathDTSA = new Label();
-            labelPathEDX = new Label();
             tabPage7 = new TabPage();
             numericUpDownExecution_Count = new NumericUpDown();
             labelExecution_Count = new Label();
             numericUpDownExecution_Parallel = new NumericUpDown();
             labelExecution_Parallel = new Label();
-            menuStrip1 = new MenuStrip();
-            optionToolStripMenuItem = new ToolStripMenuItem();
-            debugModeToolStripMenuItem = new ToolStripMenuItem();
+            panel2 = new Panel();
             ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).BeginInit();
             groupBoxMineralInfo.SuspendLayout();
             groupBox2.SuspendLayout();
@@ -134,8 +131,6 @@
             groupBoxComposition.SuspendLayout();
             ModelTrain.SuspendLayout();
             groupBox4.SuspendLayout();
-            flowLayoutPanel1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown5).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_EaryStopping).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_Epochs).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_BatchSize).BeginInit();
@@ -153,15 +148,18 @@
             flowLayoutPanel2.SuspendLayout();
             tabControl2.SuspendLayout();
             tabPage5.SuspendLayout();
+            panel4.SuspendLayout();
+            panelPathEDX.SuspendLayout();
+            panelPathDTSA.SuspendLayout();
             tabPage7.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).BeginInit();
-            menuStrip1.SuspendLayout();
+            panel2.SuspendLayout();
             SuspendLayout();
             // 
             // buttonSpectrumGenerationRun
             // 
-            buttonSpectrumGenerationRun.Location = new Point(558, 635);
+            buttonSpectrumGenerationRun.Location = new Point(558, 654);
             buttonSpectrumGenerationRun.Margin = new Padding(3, 2, 3, 2);
             buttonSpectrumGenerationRun.Name = "buttonSpectrumGenerationRun";
             buttonSpectrumGenerationRun.Size = new Size(77, 24);
@@ -169,6 +167,7 @@
             buttonSpectrumGenerationRun.Text = "実行";
             buttonSpectrumGenerationRun.UseVisualStyleBackColor = true;
             buttonSpectrumGenerationRun.Click += buttonSpectrumGenerationRun_Click;
+            // 
             // numericUpDownEndmembers_Resolution
             // 
             numericUpDownEndmembers_Resolution.Location = new Point(102, 69);
@@ -198,9 +197,9 @@
             groupBoxMineralInfo.Controls.Add(textBoxMineral_Name);
             groupBoxMineralInfo.Controls.Add(groupBoxEndmembers);
             groupBoxMineralInfo.Dock = DockStyle.Bottom;
-            groupBoxMineralInfo.Location = new Point(3, 149);
+            groupBoxMineralInfo.Location = new Point(3, 167);
             groupBoxMineralInfo.Name = "groupBoxMineralInfo";
-            groupBoxMineralInfo.Size = new Size(634, 260);
+            groupBoxMineralInfo.Size = new Size(634, 242);
             groupBoxMineralInfo.TabIndex = 37;
             groupBoxMineralInfo.TabStop = false;
             groupBoxMineralInfo.Text = "詳細情報";
@@ -444,13 +443,13 @@
             // textBoxCompositionCount
             // 
             textBoxCompositionCount.BackColor = Color.White;
-            textBoxCompositionCount.Location = new Point(378, 635);
+            textBoxCompositionCount.Location = new Point(378, 657);
             textBoxCompositionCount.Margin = new Padding(3, 2, 3, 2);
             textBoxCompositionCount.Multiline = true;
             textBoxCompositionCount.Name = "textBoxCompositionCount";
             textBoxCompositionCount.ReadOnly = true;
             textBoxCompositionCount.ScrollBars = ScrollBars.Both;
-            textBoxCompositionCount.Size = new Size(147, 81);
+            textBoxCompositionCount.Size = new Size(147, 59);
             textBoxCompositionCount.TabIndex = 92;
             // 
             // checkedListBoxMineral
@@ -462,7 +461,7 @@
             checkedListBoxMineral.MultiColumn = true;
             checkedListBoxMineral.Name = "checkedListBoxMineral";
             checkedListBoxMineral.ScrollAlwaysVisible = true;
-            checkedListBoxMineral.Size = new Size(634, 70);
+            checkedListBoxMineral.Size = new Size(634, 88);
             checkedListBoxMineral.TabIndex = 86;
             checkedListBoxMineral.ItemCheck += checkedListBoxMineral_ItemCheck;
             checkedListBoxMineral.SelectedIndexChanged += checkedListBoxMineral_SelectedIndexChanged;
@@ -485,6 +484,7 @@
             labelCompositionName.Size = new Size(31, 15);
             labelCompositionName.TabIndex = 42;
             labelCompositionName.Text = "成分";
+            // 
             // ModelTrain
             // 
             ModelTrain.Controls.Add(groupBox4);
@@ -500,17 +500,13 @@
             // groupBox4
             // 
             groupBox4.Controls.Add(numericBox1);
-            groupBox4.Controls.Add(flowLayoutPanel1);
             groupBox4.Controls.Add(buttonAllSelect);
             groupBox4.Controls.Add(checkedListBoxTrainMinerals);
             groupBox4.Controls.Add(textBoxModel_Evaluation);
             groupBox4.Controls.Add(label3);
-            groupBox4.Controls.Add(buttonModel_SaveFolder);
             groupBox4.Controls.Add(numericUpDownModel_EaryStopping);
             groupBox4.Controls.Add(buttonModel_Train);
-            groupBox4.Controls.Add(label7);
             groupBox4.Controls.Add(numericUpDownModel_Epochs);
-            groupBox4.Controls.Add(textBoxModel_Save);
             groupBox4.Controls.Add(numericUpDownModel_BatchSize);
             groupBox4.Controls.Add(label5);
             groupBox4.Controls.Add(label10);
@@ -542,51 +538,6 @@
             numericBox1.TabIndex = 104;
             numericBox1.TextFont = new Font("Yu Gothic UI", 9F);
             numericBox1.Value = 90D;
-            // 
-            // flowLayoutPanel1
-            // 
-            flowLayoutPanel1.AutoSize = true;
-            flowLayoutPanel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            flowLayoutPanel1.Controls.Add(label16);
-            flowLayoutPanel1.Controls.Add(numericUpDown5);
-            flowLayoutPanel1.Controls.Add(label17);
-            flowLayoutPanel1.Location = new Point(200, 487);
-            flowLayoutPanel1.Name = "flowLayoutPanel1";
-            flowLayoutPanel1.Size = new Size(142, 29);
-            flowLayoutPanel1.TabIndex = 100;
-            flowLayoutPanel1.Visible = false;
-            // 
-            // label16
-            // 
-            label16.AutoSize = true;
-            label16.Location = new Point(2, 0);
-            label16.Margin = new Padding(2, 0, 2, 0);
-            label16.Name = "label16";
-            label16.Padding = new Padding(0, 6, 0, 0);
-            label16.Size = new Size(45, 21);
-            label16.TabIndex = 20;
-            label16.Text = "Header";
-            // 
-            // numericUpDown5
-            // 
-            numericUpDown5.Location = new Point(52, 3);
-            numericUpDown5.Name = "numericUpDown5";
-            numericUpDown5.Size = new Size(42, 23);
-            numericUpDown5.TabIndex = 19;
-            numericUpDown5.Value = new decimal(new int[] { 10, 0, 0, 0 });
-            numericUpDown5.ValueChanged += numericUpDownSolidSolution_Resolution_ValueChanged;
-            numericUpDown5.Enter += numericUpDownSolidSolution_Resolution_ValueChanged;
-            // 
-            // label17
-            // 
-            label17.AutoSize = true;
-            label17.Location = new Point(99, 0);
-            label17.Margin = new Padding(2, 0, 2, 0);
-            label17.Name = "label17";
-            label17.Padding = new Padding(0, 6, 0, 0);
-            label17.Size = new Size(41, 21);
-            label17.TabIndex = 20;
-            label17.Text = "Footer";
             // 
             // buttonAllSelect
             // 
@@ -631,9 +582,11 @@
             // 
             // buttonModel_SaveFolder
             // 
-            buttonModel_SaveFolder.Location = new Point(403, 179);
+            buttonModel_SaveFolder.AutoSize = true;
+            buttonModel_SaveFolder.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonModel_SaveFolder.Location = new Point(274, 8);
             buttonModel_SaveFolder.Name = "buttonModel_SaveFolder";
-            buttonModel_SaveFolder.Size = new Size(36, 26);
+            buttonModel_SaveFolder.Size = new Size(26, 25);
             buttonModel_SaveFolder.TabIndex = 1;
             buttonModel_SaveFolder.Text = "...";
             buttonModel_SaveFolder.UseVisualStyleBackColor = true;
@@ -660,7 +613,7 @@
             // label7
             // 
             label7.AutoSize = true;
-            label7.Location = new Point(33, 185);
+            label7.Location = new Point(11, 13);
             label7.Name = "label7";
             label7.Size = new Size(81, 15);
             label7.TabIndex = 24;
@@ -677,9 +630,9 @@
             // 
             // textBoxModel_Save
             // 
-            textBoxModel_Save.Location = new Point(123, 177);
+            textBoxModel_Save.Location = new Point(113, 11);
             textBoxModel_Save.Name = "textBoxModel_Save";
-            textBoxModel_Save.Size = new Size(255, 23);
+            textBoxModel_Save.Size = new Size(155, 23);
             textBoxModel_Save.TabIndex = 23;
             // 
             // numericUpDownModel_BatchSize
@@ -722,10 +675,7 @@
             // 
             // groupBoxModel_LearningData
             // 
-            groupBoxModel_LearningData.Controls.Add(label4);
             groupBoxModel_LearningData.Controls.Add(numericUpDownModel_ValidationSplit);
-            groupBoxModel_LearningData.Controls.Add(buttonModel_Teacher);
-            groupBoxModel_LearningData.Controls.Add(textBoxModel_Teacher);
             groupBoxModel_LearningData.Controls.Add(label13);
             groupBoxModel_LearningData.Location = new Point(13, 31);
             groupBoxModel_LearningData.Name = "groupBoxModel_LearningData";
@@ -734,15 +684,6 @@
             groupBoxModel_LearningData.TabStop = false;
             groupBoxModel_LearningData.Text = "学習データ設定";
             // 
-            // label4
-            // 
-            label4.AutoSize = true;
-            label4.Location = new Point(19, 37);
-            label4.Name = "label4";
-            label4.Size = new Size(57, 15);
-            label4.TabIndex = 2;
-            label4.Text = "教師データ";
-            // 
             // numericUpDownModel_ValidationSplit
             // 
             numericUpDownModel_ValidationSplit.Location = new Point(161, 68);
@@ -750,23 +691,6 @@
             numericUpDownModel_ValidationSplit.Size = new Size(42, 23);
             numericUpDownModel_ValidationSplit.TabIndex = 93;
             numericUpDownModel_ValidationSplit.Value = new decimal(new int[] { 20, 0, 0, 0 });
-            // 
-            // buttonModel_Teacher
-            // 
-            buttonModel_Teacher.Location = new Point(457, 37);
-            buttonModel_Teacher.Name = "buttonModel_Teacher";
-            buttonModel_Teacher.Size = new Size(36, 26);
-            buttonModel_Teacher.TabIndex = 1;
-            buttonModel_Teacher.Text = "...";
-            buttonModel_Teacher.UseVisualStyleBackColor = true;
-            buttonModel_Teacher.Click += buttonModel_Teacher_Click;
-            // 
-            // textBoxModel_Teacher
-            // 
-            textBoxModel_Teacher.Location = new Point(104, 37);
-            textBoxModel_Teacher.Name = "textBoxModel_Teacher";
-            textBoxModel_Teacher.Size = new Size(335, 23);
-            textBoxModel_Teacher.TabIndex = 1;
             // 
             // label13
             // 
@@ -777,6 +701,34 @@
             label13.Size = new Size(111, 15);
             label13.TabIndex = 30;
             label13.Text = "テストデータの割合(%)";
+            // 
+            // labelPathTeacher
+            // 
+            labelPathTeacher.AutoSize = true;
+            labelPathTeacher.Location = new Point(20, 10);
+            labelPathTeacher.Name = "labelPathTeacher";
+            labelPathTeacher.Size = new Size(57, 15);
+            labelPathTeacher.TabIndex = 2;
+            labelPathTeacher.Text = "教師データ";
+            // 
+            // buttonModel_Teacher
+            // 
+            buttonModel_Teacher.AutoSize = true;
+            buttonModel_Teacher.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonModel_Teacher.Location = new Point(274, 6);
+            buttonModel_Teacher.Name = "buttonModel_Teacher";
+            buttonModel_Teacher.Size = new Size(26, 25);
+            buttonModel_Teacher.TabIndex = 1;
+            buttonModel_Teacher.Text = "...";
+            buttonModel_Teacher.UseVisualStyleBackColor = true;
+            buttonModel_Teacher.Click += buttonModel_Teacher_Click;
+            // 
+            // textBoxPathTeacher
+            // 
+            textBoxPathTeacher.Location = new Point(113, 5);
+            textBoxPathTeacher.Name = "textBoxPathTeacher";
+            textBoxPathTeacher.Size = new Size(155, 23);
+            textBoxPathTeacher.TabIndex = 1;
             // 
             // buttonMineral_Delete
             // 
@@ -795,15 +747,14 @@
             // 
             SpectrumGeneration.Controls.Add(groupBox1);
             SpectrumGeneration.Controls.Add(groupBoxMineral);
-            // 260416Codex: Python スクリプトのデバッグ表示欄を外し、生成画面は実行操作に絞ります。
             SpectrumGeneration.Controls.Add(tabControl2);
             SpectrumGeneration.Controls.Add(buttonSpectrumGenerationRun);
             SpectrumGeneration.Controls.Add(labelCompositionCount);
             SpectrumGeneration.Controls.Add(textBoxCompositionCount);
             SpectrumGeneration.Dock = DockStyle.Left;
-            SpectrumGeneration.Location = new Point(3, 27);
+            SpectrumGeneration.Location = new Point(3, 3);
             SpectrumGeneration.Name = "SpectrumGeneration";
-            SpectrumGeneration.Size = new Size(661, 710);
+            SpectrumGeneration.Size = new Size(661, 734);
             SpectrumGeneration.TabIndex = 88;
             SpectrumGeneration.TabStop = false;
             SpectrumGeneration.Text = "EDXスペクトル生成";
@@ -950,7 +901,7 @@
             groupBoxMineral.Controls.Add(flowLayoutPanel4);
             groupBoxMineral.Controls.Add(flowLayoutPanel2);
             groupBoxMineral.Controls.Add(groupBoxMineralInfo);
-            groupBoxMineral.Location = new Point(5, 218);
+            groupBoxMineral.Location = new Point(5, 232);
             groupBoxMineral.Name = "groupBoxMineral";
             groupBoxMineral.Size = new Size(640, 412);
             groupBoxMineral.TabIndex = 98;
@@ -964,7 +915,7 @@
             flowLayoutPanel4.Controls.Add(buttonAddList);
             flowLayoutPanel4.Dock = DockStyle.Bottom;
             flowLayoutPanel4.FlowDirection = FlowDirection.RightToLeft;
-            flowLayoutPanel4.Location = new Point(3, 118);
+            flowLayoutPanel4.Location = new Point(3, 136);
             flowLayoutPanel4.Name = "flowLayoutPanel4";
             flowLayoutPanel4.Size = new Size(634, 31);
             flowLayoutPanel4.TabIndex = 105;
@@ -1024,43 +975,97 @@
             // 
             tabControl2.Controls.Add(tabPage5);
             tabControl2.Controls.Add(tabPage7);
-            tabControl2.Location = new Point(11, 105);
+            tabControl2.Location = new Point(6, 97);
             tabControl2.Name = "tabControl2";
             tabControl2.SelectedIndex = 0;
-            tabControl2.Size = new Size(634, 131);
+            tabControl2.Size = new Size(649, 131);
             tabControl2.TabIndex = 95;
             // 
             // tabPage5
             // 
-            tabPage5.Controls.Add(buttonPathDTSA);
-            tabPage5.Controls.Add(buttonPathEDX);
-            tabPage5.Controls.Add(textBoxPathDTSA);
-            tabPage5.Controls.Add(textBoxPathEDX);
-            tabPage5.Controls.Add(labelPathDTSA);
-            tabPage5.Controls.Add(labelPathEDX);
+            tabPage5.Controls.Add(panel2);
+            tabPage5.Controls.Add(panel4);
+            tabPage5.Controls.Add(panelPathEDX);
+            tabPage5.Controls.Add(panelPathDTSA);
             tabPage5.Location = new Point(4, 24);
             tabPage5.Name = "tabPage5";
             tabPage5.Padding = new Padding(3);
-            tabPage5.Size = new Size(626, 103);
+            tabPage5.Size = new Size(641, 103);
             tabPage5.TabIndex = 0;
             tabPage5.Text = "ファイル設定";
             tabPage5.UseVisualStyleBackColor = true;
             // 
+            // panel4
+            // 
+            panel4.AutoSize = true;
+            panel4.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panel4.Controls.Add(buttonModel_Teacher);
+            panel4.Controls.Add(textBoxPathTeacher);
+            panel4.Controls.Add(labelPathTeacher);
+            panel4.Location = new Point(317, 10);
+            panel4.Name = "panel4";
+            panel4.Size = new Size(303, 34);
+            panel4.TabIndex = 18;
+            // 
+            // panelPathEDX
+            // 
+            panelPathEDX.AutoSize = true;
+            panelPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panelPathEDX.Controls.Add(labelPathEDX);
+            panelPathEDX.Controls.Add(textBoxPathEDX);
+            panelPathEDX.Controls.Add(buttonPathDTSA);
+            panelPathEDX.Location = new Point(5, 51);
+            panelPathEDX.Name = "panelPathEDX";
+            panelPathEDX.Size = new Size(304, 40);
+            panelPathEDX.TabIndex = 17;
+            // 
+            // labelPathEDX
+            // 
+            labelPathEDX.AutoSize = true;
+            labelPathEDX.Location = new Point(3, 17);
+            labelPathEDX.Name = "labelPathEDX";
+            labelPathEDX.Size = new Size(110, 15);
+            labelPathEDX.TabIndex = 15;
+            labelPathEDX.Text = "EDXスペクトル出力先";
+            // 
+            // textBoxPathEDX
+            // 
+            textBoxPathEDX.Location = new Point(114, 14);
+            textBoxPathEDX.Name = "textBoxPathEDX";
+            textBoxPathEDX.Size = new Size(155, 23);
+            textBoxPathEDX.TabIndex = 0;
+            // 
             // buttonPathDTSA
             // 
-            buttonPathDTSA.Location = new Point(268, 75);
+            buttonPathDTSA.AutoSize = true;
+            buttonPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonPathDTSA.Location = new Point(275, 12);
             buttonPathDTSA.Name = "buttonPathDTSA";
-            buttonPathDTSA.Size = new Size(36, 26);
+            buttonPathDTSA.Size = new Size(26, 25);
             buttonPathDTSA.TabIndex = 1;
             buttonPathDTSA.Text = "...";
             buttonPathDTSA.UseVisualStyleBackColor = true;
             buttonPathDTSA.Click += buttonFolderBrowserDialog_Click;
             // 
+            // panelPathDTSA
+            // 
+            panelPathDTSA.AutoSize = true;
+            panelPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panelPathDTSA.Controls.Add(buttonPathEDX);
+            panelPathDTSA.Controls.Add(textBoxPathDTSA);
+            panelPathDTSA.Controls.Add(labelPathDTSA);
+            panelPathDTSA.Location = new Point(5, 10);
+            panelPathDTSA.Name = "panelPathDTSA";
+            panelPathDTSA.Size = new Size(304, 35);
+            panelPathDTSA.TabIndex = 16;
+            // 
             // buttonPathEDX
             // 
-            buttonPathEDX.Location = new Point(268, 49);
+            buttonPathEDX.AutoSize = true;
+            buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonPathEDX.Location = new Point(275, 7);
             buttonPathEDX.Name = "buttonPathEDX";
-            buttonPathEDX.Size = new Size(36, 26);
+            buttonPathEDX.Size = new Size(26, 25);
             buttonPathEDX.TabIndex = 1;
             buttonPathEDX.Text = "...";
             buttonPathEDX.UseVisualStyleBackColor = true;
@@ -1068,36 +1073,20 @@
             // 
             // textBoxPathDTSA
             // 
-            textBoxPathDTSA.Location = new Point(130, 77);
+            textBoxPathDTSA.Location = new Point(114, 8);
             textBoxPathDTSA.Name = "textBoxPathDTSA";
-            textBoxPathDTSA.Size = new Size(138, 23);
+            textBoxPathDTSA.Size = new Size(155, 23);
             textBoxPathDTSA.TabIndex = 0;
             textBoxPathDTSA.Text = "C:\\\\Users\\\\mineral\\\\AppData\\\\Local\\\\NIST\\\\NIST DTSA-II Oberon 2026-01-07";
-            // 
-            // textBoxPathEDX
-            // 
-            textBoxPathEDX.Location = new Point(130, 51);
-            textBoxPathEDX.Name = "textBoxPathEDX";
-            textBoxPathEDX.Size = new Size(138, 23);
-            textBoxPathEDX.TabIndex = 0;
             // 
             // labelPathDTSA
             // 
             labelPathDTSA.AutoSize = true;
-            labelPathDTSA.Location = new Point(5, 80);
+            labelPathDTSA.Location = new Point(3, 12);
             labelPathDTSA.Name = "labelPathDTSA";
             labelPathDTSA.Size = new Size(105, 15);
             labelPathDTSA.TabIndex = 15;
             labelPathDTSA.Text = "DTSA-Ⅱファイルパス";
-            // 
-            // labelPathEDX
-            // 
-            labelPathEDX.AutoSize = true;
-            labelPathEDX.Location = new Point(5, 54);
-            labelPathEDX.Name = "labelPathEDX";
-            labelPathEDX.Size = new Size(110, 15);
-            labelPathEDX.TabIndex = 15;
-            labelPathEDX.Text = "EDXスペクトル出力先";
             // 
             // tabPage7
             // 
@@ -1108,7 +1097,7 @@
             tabPage7.Location = new Point(4, 24);
             tabPage7.Name = "tabPage7";
             tabPage7.Padding = new Padding(3);
-            tabPage7.Size = new Size(626, 103);
+            tabPage7.Size = new Size(641, 103);
             tabPage7.TabIndex = 2;
             tabPage7.Text = "シミュレーション実行設定";
             tabPage7.UseVisualStyleBackColor = true;
@@ -1148,29 +1137,17 @@
             labelExecution_Parallel.TabIndex = 35;
             labelExecution_Parallel.Text = "並列数";
             // 
-            // menuStrip1
+            // panel2
             // 
-            menuStrip1.Items.AddRange(new ToolStripItem[] { optionToolStripMenuItem });
-            menuStrip1.Location = new Point(3, 3);
-            menuStrip1.Name = "menuStrip1";
-            menuStrip1.Size = new Size(1191, 24);
-            menuStrip1.TabIndex = 89;
-            menuStrip1.Text = "menuStrip1";
-            // 
-            // optionToolStripMenuItem
-            // 
-            optionToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { debugModeToolStripMenuItem });
-            optionToolStripMenuItem.Name = "optionToolStripMenuItem";
-            optionToolStripMenuItem.Size = new Size(56, 20);
-            optionToolStripMenuItem.Text = "Option";
-            optionToolStripMenuItem.CheckedChanged += optionToolStripMenuItem_CheckedChanged;
-            // 
-            // debugModeToolStripMenuItem
-            // 
-            debugModeToolStripMenuItem.CheckOnClick = true;
-            debugModeToolStripMenuItem.Name = "debugModeToolStripMenuItem";
-            debugModeToolStripMenuItem.Size = new Size(142, 22);
-            debugModeToolStripMenuItem.Text = "Debug mode";
+            panel2.AutoSize = true;
+            panel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panel2.Controls.Add(label7);
+            panel2.Controls.Add(textBoxModel_Save);
+            panel2.Controls.Add(buttonModel_SaveFolder);
+            panel2.Location = new Point(317, 51);
+            panel2.Name = "panel2";
+            panel2.Size = new Size(303, 37);
+            panel2.TabIndex = 19;
             // 
             // GeneratorForm
             // 
@@ -1179,8 +1156,6 @@
             ClientSize = new Size(1197, 740);
             Controls.Add(ModelTrain);
             Controls.Add(SpectrumGeneration);
-            Controls.Add(menuStrip1);
-            MainMenuStrip = menuStrip1;
             Margin = new Padding(3, 2, 3, 2);
             Name = "GeneratorForm";
             Padding = new Padding(3);
@@ -1200,9 +1175,6 @@
             ModelTrain.ResumeLayout(false);
             groupBox4.ResumeLayout(false);
             groupBox4.PerformLayout();
-            flowLayoutPanel1.ResumeLayout(false);
-            flowLayoutPanel1.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDown5).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_EaryStopping).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_Epochs).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownModel_BatchSize).EndInit();
@@ -1228,13 +1200,18 @@
             tabControl2.ResumeLayout(false);
             tabPage5.ResumeLayout(false);
             tabPage5.PerformLayout();
+            panel4.ResumeLayout(false);
+            panel4.PerformLayout();
+            panelPathEDX.ResumeLayout(false);
+            panelPathEDX.PerformLayout();
+            panelPathDTSA.ResumeLayout(false);
+            panelPathDTSA.PerformLayout();
             tabPage7.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).EndInit();
-            menuStrip1.ResumeLayout(false);
-            menuStrip1.PerformLayout();
+            panel2.ResumeLayout(false);
+            panel2.PerformLayout();
             ResumeLayout(false);
-            PerformLayout();
         }
 
         #endregion
@@ -1275,8 +1252,8 @@
         private TextBox textBoxDetectorName;
         private GroupBox groupBoxModel_LearningData;
         private GroupBox groupBox4;
-        private Label label4;
-        private TextBox textBoxModel_Teacher;
+        private Label labelPathTeacher;
+        private TextBox textBoxPathTeacher;
         private TextBox textBoxModel_Evaluation;
         private Button buttonModel_Save;
         private Label label5;
@@ -1296,17 +1273,10 @@
         private Button buttonMineral_AllDelete;
         private TextBox textBoxMineral_Memo;
         private Label label15;
-        private FlowLayoutPanel flowLayoutPanel1;
-        private Label label16;
-        private NumericUpDown numericUpDown5;
-        private Label label17;
         private Button buttonModel_SaveFolder;
         private Button buttonModel_Teacher;
         private Button buttonMineral_Reset;
         private Label label3;
-        private MenuStrip menuStrip1;
-        private ToolStripMenuItem optionToolStripMenuItem;
-        private ToolStripMenuItem debugModeToolStripMenuItem;
         private Label labelMineral_Target;
         private NumericUpDown numericUpDownMineral_Target;
         private CheckedListBox checkedListBoxTrainMinerals;
@@ -1337,6 +1307,10 @@
         private Label labelExecution_Count;
         private NumericUpDown numericUpDownExecution_Parallel;
         private Label labelExecution_Parallel;
+        private Panel panelPathEDX;
+        private Panel panelPathDTSA;
+        private Panel panel4;
+        private Panel panel2;
     }
 }
 

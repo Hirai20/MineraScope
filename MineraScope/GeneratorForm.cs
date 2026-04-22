@@ -100,11 +100,11 @@ namespace MineraScope
             textBoxPathEDX.Text = Path.Combine(DesktopPath, "TrainingData");
             // 260416Codex: 固定保存先を事前作成し、設定 UI には表示しないようにします。
             Directory.CreateDirectory(PythonScriptOutputPath);
-            textBoxModel_Teacher.Text = Path.Combine(DesktopPath, "TrainingData");
-            if (Directory.Exists(textBoxModel_Teacher.Text))
+            textBoxPathTeacher.Text = Path.Combine(DesktopPath, "TrainingData");
+            if (Directory.Exists(textBoxPathTeacher.Text))
             {
                 // 260416Codex: 教師データ一覧の初期表示は service 経由で統一します。
-                RefreshTrainingMineralList(textBoxModel_Teacher.Text);
+                RefreshTrainingMineralList(textBoxPathTeacher.Text);
             }
 
 
@@ -620,7 +620,7 @@ namespace MineraScope
             {
                 nameof(buttonPathEDX) => textBoxPathEDX,
                 nameof(buttonPathDTSA) => textBoxPathDTSA,
-                nameof(buttonModel_Teacher) => textBoxModel_Teacher,
+                nameof(buttonModel_Teacher) => textBoxPathTeacher,
                 nameof(buttonModel_SaveFolder) => textBoxModel_Save,
                 _ => null
             };
@@ -634,13 +634,13 @@ namespace MineraScope
         // 260416Codex: 教師データ選択も共通 helper を通して後から別 Form へ移しやすくします。
         private void buttonModel_Teacher_Click(object sender, EventArgs e)
         {
-            if (!FolderSelectionHelper.TrySelectFolder(textBoxModel_Teacher))
+            if (!FolderSelectionHelper.TrySelectFolder(textBoxPathTeacher))
             {
                 return;
             }
 
             // 260416Codex: 教師データ一覧の再構築は service 経由で一元化します。
-            RefreshTrainingMineralList(textBoxModel_Teacher.Text);
+            RefreshTrainingMineralList(textBoxPathTeacher.Text);
         }
         #endregion
         #region リストに追加・更新・削除・初期化メソッド

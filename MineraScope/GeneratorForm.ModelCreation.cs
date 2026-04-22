@@ -25,7 +25,7 @@ namespace MineraScope
                     textBoxPathEDX.Text.Trim(),
                     PythonScriptOutputPath,
                     textBoxPathDTSA.Text.Trim(),
-                    textBoxModel_Teacher.Text.Trim(),
+                    textBoxPathTeacher.Text.Trim(),
                     textBoxModel_Save.Text.Trim()),
                 new SemEdxCondition(
                     textBoxDetectorName.Text.Trim(),
