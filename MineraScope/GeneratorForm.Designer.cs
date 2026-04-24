@@ -40,8 +40,7 @@
             numericUpDownMineral_Target = new NumericUpDown();
             textBoxEndmembers_CompositionLists = new TextBox();
             labelMineral_Target = new Label();
-            textBoxMineral_Memo = new TextBox();
-            label15 = new Label();
+            labelMemo = new Label();
             labelMineralInfo_Name = new Label();
             textBoxMineral_Name = new TextBox();
             groupBoxEndmembers = new GroupBox();
@@ -53,6 +52,7 @@
             flowLayoutPanel3 = new FlowLayoutPanel();
             EndmemberControl1 = new EndmemberControl();
             EndmemberControl2 = new EndmemberControl();
+            textBoxMemo = new TextBox();
             buttonAddList = new Button();
             buttonUpdateList = new Button();
             labelCompositionCount = new Label();
@@ -62,6 +62,7 @@
             labelCompositionName = new Label();
             ModelTrain = new GroupBox();
             groupBox4 = new GroupBox();
+            graphControl1 = new Crystallography.Controls.GraphControl();
             numericBoxModel_EarlyStopping = new Crystallography.Controls.NumericBox();
             numericBoxModel_BatchSize = new Crystallography.Controls.NumericBox();
             numericBoxModel_Epochs = new Crystallography.Controls.NumericBox();
@@ -71,8 +72,7 @@
             buttonModel_Train = new Button();
             label5 = new Label();
             groupBoxModel_LearningData = new GroupBox();
-            numericUpDownModel_ValidationSplit = new NumericUpDown();
-            label13 = new Label();
+            numericBoxValidationSplit = new Crystallography.Controls.NumericBox();
             numericBoxProbeCurrent = new Crystallography.Controls.NumericBox();
             numericBoxLiveTime = new Crystallography.Controls.NumericBox();
             buttonModel_SaveFolder = new Button();
@@ -114,6 +114,9 @@
             labelExecution_Count = new Label();
             numericUpDownExecution_Parallel = new NumericUpDown();
             labelExecution_Parallel = new Label();
+            statusStrip1 = new StatusStrip();
+            toolStripProgressBar1 = new ToolStripProgressBar();
+            toolStripStatusLabel1 = new ToolStripStatusLabel();
             ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).BeginInit();
             groupBoxMineralInfo.SuspendLayout();
             groupBox2.SuspendLayout();
@@ -124,8 +127,6 @@
             groupBoxComposition.SuspendLayout();
             ModelTrain.SuspendLayout();
             groupBox4.SuspendLayout();
-            groupBoxModel_LearningData.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_ValidationSplit).BeginInit();
             SpectrumGeneration.SuspendLayout();
             groupBox1.SuspendLayout();
             groupBox5.SuspendLayout();
@@ -142,6 +143,7 @@
             tabPage7.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).BeginInit();
+            statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
             // buttonSpectrumGenerationRun
@@ -178,8 +180,7 @@
             // groupBoxMineralInfo
             // 
             groupBoxMineralInfo.Controls.Add(groupBox2);
-            groupBoxMineralInfo.Controls.Add(textBoxMineral_Memo);
-            groupBoxMineralInfo.Controls.Add(label15);
+            groupBoxMineralInfo.Controls.Add(labelMemo);
             groupBoxMineralInfo.Controls.Add(labelMineralInfo_Name);
             groupBoxMineralInfo.Controls.Add(textBoxMineral_Name);
             groupBoxMineralInfo.Controls.Add(groupBoxEndmembers);
@@ -264,21 +265,14 @@
             labelMineral_Target.TabIndex = 102;
             labelMineral_Target.Text = "シミュレーション数";
             // 
-            // textBoxMineral_Memo
+            // labelMemo
             // 
-            textBoxMineral_Memo.Location = new Point(299, 22);
-            textBoxMineral_Memo.Name = "textBoxMineral_Memo";
-            textBoxMineral_Memo.Size = new Size(120, 23);
-            textBoxMineral_Memo.TabIndex = 94;
-            // 
-            // label15
-            // 
-            label15.AutoSize = true;
-            label15.Location = new Point(253, 24);
-            label15.Name = "label15";
-            label15.Size = new Size(40, 15);
-            label15.TabIndex = 93;
-            label15.Text = "memo";
+            labelMemo.AutoSize = true;
+            labelMemo.Location = new Point(253, 24);
+            labelMemo.Name = "labelMemo";
+            labelMemo.Size = new Size(40, 15);
+            labelMemo.TabIndex = 93;
+            labelMemo.Text = "memo";
             // 
             // labelMineralInfo_Name
             // 
@@ -399,6 +393,13 @@
             EndmemberControl2.Size = new Size(260, 23);
             EndmemberControl2.TabIndex = 88;
             // 
+            // textBoxMemo
+            // 
+            textBoxMemo.Location = new Point(299, 22);
+            textBoxMemo.Name = "textBoxMemo";
+            textBoxMemo.Size = new Size(120, 23);
+            textBoxMemo.TabIndex = 94;
+            // 
             // buttonAddList
             // 
             buttonAddList.AutoSize = true;
@@ -490,6 +491,8 @@
             // 
             // groupBox4
             // 
+            groupBox4.Controls.Add(numericBoxValidationSplit);
+            groupBox4.Controls.Add(graphControl1);
             groupBox4.Controls.Add(numericBoxModel_EarlyStopping);
             groupBox4.Controls.Add(numericBoxModel_BatchSize);
             groupBox4.Controls.Add(numericBoxModel_Epochs);
@@ -504,6 +507,55 @@
             groupBox4.TabIndex = 43;
             groupBox4.TabStop = false;
             groupBox4.Text = "モデル訓練";
+            // 
+            // graphControl1
+            // 
+            graphControl1.AllowMouseOperation = true;
+            graphControl1.AxisLineColor = Color.Gray;
+            graphControl1.AxisTextColor = Color.Black;
+            graphControl1.AxisTextFont = new Font("Segoe UI", 9F);
+            graphControl1.AxisXTextVisible = true;
+            graphControl1.AxisYTextVisible = true;
+            graphControl1.BackgroundColor = Color.White;
+            graphControl1.BottomMargin = 0D;
+            graphControl1.DivisionLineColor = Color.LightGray;
+            graphControl1.DivisionLineXVisible = true;
+            graphControl1.DivisionLineYVisible = true;
+            graphControl1.FixRangeHorizontal = false;
+            graphControl1.FixRangeVertical = false;
+            graphControl1.Font = new Font("Segoe UI Symbol", 9F);
+            graphControl1.GraphTitle = "";
+            graphControl1.IsIntegerX = false;
+            graphControl1.IsIntegerY = false;
+            graphControl1.LabelX = "X:";
+            graphControl1.LabelY = "Y:";
+            graphControl1.LeftMargin = 0F;
+            graphControl1.LineWidth = 1F;
+            graphControl1.Location = new Point(133, 400);
+            graphControl1.LowerX = 0D;
+            graphControl1.LowerY = 0D;
+            graphControl1.MaximalX = 1D;
+            graphControl1.MaximalY = 1D;
+            graphControl1.MinimalX = 0D;
+            graphControl1.MinimalY = 0D;
+            graphControl1.Mode = Crystallography.Controls.GraphControl.DrawingMode.Line;
+            graphControl1.MousePositionVisible = true;
+            graphControl1.MousePositionXDigit = -1;
+            graphControl1.MousePositionYDigit = -1;
+            graphControl1.Name = "graphControl1";
+            graphControl1.OriginPosition = new Point(40, 20);
+            graphControl1.Size = new Size(230, 131);
+            graphControl1.TabIndex = 107;
+            graphControl1.UnitX = "";
+            graphControl1.UnitY = "";
+            graphControl1.UpperPanelFont = new Font("Segoe UI Symbol", 9F);
+            graphControl1.UpperPanelVisible = true;
+            graphControl1.UpperX = 1D;
+            graphControl1.UpperY = 1D;
+            graphControl1.UseLineWidth = true;
+            graphControl1.VerticalLineColor = Color.Red;
+            graphControl1.XLog = false;
+            graphControl1.YLog = false;
             // 
             // numericBoxModel_EarlyStopping
             // 
@@ -596,7 +648,7 @@
             // 
             // textBoxModel_Evaluation
             // 
-            textBoxModel_Evaluation.Location = new Point(27, 247);
+            textBoxModel_Evaluation.Location = new Point(19, 247);
             textBoxModel_Evaluation.Multiline = true;
             textBoxModel_Evaluation.Name = "textBoxModel_Evaluation";
             textBoxModel_Evaluation.ScrollBars = ScrollBars.Both;
@@ -625,8 +677,6 @@
             // 
             // groupBoxModel_LearningData
             // 
-            groupBoxModel_LearningData.Controls.Add(numericUpDownModel_ValidationSplit);
-            groupBoxModel_LearningData.Controls.Add(label13);
             groupBoxModel_LearningData.Location = new Point(13, 31);
             groupBoxModel_LearningData.Name = "groupBoxModel_LearningData";
             groupBoxModel_LearningData.Size = new Size(510, 97);
@@ -634,23 +684,28 @@
             groupBoxModel_LearningData.TabStop = false;
             groupBoxModel_LearningData.Text = "学習データ設定";
             // 
-            // numericUpDownModel_ValidationSplit
+            // numericBoxValidationSplit
             // 
-            numericUpDownModel_ValidationSplit.Location = new Point(161, 68);
-            numericUpDownModel_ValidationSplit.Name = "numericUpDownModel_ValidationSplit";
-            numericUpDownModel_ValidationSplit.Size = new Size(42, 23);
-            numericUpDownModel_ValidationSplit.TabIndex = 93;
-            numericUpDownModel_ValidationSplit.Value = new decimal(new int[] { 20, 0, 0, 0 });
-            // 
-            // label13
-            // 
-            label13.AutoSize = true;
-            label13.Location = new Point(19, 74);
-            label13.Margin = new Padding(2, 0, 2, 0);
-            label13.Name = "label13";
-            label13.Size = new Size(111, 15);
-            label13.TabIndex = 30;
-            label13.Text = "テストデータの割合(%)";
+            numericBoxValidationSplit.BackColor = Color.Transparent;
+            numericBoxValidationSplit.DecimalPlaces = 0;
+            numericBoxValidationSplit.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.HeaderText = "テストデータの割合(%)";
+            numericBoxValidationSplit.Location = new Point(229, 170);
+            numericBoxValidationSplit.Margin = new Padding(0);
+            numericBoxValidationSplit.Maximum = 100000D;
+            numericBoxValidationSplit.MaximumSize = new Size(1000, 28);
+            numericBoxValidationSplit.Minimum = 1D;
+            numericBoxValidationSplit.MinimumSize = new Size(1, 18);
+            numericBoxValidationSplit.Name = "numericBoxValidationSplit";
+            numericBoxValidationSplit.RadianValue = 0.3490658503988659D;
+            numericBoxValidationSplit.ShowUpDown = true;
+            numericBoxValidationSplit.Size = new Size(161, 26);
+            numericBoxValidationSplit.SmartIncrement = true;
+            numericBoxValidationSplit.TabIndex = 93;
+            numericBoxValidationSplit.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.Value = 20D;
             // 
             // numericBoxProbeCurrent
             // 
@@ -775,7 +830,7 @@
             SpectrumGeneration.Dock = DockStyle.Left;
             SpectrumGeneration.Location = new Point(3, 3);
             SpectrumGeneration.Name = "SpectrumGeneration";
-            SpectrumGeneration.Size = new Size(661, 734);
+            SpectrumGeneration.Size = new Size(661, 725);
             SpectrumGeneration.TabIndex = 88;
             SpectrumGeneration.TabStop = false;
             SpectrumGeneration.Text = "EDXスペクトル生成";
@@ -1143,16 +1198,38 @@
             labelExecution_Parallel.TabIndex = 35;
             labelExecution_Parallel.Text = "並列数";
             // 
+            // statusStrip1
+            // 
+            statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripProgressBar1, toolStripStatusLabel1 });
+            statusStrip1.Location = new Point(3, 728);
+            statusStrip1.Name = "statusStrip1";
+            statusStrip1.Size = new Size(1191, 22);
+            statusStrip1.TabIndex = 89;
+            statusStrip1.Text = "statusStrip1";
+            // 
+            // toolStripProgressBar1
+            // 
+            toolStripProgressBar1.Name = "toolStripProgressBar1";
+            toolStripProgressBar1.Size = new Size(100, 16);
+            // 
+            // toolStripStatusLabel1
+            // 
+            toolStripStatusLabel1.Name = "toolStripStatusLabel1";
+            toolStripStatusLabel1.Size = new Size(118, 17);
+            toolStripStatusLabel1.Text = "toolStripStatusLabel1";
+            // 
             // GeneratorForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1197, 740);
+            ClientSize = new Size(1197, 753);
             Controls.Add(ModelTrain);
             Controls.Add(SpectrumGeneration);
+            Controls.Add(statusStrip1);
             Margin = new Padding(3, 2, 3, 2);
             Name = "GeneratorForm";
             Padding = new Padding(3);
+            FormClosing += GeneratorForm_FormClosing;
             ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).EndInit();
             groupBoxMineralInfo.ResumeLayout(false);
             groupBoxMineralInfo.PerformLayout();
@@ -1169,9 +1246,6 @@
             ModelTrain.ResumeLayout(false);
             groupBox4.ResumeLayout(false);
             groupBox4.PerformLayout();
-            groupBoxModel_LearningData.ResumeLayout(false);
-            groupBoxModel_LearningData.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownModel_ValidationSplit).EndInit();
             SpectrumGeneration.ResumeLayout(false);
             SpectrumGeneration.PerformLayout();
             groupBox1.ResumeLayout(false);
@@ -1199,7 +1273,10 @@
             tabPage7.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).EndInit();
             ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).EndInit();
+            statusStrip1.ResumeLayout(false);
+            statusStrip1.PerformLayout();
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
@@ -1244,15 +1321,12 @@
         private Button buttonModel_Train;
         private TextBox textBoxModelPath;
         private Label label7;
-        private Label label13;
-        // 260416Codex: モデル訓練設定は NumericBox 群に置き換えます。
-        private NumericUpDown numericUpDownModel_ValidationSplit;
         private Button buttonEndmember_Add;
         private Button buttonEndmember_Delete;
         private Button buttonUpdateList;
         private Button buttonAllDelete;
-        private TextBox textBoxMineral_Memo;
-        private Label label15;
+        private TextBox textBoxMemo;
+        private Label labelMemo;
         private Button buttonModel_SaveFolder;
         private Button buttonModel_Teacher;
         private Button buttonReset;
@@ -1294,6 +1368,11 @@
         private Crystallography.Controls.NumericBox numericBoxLiveTime;
         private Crystallography.Controls.NumericBox numericBoxBeamEnergy;
         private Crystallography.Controls.NumericBox numericBoxCarbonThickness;
+        private StatusStrip statusStrip1;
+        private ToolStripProgressBar toolStripProgressBar1;
+        private ToolStripStatusLabel toolStripStatusLabel1;
+        private Crystallography.Controls.GraphControl graphControl1;
+        private Crystallography.Controls.NumericBox numericBoxValidationSplit;
     }
 }
 

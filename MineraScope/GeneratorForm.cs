@@ -68,6 +68,10 @@ namespace MineraScope
     // 260416Codex: 生成系の責務が伝わるように Form 名を GeneratorForm へ変更します。
     public partial class GeneratorForm : Form
     {
+
+        // 260416Codex: 親フォーム参照名を FormMain に統一します。
+        public FormMain FormMain;
+
         private readonly List<EndmemberControl> endmemberControls = [];
         private readonly DeepLearning _deepLearning;
         // 260416Codex: 鉱物 DB の入出力を repository に寄せ、Form の責務を UI 側へ戻していきます。
@@ -113,7 +117,7 @@ namespace MineraScope
                 RefreshTrainingMineralList(textBoxPathTeacher.Text);
             }
 
-
+            
 
 
             //var fs1 = new FileStream(AssemblyPath + "\\MineralDatabase.xml", FileMode.Create);
@@ -131,6 +135,12 @@ namespace MineraScope
             labelEndmembers_Resolution.Visible = false;
             numericUpDownEndmembers_Resolution.Visible = false;
 #endif
+
+
+            Profile profile = new Profile();
+            profile.Pt = [new PointD(0, 1), new PointD(1, 1), new PointD(2, 3), new PointD(3, 1), new PointD(4, 2)];
+            graphControl1.Profile = profile;
+
 
         }
 
@@ -331,11 +341,11 @@ namespace MineraScope
                 textBoxEndmembers_Constraints.Text = "";
                 textBoxEndmembers_CompositionLists.Text = "";
                 textBoxMineral_Name.Text = "";
-                textBoxMineral_Memo.Text = "";
+                textBoxMemo.Text = "";
                 return;
             }
             textBoxMineral_Name.Text = selectedSolution.Name;
-            textBoxMineral_Memo.Text = selectedSolution.Formula;
+            textBoxMemo.Text = selectedSolution.Formula;
 
             // 条件式を表示
             textBoxEndmembers_Constraints.Text = selectedSolution.Constraints.Length > 0
@@ -391,18 +401,52 @@ namespace MineraScope
 
             solution = new SolidSolution(
                 textBoxMineral_Name.Text.Trim(),
-                textBoxMineral_Memo.Text.Trim(),
+                textBoxMemo.Text.Trim(),
                 members,
                 ParseConstraints());
             return true;
         }
 
+        // 260416Codex: 組成数表示と詳細表示の再描画を 1 メソッドにまとめて再利用しやすくします。
         private void RefreshCompositionViews()
         {
             UpdateCompositionCount();
             UpdateSelectedSolution();
         }
 
+        // 260416Codex: BeginInvoke で行う一覧再計算を helper 化し、イベント側の重複を減らします。
+        private void BeginInvokeMineralSelectionRefresh()
+        {
+            BeginInvoke(new Action(() =>
+            {
+                RefreshCompositionViews();
+                SyncTrainingSelectionFromSelectedMinerals();
+            }));
+        }
+
+        // 260416Codex: 永続化後の再バインド手順を 1 か所に寄せて追加・更新・削除を揃えます。
+        private void SaveAndBindSolutions(SolidSolution[] solutions, bool clearSelection = true)
+        {
+            SaveSolidSolutions(solutions);
+            BindMineralSolutions(solutions, clearSelection);
+        }
+
+        // 260416Codex: 学習候補の全選択・全解除を helper 化してボタンイベントを短く保ちます。
+        private static void SetCheckedStateForAllItems(CheckedListBox listBox, bool isChecked)
+        {
+            listBox.BeginUpdate();
+            try
+            {
+                for (int i = 0; i < listBox.Items.Count; i++)
+                {
+                    listBox.SetItemChecked(i, isChecked);
+                }
+            }
+            finally
+            {
+                listBox.EndUpdate();
+            }
+        }
 
         private void numericUpDownSolidSolution_Resolution_ValueChanged(object sender, EventArgs e)
         {
@@ -412,12 +456,8 @@ namespace MineraScope
         // 260416Codex: ItemCheck 後の再計算をメソッドグループで簡潔にする
         private void checkedListBoxMineral_ItemCheck(object sender, ItemCheckEventArgs e)
         {
-            // 260416Codex: 生成側のチェック変更後に学習候補への同期もまとめて走らせます。
-            BeginInvoke(new Action(() =>
-            {
-                UpdateCompositionCount();
-                SyncTrainingSelectionFromSelectedMinerals();
-            }));
+            // 260416Codex: 生成側のチェック変更後に関連する UI 更新をまとめて遅延実行します。
+            BeginInvokeMineralSelectionRefresh();
         }
 
         private void checkedListBoxMineral_SelectedIndexChanged(object sender, EventArgs e)
@@ -471,12 +511,12 @@ namespace MineraScope
             if (!TryCreateSolutionFromInputs(out var newSolution))
                 return;
 
-            var updatedSolutions = LoadSolidSolutions()
+            // 260416Codex: 保存と再バインドは共通 helper に寄せ、追加処理の本筋だけを残します。
+            SaveAndBindSolutions(
+                LoadSolidSolutions()
                 .Append(newSolution)
-                .ToArray();
-
-            SaveSolidSolutions(updatedSolutions);
-            BindMineralSolutions(updatedSolutions, clearSelection: false);
+                .ToArray(),
+                clearSelection: false);
         }
         #endregion
         #region 更新メソッド
@@ -491,27 +531,25 @@ namespace MineraScope
             var existingSolutions = LoadSolidSolutions();
             existingSolutions[selectedIndex] = updatedSolution;
 
-            SaveSolidSolutions(existingSolutions);
-            BindMineralSolutions(existingSolutions);
+            // 260416Codex: 更新後の永続化と再表示も共通 helper へ寄せます。
+            SaveAndBindSolutions(existingSolutions);
         }
         #endregion
         #region 削除メソッド
+        // 260416Codex: 削除後の保存と再バインドも共通 helper を使って読みやすくします。
         private void buttonMineral_Delete_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMineral.SelectedIndex;
-            var updatedSolutions = LoadSolidSolutions()
+            SaveAndBindSolutions(
+                LoadSolidSolutions()
                 .Where((_, index) => index != selectedIndex)
-                .ToArray();
-
-            SaveSolidSolutions(updatedSolutions);
-            BindMineralSolutions(updatedSolutions);
+                .ToArray());
         }
         //全削除メソッド
         private void buttonMineral_AllDelete_Click(object sender, EventArgs e)
         {
-            SaveSolidSolutions([]);
-            checkedListBoxMineral.DataSource = null;
-            checkedListBoxMineral.Items.Clear();
+            // 260416Codex: 全削除時も共通 helper を通し、一覧クリアの手順を統一します。
+            SaveAndBindSolutions([]);
         }
         #endregion
         #region 初期化メソッド
@@ -519,6 +557,7 @@ namespace MineraScope
         {
             // 260416Codex: DB 初期化のファイル操作は repository に閉じ込めます。
             _mineralDatabaseRepository.Reset();
+            // 260416Codex: Reset 後は再保存せず、読み直した内容をそのまま再表示します。
             BindMineralSolutions(LoadSolidSolutions());
         }
         #endregion
@@ -569,27 +608,26 @@ namespace MineraScope
         {
             var targetList = checkedListBoxTrainMinerals;
 
-            if (targetList.Items.Count == 0) return;
-
-            // 現在「すべてチェックされているか」を確認
-            bool isAllChecked = (targetList.CheckedItems.Count == targetList.Items.Count);
-
-            // すべてチェック済みなら「全解除(false)」、そうでなければ「全選択(true)」にする
-            bool newState = !isAllChecked;
-
-            targetList.BeginUpdate();
-
-            for (int i = 0; i < targetList.Items.Count; i++)
+            if (targetList.Items.Count == 0)
             {
-                targetList.SetItemChecked(i, newState);
+                return;
             }
 
-            targetList.EndUpdate();
+            // 260416Codex: 現在状態から次の一括チェック状態を決め、反映処理は helper に委譲します。
+            bool newState = targetList.CheckedItems.Count != targetList.Items.Count;
+            SetCheckedStateForAllItems(targetList, newState);
         }
 
         private void numericUpDownMineral_Target_ValueChanged(object sender, EventArgs e)
         {
             BeginInvoke(RefreshCompositionViews);
+        }
+
+        private void GeneratorForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // 260416Codex: 閉じる操作は破棄せず非表示にするだけなので未使用のローカルを削除します。
+            e.Cancel = true;
+            Visible = false;
         }
     }
 }

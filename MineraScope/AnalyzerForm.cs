@@ -7,6 +7,10 @@ namespace MineraScope
 {
     public partial class AnalyzerForm : Form
     {
+        // 260416Codex: 親フォーム参照名を FormMain に統一します。
+        public FormMain FormMain;
+
+
         // 260416Codex: AnalyzerForm の UI 配線をフォーム本体にまとめて保守しやすくします。
         public AnalyzerForm()
         {
@@ -87,5 +91,19 @@ namespace MineraScope
             }
         }
 
+        private void groupBoxModelFolder_VisibleChanged(object sender, EventArgs e)
+        {
+            if (this.Visible)
+            {
+
+            }
+        }
+
+        private void AnalyzerForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            var str = FormMain.ModelPath;
+            e.Cancel = true;
+            this.Visible = false;
+        }
     }
 }
