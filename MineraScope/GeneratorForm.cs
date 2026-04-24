@@ -93,6 +93,31 @@ namespace MineraScope
             "MineraScope",
             "PythonScripts");
 
+        // 260424Codex: 親フォーム未接続時にも処理できるよう、教師データ既定フォルダを保持します。
+        private string DefaultTrainingDataPath => Path.Combine(DesktopPath, "TrainingData");
+
+        // 260424Codex: EDX 出力先は FormMain の共通ファイル設定から参照します。
+        private string EdxOutputPath => FormMain?.EdxOutputPath ?? DefaultTrainingDataPath;
+
+        // 260424Codex: 教師データパスは EDX 出力先と同じ値に統一します。
+        private string TeacherDataPath => FormMain?.TeacherDataPath ?? DefaultTrainingDataPath;
+
+        // 260424Codex: DTSA-II パスも FormMain の共通ファイル設定から参照します。
+        private string DtsaPath => FormMain?.DtsaPath ?? string.Empty;
+
+        // 260424Codex: モデル保存先は FormMain の共通ファイル設定へ読み書きします。
+        private string ModelOutputPath
+        {
+            get => FormMain?.ModelPath ?? string.Empty;
+            set
+            {
+                if (FormMain is not null)
+                {
+                    FormMain.ModelPath = value;
+                }
+            }
+        }
+
         // 260416Codex: クラス名リネームに合わせてコンストラクタ名も更新します。
         public GeneratorForm()
         {
@@ -107,15 +132,10 @@ namespace MineraScope
             _simulationPlanBuilder = new();
             // 260416Codex: スクリプト生成と外部実行は専用 service へまとめ、Form から I/O 詳細を隠します。
             _simulationExecutionService = new(new SimulationScriptGenerator());
-            textBoxPathEDX.Text = Path.Combine(DesktopPath, "TrainingData");
             // 260416Codex: 固定保存先を事前作成し、設定 UI には表示しないようにします。
             Directory.CreateDirectory(PythonScriptOutputPath);
-            textBoxPathTeacher.Text = Path.Combine(DesktopPath, "TrainingData");
-            if (Directory.Exists(textBoxPathTeacher.Text))
-            {
-                // 260416Codex: 教師データ一覧の初期表示は service 経由で統一します。
-                RefreshTrainingMineralList(textBoxPathTeacher.Text);
-            }
+            // 260424Codex: 教師データ一覧は FormMain の EDX/教師データパスから初期表示します。
+            RefreshTrainingMineralListFromMain();
 
             
 
@@ -176,6 +196,99 @@ namespace MineraScope
 
         private static T[] GetCheckedItems<T>(CheckedListBox listBox) =>
             listBox.CheckedItems.Cast<T>().ToArray();
+
+        // 260424Codex: UI のチェック状態を読む処理はフォーム本体に置き、参照元を追いやすくします。
+        private static string[] GetCheckedStrings(CheckedListBox listBox) =>
+            listBox.CheckedItems
+                .Cast<object>()
+                .Select(item => item?.ToString())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Cast<string>()
+                .ToArray();
+
+        // 260424Codex: 生成側の UI 選択をフォーム内で集約し、学習候補との同期に使います。
+        private HashSet<string> GetSelectedGeneratorMineralNames() =>
+            new(
+                GetCheckedItems<SolidSolution>(checkedListBoxMineral).Select(solution => solution.Name),
+                StringComparer.OrdinalIgnoreCase);
+
+        // 260424Codex: CheckedListBox の項目入れ替えは UI 更新 helper としてフォーム本体にまとめます。
+        private static void ReplaceItems(CheckedListBox listBox, IEnumerable<string> items)
+        {
+            listBox.Items.Clear();
+            listBox.Items.AddRange(items.Cast<object>().ToArray());
+        }
+
+        // 260424Codex: 名前集合に基づくチェック反映も UI 状態操作としてフォーム側に残します。
+        private static void SetCheckedStates(CheckedListBox listBox, ISet<string> checkedNames)
+        {
+            for (int i = 0; i < listBox.Items.Count; i++)
+            {
+                // 260424Codex: auto-generated 扱いのファイルでも nullable 注釈警告が増えない形で空値を扱います。
+                string itemName = listBox.Items[i]?.ToString() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(itemName))
+                {
+                    continue;
+                }
+
+                listBox.SetItemChecked(i, checkedNames.Contains(itemName));
+            }
+        }
+
+        // 260424Codex: 画面入力の読み取りは partial に逃がさず、フォーム本体で request に変換します。
+        private ModelCreationRequest CreateModelCreationRequest() =>
+            new(
+                // 260424Codex: Python スクリプトの保存先は固定パスへ集約した値を使います。
+                new ModelCreationPaths(
+                    EdxOutputPath.Trim(),
+                    PythonScriptOutputPath,
+                    DtsaPath.Trim(),
+                    TeacherDataPath.Trim(),
+                    ModelOutputPath.Trim()),
+                new SemEdxCondition(
+                    textBoxDetectorName.Text.Trim(),
+                    numericBoxCarbonThickness.Value,
+                    numericBoxBeamEnergy.Value,
+                    numericBoxLiveTime.Value,
+                    numericBoxProbeCurrent.Value),
+                new SimulationExecutionSettings(
+                    (int)numericUpDownMineral_Target.Value,
+                    (double)numericUpDownEndmembers_Resolution.Value / 100,
+                    (int)numericBoxCount.Value,
+                    (int)numericBoxParallel.Value),
+                new ModelTrainingSettings(
+                    (int)numericBoxModel_Epochs.Value,
+                    (int)numericBoxModel_BatchSize.Value,
+                    (int)numericBoxModel_EarlyStopping.Value,
+                    (float)numericBoxValidationSplit.Value / 100f),
+                GetCheckedItems<SolidSolution>(checkedListBoxMineral),
+                GetCheckedStrings(checkedListBoxTrainMinerals));
+
+        // 260424Codex: 教師データ一覧の再構築は UI リスト操作なのでフォーム本体に置きます。
+        private void RefreshTrainingMineralList(string trainingPath)
+        {
+            HashSet<string> checkedNames = new(GetCheckedStrings(checkedListBoxTrainMinerals), StringComparer.OrdinalIgnoreCase);
+            checkedNames.UnionWith(GetSelectedGeneratorMineralNames());
+
+            checkedListBoxTrainMinerals.BeginUpdate();
+            try
+            {
+                ReplaceItems(checkedListBoxTrainMinerals, _trainingDataScanner.Scan(trainingPath));
+                SetCheckedStates(checkedListBoxTrainMinerals, checkedNames);
+            }
+            finally
+            {
+                checkedListBoxTrainMinerals.EndUpdate();
+            }
+        }
+
+        // 260424Codex: 生成側の選択を学習候補へ反映する UI 同期もフォーム本体で追えるようにします。
+        private void SyncTrainingSelectionFromSelectedMinerals()
+        {
+            HashSet<string> checkedNames = new(GetCheckedStrings(checkedListBoxTrainMinerals), StringComparer.OrdinalIgnoreCase);
+            checkedNames.UnionWith(GetSelectedGeneratorMineralNames());
+            SetCheckedStates(checkedListBoxTrainMinerals, checkedNames);
+        }
 
         // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
         private async void buttonSpectrumGenerationRun_Click(object sender, EventArgs e)
@@ -466,42 +579,14 @@ namespace MineraScope
             UpdateSelectedSolution();
         }
 
-        #region フォルダ選択ダイアログ
-        // 260416Codex: GeneratorForm 固有のボタン名と共通フォルダ選択 helper をつなぐ役目だけに絞ります。
-        private void buttonFolderBrowserDialog_Click(object sender, EventArgs e)
+        // 260424Codex: FormMain に移した教師データパスから学習候補一覧を更新します。
+        public void RefreshTrainingMineralListFromMain()
         {
-            if (sender is not Button button)
+            if (Directory.Exists(TeacherDataPath))
             {
-                return;
-            }
-
-            var targetTextBox = button.Name switch
-            {
-                nameof(buttonPathEDX) => textBoxPathEDX,
-                nameof(buttonPathDTSA) => textBoxPathDTSA,
-                nameof(buttonModel_Teacher) => textBoxPathTeacher,
-                nameof(buttonModel_SaveFolder) => textBoxModelPath,
-                _ => null
-            };
-
-            if (targetTextBox is not null)
-            {
-                FolderSelectionHelper.TrySelectFolder(targetTextBox);
+                RefreshTrainingMineralList(TeacherDataPath);
             }
         }
-
-        // 260416Codex: 教師データ選択も共通 helper を通して後から別 Form へ移しやすくします。
-        private void buttonModel_Teacher_Click(object sender, EventArgs e)
-        {
-            if (!FolderSelectionHelper.TrySelectFolder(textBoxPathTeacher))
-            {
-                return;
-            }
-
-            // 260416Codex: 教師データ一覧の再構築は service 経由で一元化します。
-            RefreshTrainingMineralList(textBoxPathTeacher.Text);
-        }
-        #endregion
         #region リストに追加・更新・削除・初期化メソッド
         #region 追加メソッド
         // 260416Codex: 追加時の入力変換を helper ベースに統一
@@ -586,8 +671,8 @@ namespace MineraScope
                 return;
             }
 
-            // 260416Codex: 既定保存先へ解決された結果を UI にも反映し、実行後の保存先が見える状態にします。
-            textBoxModelPath.Text = trainingPlan.ModelOutputFolder;
+            // 260424Codex: 既定保存先へ解決された結果を FormMain の共通パスへ反映します。
+            ModelOutputPath = trainingPlan.ModelOutputFolder;
 
             //  UIロックとログクリア
             buttonModel_Train.Enabled = false;

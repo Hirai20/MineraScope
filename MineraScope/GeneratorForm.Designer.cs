@@ -62,6 +62,7 @@
             labelCompositionName = new Label();
             ModelTrain = new GroupBox();
             groupBox4 = new GroupBox();
+            numericBoxValidationSplit = new Crystallography.Controls.NumericBox();
             graphControl1 = new Crystallography.Controls.GraphControl();
             numericBoxModel_EarlyStopping = new Crystallography.Controls.NumericBox();
             numericBoxModel_BatchSize = new Crystallography.Controls.NumericBox();
@@ -72,18 +73,13 @@
             buttonModel_Train = new Button();
             label5 = new Label();
             groupBoxModel_LearningData = new GroupBox();
-            numericBoxValidationSplit = new Crystallography.Controls.NumericBox();
             numericBoxProbeCurrent = new Crystallography.Controls.NumericBox();
             numericBoxLiveTime = new Crystallography.Controls.NumericBox();
-            buttonModel_SaveFolder = new Button();
-            label7 = new Label();
-            textBoxModelPath = new TextBox();
-            labelPathTeacher = new Label();
-            buttonModel_Teacher = new Button();
-            textBoxPathTeacher = new TextBox();
             buttonDelete = new Button();
             SpectrumGeneration = new GroupBox();
             groupBox1 = new GroupBox();
+            numericBoxCount = new Crystallography.Controls.NumericBox();
+            numericBoxParallel = new Crystallography.Controls.NumericBox();
             numericBoxCarbonThickness = new Crystallography.Controls.NumericBox();
             groupBox5 = new GroupBox();
             label2 = new Label();
@@ -96,24 +92,6 @@
             buttonAllDelete = new Button();
             buttonReset = new Button();
             checkBox1 = new CheckBox();
-            tabControl2 = new TabControl();
-            tabPage5 = new TabPage();
-            flowLayoutPanel1 = new FlowLayoutPanel();
-            panel2 = new Panel();
-            panel4 = new Panel();
-            panelPathEDX = new Panel();
-            labelPathEDX = new Label();
-            textBoxPathEDX = new TextBox();
-            buttonPathDTSA = new Button();
-            panelPathDTSA = new Panel();
-            buttonPathEDX = new Button();
-            textBoxPathDTSA = new TextBox();
-            labelPathDTSA = new Label();
-            tabPage7 = new TabPage();
-            numericUpDownExecution_Count = new NumericUpDown();
-            labelExecution_Count = new Label();
-            numericUpDownExecution_Parallel = new NumericUpDown();
-            labelExecution_Parallel = new Label();
             statusStrip1 = new StatusStrip();
             toolStripProgressBar1 = new ToolStripProgressBar();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
@@ -133,16 +111,6 @@
             groupBoxMineral.SuspendLayout();
             flowLayoutPanel4.SuspendLayout();
             flowLayoutPanel2.SuspendLayout();
-            tabControl2.SuspendLayout();
-            tabPage5.SuspendLayout();
-            flowLayoutPanel1.SuspendLayout();
-            panel2.SuspendLayout();
-            panel4.SuspendLayout();
-            panelPathEDX.SuspendLayout();
-            panelPathDTSA.SuspendLayout();
-            tabPage7.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).BeginInit();
             statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
@@ -508,6 +476,29 @@
             groupBox4.TabStop = false;
             groupBox4.Text = "モデル訓練";
             // 
+            // numericBoxValidationSplit
+            // 
+            numericBoxValidationSplit.BackColor = Color.Transparent;
+            numericBoxValidationSplit.DecimalPlaces = 0;
+            numericBoxValidationSplit.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.HeaderText = "テストデータの割合(%)";
+            numericBoxValidationSplit.Location = new Point(229, 170);
+            numericBoxValidationSplit.Margin = new Padding(0);
+            numericBoxValidationSplit.Maximum = 100000D;
+            numericBoxValidationSplit.MaximumSize = new Size(1000, 28);
+            numericBoxValidationSplit.Minimum = 1D;
+            numericBoxValidationSplit.MinimumSize = new Size(1, 18);
+            numericBoxValidationSplit.Name = "numericBoxValidationSplit";
+            numericBoxValidationSplit.RadianValue = 0.3490658503988659D;
+            numericBoxValidationSplit.ShowUpDown = true;
+            numericBoxValidationSplit.Size = new Size(161, 26);
+            numericBoxValidationSplit.SmartIncrement = true;
+            numericBoxValidationSplit.TabIndex = 93;
+            numericBoxValidationSplit.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.Value = 20D;
+            // 
             // graphControl1
             // 
             graphControl1.AllowMouseOperation = true;
@@ -684,29 +675,6 @@
             groupBoxModel_LearningData.TabStop = false;
             groupBoxModel_LearningData.Text = "学習データ設定";
             // 
-            // numericBoxValidationSplit
-            // 
-            numericBoxValidationSplit.BackColor = Color.Transparent;
-            numericBoxValidationSplit.DecimalPlaces = 0;
-            numericBoxValidationSplit.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxValidationSplit.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxValidationSplit.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxValidationSplit.HeaderText = "テストデータの割合(%)";
-            numericBoxValidationSplit.Location = new Point(229, 170);
-            numericBoxValidationSplit.Margin = new Padding(0);
-            numericBoxValidationSplit.Maximum = 100000D;
-            numericBoxValidationSplit.MaximumSize = new Size(1000, 28);
-            numericBoxValidationSplit.Minimum = 1D;
-            numericBoxValidationSplit.MinimumSize = new Size(1, 18);
-            numericBoxValidationSplit.Name = "numericBoxValidationSplit";
-            numericBoxValidationSplit.RadianValue = 0.3490658503988659D;
-            numericBoxValidationSplit.ShowUpDown = true;
-            numericBoxValidationSplit.Size = new Size(161, 26);
-            numericBoxValidationSplit.SmartIncrement = true;
-            numericBoxValidationSplit.TabIndex = 93;
-            numericBoxValidationSplit.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxValidationSplit.Value = 20D;
-            // 
             // numericBoxProbeCurrent
             // 
             numericBoxProbeCurrent.BackColor = Color.Transparent;
@@ -750,62 +718,6 @@
             numericBoxLiveTime.TextFont = new Font("Yu Gothic UI", 9F);
             numericBoxLiveTime.Value = 120D;
             // 
-            // buttonModel_SaveFolder
-            // 
-            buttonModel_SaveFolder.AutoSize = true;
-            buttonModel_SaveFolder.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonModel_SaveFolder.Location = new Point(275, 5);
-            buttonModel_SaveFolder.Name = "buttonModel_SaveFolder";
-            buttonModel_SaveFolder.Size = new Size(26, 25);
-            buttonModel_SaveFolder.TabIndex = 1;
-            buttonModel_SaveFolder.Text = "...";
-            buttonModel_SaveFolder.UseVisualStyleBackColor = true;
-            buttonModel_SaveFolder.Click += buttonFolderBrowserDialog_Click;
-            // 
-            // label7
-            // 
-            label7.AutoSize = true;
-            label7.Location = new Point(12, 10);
-            label7.Name = "label7";
-            label7.Size = new Size(81, 15);
-            label7.TabIndex = 24;
-            label7.Text = "モデルの保存先";
-            // 
-            // textBoxModelPath
-            // 
-            textBoxModelPath.Location = new Point(115, 10);
-            textBoxModelPath.Name = "textBoxModelPath";
-            textBoxModelPath.Size = new Size(155, 23);
-            textBoxModelPath.TabIndex = 23;
-            // 
-            // labelPathTeacher
-            // 
-            labelPathTeacher.AutoSize = true;
-            labelPathTeacher.Location = new Point(23, 10);
-            labelPathTeacher.Name = "labelPathTeacher";
-            labelPathTeacher.Size = new Size(57, 15);
-            labelPathTeacher.TabIndex = 2;
-            labelPathTeacher.Text = "教師データ";
-            // 
-            // buttonModel_Teacher
-            // 
-            buttonModel_Teacher.AutoSize = true;
-            buttonModel_Teacher.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonModel_Teacher.Location = new Point(275, 5);
-            buttonModel_Teacher.Name = "buttonModel_Teacher";
-            buttonModel_Teacher.Size = new Size(26, 25);
-            buttonModel_Teacher.TabIndex = 1;
-            buttonModel_Teacher.Text = "...";
-            buttonModel_Teacher.UseVisualStyleBackColor = true;
-            buttonModel_Teacher.Click += buttonModel_Teacher_Click;
-            // 
-            // textBoxPathTeacher
-            // 
-            textBoxPathTeacher.Location = new Point(115, 5);
-            textBoxPathTeacher.Name = "textBoxPathTeacher";
-            textBoxPathTeacher.Size = new Size(155, 23);
-            textBoxPathTeacher.TabIndex = 1;
-            // 
             // buttonDelete
             // 
             buttonDelete.AutoSize = true;
@@ -823,7 +735,6 @@
             // 
             SpectrumGeneration.Controls.Add(groupBox1);
             SpectrumGeneration.Controls.Add(groupBoxMineral);
-            SpectrumGeneration.Controls.Add(tabControl2);
             SpectrumGeneration.Controls.Add(buttonSpectrumGenerationRun);
             SpectrumGeneration.Controls.Add(labelCompositionCount);
             SpectrumGeneration.Controls.Add(textBoxCompositionCount);
@@ -837,6 +748,8 @@
             // 
             // groupBox1
             // 
+            groupBox1.Controls.Add(numericBoxCount);
+            groupBox1.Controls.Add(numericBoxParallel);
             groupBox1.Controls.Add(numericBoxCarbonThickness);
             groupBox1.Controls.Add(numericBoxLiveTime);
             groupBox1.Controls.Add(numericBoxProbeCurrent);
@@ -850,6 +763,52 @@
             groupBox1.TabIndex = 99;
             groupBox1.TabStop = false;
             groupBox1.Text = "SEM-EDX条件";
+            // 
+            // numericBoxCount
+            // 
+            numericBoxCount.BackColor = Color.Transparent;
+            numericBoxCount.DecimalPlaces = 0;
+            numericBoxCount.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxCount.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCount.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCount.HeaderText = "回数";
+            numericBoxCount.Location = new Point(511, 14);
+            numericBoxCount.Margin = new Padding(0);
+            numericBoxCount.Maximum = 100000D;
+            numericBoxCount.MaximumSize = new Size(1000, 28);
+            numericBoxCount.Minimum = 1D;
+            numericBoxCount.MinimumSize = new Size(1, 18);
+            numericBoxCount.Name = "numericBoxCount";
+            numericBoxCount.RadianValue = 0.017453292519943295D;
+            numericBoxCount.ShowUpDown = true;
+            numericBoxCount.Size = new Size(136, 26);
+            numericBoxCount.SmartIncrement = true;
+            numericBoxCount.TabIndex = 115;
+            numericBoxCount.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCount.Value = 1D;
+            // 
+            // numericBoxParallel
+            // 
+            numericBoxParallel.BackColor = Color.Transparent;
+            numericBoxParallel.DecimalPlaces = 0;
+            numericBoxParallel.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxParallel.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxParallel.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxParallel.HeaderText = "並列数";
+            numericBoxParallel.Location = new Point(370, 45);
+            numericBoxParallel.Margin = new Padding(0);
+            numericBoxParallel.Maximum = 100000D;
+            numericBoxParallel.MaximumSize = new Size(1000, 28);
+            numericBoxParallel.Minimum = 1D;
+            numericBoxParallel.MinimumSize = new Size(1, 18);
+            numericBoxParallel.Name = "numericBoxParallel";
+            numericBoxParallel.RadianValue = 0.017453292519943295D;
+            numericBoxParallel.ShowUpDown = true;
+            numericBoxParallel.Size = new Size(136, 26);
+            numericBoxParallel.SmartIncrement = true;
+            numericBoxParallel.TabIndex = 114;
+            numericBoxParallel.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxParallel.Value = 1D;
             // 
             // numericBoxCarbonThickness
             // 
@@ -1009,195 +968,6 @@
             checkBox1.Text = "詳細情報を表示";
             checkBox1.UseVisualStyleBackColor = true;
             // 
-            // tabControl2
-            // 
-            tabControl2.Controls.Add(tabPage5);
-            tabControl2.Controls.Add(tabPage7);
-            tabControl2.Location = new Point(3, 24);
-            tabControl2.Name = "tabControl2";
-            tabControl2.SelectedIndex = 0;
-            tabControl2.Size = new Size(649, 131);
-            tabControl2.TabIndex = 95;
-            // 
-            // tabPage5
-            // 
-            tabPage5.Controls.Add(flowLayoutPanel1);
-            tabPage5.Location = new Point(4, 24);
-            tabPage5.Name = "tabPage5";
-            tabPage5.Padding = new Padding(3);
-            tabPage5.Size = new Size(641, 103);
-            tabPage5.TabIndex = 0;
-            tabPage5.Text = "ファイル設定";
-            tabPage5.UseVisualStyleBackColor = true;
-            // 
-            // flowLayoutPanel1
-            // 
-            flowLayoutPanel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            flowLayoutPanel1.Controls.Add(panel2);
-            flowLayoutPanel1.Controls.Add(panel4);
-            flowLayoutPanel1.Controls.Add(panelPathEDX);
-            flowLayoutPanel1.Controls.Add(panelPathDTSA);
-            flowLayoutPanel1.Dock = DockStyle.Top;
-            flowLayoutPanel1.FlowDirection = FlowDirection.TopDown;
-            flowLayoutPanel1.Location = new Point(3, 3);
-            flowLayoutPanel1.Name = "flowLayoutPanel1";
-            flowLayoutPanel1.Size = new Size(635, 94);
-            flowLayoutPanel1.TabIndex = 20;
-            // 
-            // panel2
-            // 
-            panel2.AutoSize = true;
-            panel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panel2.Controls.Add(label7);
-            panel2.Controls.Add(textBoxModelPath);
-            panel2.Controls.Add(buttonModel_SaveFolder);
-            panel2.Location = new Point(3, 3);
-            panel2.Name = "panel2";
-            panel2.Size = new Size(304, 36);
-            panel2.TabIndex = 19;
-            // 
-            // panel4
-            // 
-            panel4.AutoSize = true;
-            panel4.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panel4.Controls.Add(buttonModel_Teacher);
-            panel4.Controls.Add(textBoxPathTeacher);
-            panel4.Controls.Add(labelPathTeacher);
-            panel4.Location = new Point(3, 45);
-            panel4.Name = "panel4";
-            panel4.Size = new Size(304, 33);
-            panel4.TabIndex = 18;
-            // 
-            // panelPathEDX
-            // 
-            panelPathEDX.AutoSize = true;
-            panelPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panelPathEDX.Controls.Add(labelPathEDX);
-            panelPathEDX.Controls.Add(textBoxPathEDX);
-            panelPathEDX.Controls.Add(buttonPathDTSA);
-            panelPathEDX.Location = new Point(313, 3);
-            panelPathEDX.Name = "panelPathEDX";
-            panelPathEDX.Size = new Size(304, 33);
-            panelPathEDX.TabIndex = 17;
-            // 
-            // labelPathEDX
-            // 
-            labelPathEDX.AutoSize = true;
-            labelPathEDX.Location = new Point(5, 10);
-            labelPathEDX.Name = "labelPathEDX";
-            labelPathEDX.Size = new Size(110, 15);
-            labelPathEDX.TabIndex = 15;
-            labelPathEDX.Text = "EDXスペクトル出力先";
-            // 
-            // textBoxPathEDX
-            // 
-            textBoxPathEDX.Location = new Point(115, 5);
-            textBoxPathEDX.Name = "textBoxPathEDX";
-            textBoxPathEDX.Size = new Size(155, 23);
-            textBoxPathEDX.TabIndex = 0;
-            // 
-            // buttonPathDTSA
-            // 
-            buttonPathDTSA.AutoSize = true;
-            buttonPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathDTSA.Location = new Point(275, 5);
-            buttonPathDTSA.Name = "buttonPathDTSA";
-            buttonPathDTSA.Size = new Size(26, 25);
-            buttonPathDTSA.TabIndex = 1;
-            buttonPathDTSA.Text = "...";
-            buttonPathDTSA.UseVisualStyleBackColor = true;
-            buttonPathDTSA.Click += buttonFolderBrowserDialog_Click;
-            // 
-            // panelPathDTSA
-            // 
-            panelPathDTSA.AutoSize = true;
-            panelPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panelPathDTSA.Controls.Add(buttonPathEDX);
-            panelPathDTSA.Controls.Add(textBoxPathDTSA);
-            panelPathDTSA.Controls.Add(labelPathDTSA);
-            panelPathDTSA.Location = new Point(313, 42);
-            panelPathDTSA.Name = "panelPathDTSA";
-            panelPathDTSA.Size = new Size(304, 33);
-            panelPathDTSA.TabIndex = 16;
-            // 
-            // buttonPathEDX
-            // 
-            buttonPathEDX.AutoSize = true;
-            buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathEDX.Location = new Point(275, 5);
-            buttonPathEDX.Name = "buttonPathEDX";
-            buttonPathEDX.Size = new Size(26, 25);
-            buttonPathEDX.TabIndex = 1;
-            buttonPathEDX.Text = "...";
-            buttonPathEDX.UseVisualStyleBackColor = true;
-            buttonPathEDX.Click += buttonFolderBrowserDialog_Click;
-            // 
-            // textBoxPathDTSA
-            // 
-            textBoxPathDTSA.Location = new Point(115, 5);
-            textBoxPathDTSA.Name = "textBoxPathDTSA";
-            textBoxPathDTSA.Size = new Size(155, 23);
-            textBoxPathDTSA.TabIndex = 0;
-            textBoxPathDTSA.Text = "C:\\\\Users\\\\mineral\\\\AppData\\\\Local\\\\NIST\\\\NIST DTSA-II Oberon 2026-01-07";
-            // 
-            // labelPathDTSA
-            // 
-            labelPathDTSA.AutoSize = true;
-            labelPathDTSA.Location = new Point(5, 10);
-            labelPathDTSA.Name = "labelPathDTSA";
-            labelPathDTSA.Size = new Size(105, 15);
-            labelPathDTSA.TabIndex = 15;
-            labelPathDTSA.Text = "DTSA-Ⅱファイルパス";
-            // 
-            // tabPage7
-            // 
-            tabPage7.Controls.Add(numericUpDownExecution_Count);
-            tabPage7.Controls.Add(labelExecution_Count);
-            tabPage7.Controls.Add(numericUpDownExecution_Parallel);
-            tabPage7.Controls.Add(labelExecution_Parallel);
-            tabPage7.Location = new Point(4, 24);
-            tabPage7.Name = "tabPage7";
-            tabPage7.Padding = new Padding(3);
-            tabPage7.Size = new Size(641, 103);
-            tabPage7.TabIndex = 2;
-            tabPage7.Text = "シミュレーション実行設定";
-            tabPage7.UseVisualStyleBackColor = true;
-            // 
-            // numericUpDownExecution_Count
-            // 
-            numericUpDownExecution_Count.Location = new Point(100, 10);
-            numericUpDownExecution_Count.Margin = new Padding(3, 2, 3, 2);
-            numericUpDownExecution_Count.Name = "numericUpDownExecution_Count";
-            numericUpDownExecution_Count.Size = new Size(40, 23);
-            numericUpDownExecution_Count.TabIndex = 18;
-            numericUpDownExecution_Count.Value = new decimal(new int[] { 1, 0, 0, 0 });
-            // 
-            // labelExecution_Count
-            // 
-            labelExecution_Count.AutoEllipsis = true;
-            labelExecution_Count.Location = new Point(20, 10);
-            labelExecution_Count.Name = "labelExecution_Count";
-            labelExecution_Count.Size = new Size(35, 15);
-            labelExecution_Count.TabIndex = 17;
-            labelExecution_Count.Text = "回数";
-            // 
-            // numericUpDownExecution_Parallel
-            // 
-            numericUpDownExecution_Parallel.Location = new Point(100, 39);
-            numericUpDownExecution_Parallel.Margin = new Padding(3, 2, 3, 2);
-            numericUpDownExecution_Parallel.Name = "numericUpDownExecution_Parallel";
-            numericUpDownExecution_Parallel.Size = new Size(40, 23);
-            numericUpDownExecution_Parallel.TabIndex = 34;
-            numericUpDownExecution_Parallel.Value = new decimal(new int[] { 1, 0, 0, 0 });
-            // 
-            // labelExecution_Parallel
-            // 
-            labelExecution_Parallel.Location = new Point(20, 40);
-            labelExecution_Parallel.Name = "labelExecution_Parallel";
-            labelExecution_Parallel.Size = new Size(66, 15);
-            labelExecution_Parallel.TabIndex = 35;
-            labelExecution_Parallel.Text = "並列数";
-            // 
             // statusStrip1
             // 
             statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripProgressBar1, toolStripStatusLabel1 });
@@ -1258,21 +1028,6 @@
             flowLayoutPanel4.PerformLayout();
             flowLayoutPanel2.ResumeLayout(false);
             flowLayoutPanel2.PerformLayout();
-            tabControl2.ResumeLayout(false);
-            tabPage5.ResumeLayout(false);
-            flowLayoutPanel1.ResumeLayout(false);
-            flowLayoutPanel1.PerformLayout();
-            panel2.ResumeLayout(false);
-            panel2.PerformLayout();
-            panel4.ResumeLayout(false);
-            panel4.PerformLayout();
-            panelPathEDX.ResumeLayout(false);
-            panelPathEDX.PerformLayout();
-            panelPathDTSA.ResumeLayout(false);
-            panelPathDTSA.PerformLayout();
-            tabPage7.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Count).EndInit();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownExecution_Parallel).EndInit();
             statusStrip1.ResumeLayout(false);
             statusStrip1.PerformLayout();
             ResumeLayout(false);
@@ -1313,22 +1068,16 @@
         private TextBox textBoxDetectorName;
         private GroupBox groupBoxModel_LearningData;
         private GroupBox groupBox4;
-        private Label labelPathTeacher;
-        private TextBox textBoxPathTeacher;
         private TextBox textBoxModel_Evaluation;
         private Button buttonModel_Save;
         private Label label5;
         private Button buttonModel_Train;
-        private TextBox textBoxModelPath;
-        private Label label7;
         private Button buttonEndmember_Add;
         private Button buttonEndmember_Delete;
         private Button buttonUpdateList;
         private Button buttonAllDelete;
         private TextBox textBoxMemo;
         private Label labelMemo;
-        private Button buttonModel_SaveFolder;
-        private Button buttonModel_Teacher;
         private Button buttonReset;
         private Label labelMineral_Target;
         private NumericUpDown numericUpDownMineral_Target;
@@ -1345,26 +1094,7 @@
         private Crystallography.Controls.NumericBox numericBoxModel_Epochs;
         private Crystallography.Controls.NumericBox numericBoxModel_BatchSize;
         private Crystallography.Controls.NumericBox numericBoxModel_EarlyStopping;
-        private TabControl tabControl2;
-        private TabPage tabPage5;
-        private Button buttonPathDTSA;
-        private Button buttonPathEDX;
-        private TextBox textBoxPathDTSA;
-        private TextBox textBoxPathEDX;
-        private Label labelPathDTSA;
-        private Label labelPathEDX;
-        private TabPage tabPage7;
-        private NumericUpDown numericUpDownExecution_Count;
-        private Label labelExecution_Count;
-        private NumericUpDown numericUpDownExecution_Parallel;
-        private Label labelExecution_Parallel;
-        private Panel panelPathEDX;
-        private Panel panelPathDTSA;
-        private Panel panel4;
-        private Panel panel2;
-        private FlowLayoutPanel flowLayoutPanel1;
         private Crystallography.Controls.NumericBox numericBoxProbeCurrent;
-        private Crystallography.Controls.NumericBox numericBox3;
         private Crystallography.Controls.NumericBox numericBoxLiveTime;
         private Crystallography.Controls.NumericBox numericBoxBeamEnergy;
         private Crystallography.Controls.NumericBox numericBoxCarbonThickness;
@@ -1373,6 +1103,8 @@
         private ToolStripStatusLabel toolStripStatusLabel1;
         private Crystallography.Controls.GraphControl graphControl1;
         private Crystallography.Controls.NumericBox numericBoxValidationSplit;
+        private Crystallography.Controls.NumericBox numericBoxCount;
+        private Crystallography.Controls.NumericBox numericBoxParallel;
     }
 }
 

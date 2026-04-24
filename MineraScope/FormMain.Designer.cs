@@ -35,12 +35,12 @@
             fileToolStripMenuItem = new ToolStripMenuItem();
             folderSettingToolStripMenuItem = new ToolStripMenuItem();
             dTSAIIFileToolStripMenuItem = new ToolStripMenuItem();
-            this.comboBoxModelPath = new ComboBox();
+            comboBoxModelPath = new ComboBox();
             graphControl1 = new Crystallography.Controls.GraphControl();
             panel2 = new Panel();
             label7 = new Label();
-            textBoxSaveModelPath = new TextBox();
-            buttonModel_SaveFolder = new Button();
+            textBoxlPathSaveMode = new TextBox();
+            buttonPathSaveMode = new Button();
             textBoxPathEDX = new TextBox();
             panelPathEDX = new Panel();
             labelPathEDX = new Label();
@@ -50,6 +50,7 @@
             textBoxPathDTSA = new TextBox();
             labelPathDTSA = new Label();
             textBoxAnalysisResult = new TextBox();
+            numericBoxModel_Epochs = new Crystallography.Controls.NumericBox();
             menuStrip1.SuspendLayout();
             panel2.SuspendLayout();
             panelPathEDX.SuspendLayout();
@@ -100,23 +101,23 @@
             // 
             folderSettingToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { dTSAIIFileToolStripMenuItem });
             folderSettingToolStripMenuItem.Name = "folderSettingToolStripMenuItem";
-            folderSettingToolStripMenuItem.Size = new Size(180, 22);
+            folderSettingToolStripMenuItem.Size = new Size(146, 22);
             folderSettingToolStripMenuItem.Text = "Folder setting";
             // 
             // dTSAIIFileToolStripMenuItem
             // 
             dTSAIIFileToolStripMenuItem.Name = "dTSAIIFileToolStripMenuItem";
-            dTSAIIFileToolStripMenuItem.Size = new Size(180, 22);
+            dTSAIIFileToolStripMenuItem.Size = new Size(155, 22);
             dTSAIIFileToolStripMenuItem.Text = "DTSA-IIFilePath";
             // 
             // comboBoxModelPath
             // 
-            this.comboBoxModelPath.DropDownStyle = ComboBoxStyle.DropDownList;
-            this.comboBoxModelPath.FormattingEnabled = true;
-            this.comboBoxModelPath.Location = new Point(12, 68);
-            this.comboBoxModelPath.Name = "comboBoxModelPath";
-            this.comboBoxModelPath.Size = new Size(148, 23);
-            this.comboBoxModelPath.TabIndex = 26;
+            comboBoxModelPath.DropDownStyle = ComboBoxStyle.DropDownList;
+            comboBoxModelPath.FormattingEnabled = true;
+            comboBoxModelPath.Location = new Point(12, 68);
+            comboBoxModelPath.Name = "comboBoxModelPath";
+            comboBoxModelPath.Size = new Size(148, 23);
+            comboBoxModelPath.TabIndex = 26;
             // 
             // graphControl1
             // 
@@ -172,8 +173,8 @@
             panel2.AutoSize = true;
             panel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             panel2.Controls.Add(label7);
-            panel2.Controls.Add(textBoxSaveModelPath);
-            panel2.Controls.Add(buttonModel_SaveFolder);
+            panel2.Controls.Add(textBoxlPathSaveMode);
+            panel2.Controls.Add(buttonPathSaveMode);
             panel2.Location = new Point(171, 58);
             panel2.Name = "panel2";
             panel2.Size = new Size(304, 36);
@@ -188,23 +189,23 @@
             label7.TabIndex = 24;
             label7.Text = "モデルの保存先";
             // 
-            // textBoxSaveModelPath
+            // textBoxlPathSaveMode
             // 
-            textBoxSaveModelPath.Location = new Point(115, 10);
-            textBoxSaveModelPath.Name = "textBoxSaveModelPath";
-            textBoxSaveModelPath.Size = new Size(155, 23);
-            textBoxSaveModelPath.TabIndex = 23;
+            textBoxlPathSaveMode.Location = new Point(115, 10);
+            textBoxlPathSaveMode.Name = "textBoxlPathSaveMode";
+            textBoxlPathSaveMode.Size = new Size(155, 23);
+            textBoxlPathSaveMode.TabIndex = 23;
             // 
-            // buttonModel_SaveFolder
+            // buttonPathSaveMode
             // 
-            buttonModel_SaveFolder.AutoSize = true;
-            buttonModel_SaveFolder.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonModel_SaveFolder.Location = new Point(275, 5);
-            buttonModel_SaveFolder.Name = "buttonModel_SaveFolder";
-            buttonModel_SaveFolder.Size = new Size(26, 25);
-            buttonModel_SaveFolder.TabIndex = 1;
-            buttonModel_SaveFolder.Text = "...";
-            buttonModel_SaveFolder.UseVisualStyleBackColor = true;
+            buttonPathSaveMode.AutoSize = true;
+            buttonPathSaveMode.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonPathSaveMode.Location = new Point(275, 5);
+            buttonPathSaveMode.Name = "buttonPathSaveMode";
+            buttonPathSaveMode.Size = new Size(26, 25);
+            buttonPathSaveMode.TabIndex = 1;
+            buttonPathSaveMode.Text = "...";
+            buttonPathSaveMode.UseVisualStyleBackColor = true;
             // 
             // textBoxPathEDX
             // 
@@ -230,9 +231,9 @@
             labelPathEDX.AutoSize = true;
             labelPathEDX.Location = new Point(5, 10);
             labelPathEDX.Name = "labelPathEDX";
-            labelPathEDX.Size = new Size(110, 15);
+            labelPathEDX.Size = new Size(83, 15);
             labelPathEDX.TabIndex = 15;
-            labelPathEDX.Text = "EDXスペクトル出力先";
+            labelPathEDX.Text = "学習/EDXデータ";
             // 
             // buttonPathDTSA
             // 
@@ -295,17 +296,41 @@
             textBoxAnalysisResult.Size = new Size(426, 106);
             textBoxAnalysisResult.TabIndex = 112;
             // 
+            // numericBoxModel_Epochs
+            // 
+            numericBoxModel_Epochs.BackColor = Color.Transparent;
+            numericBoxModel_Epochs.DecimalPlaces = 0;
+            numericBoxModel_Epochs.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.HeaderText = "並列数";
+            numericBoxModel_Epochs.Location = new Point(39, 178);
+            numericBoxModel_Epochs.Margin = new Padding(0);
+            numericBoxModel_Epochs.Maximum = 100000D;
+            numericBoxModel_Epochs.MaximumSize = new Size(1000, 28);
+            numericBoxModel_Epochs.Minimum = 1D;
+            numericBoxModel_Epochs.MinimumSize = new Size(1, 18);
+            numericBoxModel_Epochs.Name = "numericBoxModel_Epochs";
+            numericBoxModel_Epochs.RadianValue = 0.017453292519943295D;
+            numericBoxModel_Epochs.ShowUpDown = true;
+            numericBoxModel_Epochs.Size = new Size(144, 26);
+            numericBoxModel_Epochs.SmartIncrement = true;
+            numericBoxModel_Epochs.TabIndex = 113;
+            numericBoxModel_Epochs.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxModel_Epochs.Value = 1D;
+            // 
             // FormMain
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(475, 465);
+            Controls.Add(numericBoxModel_Epochs);
             Controls.Add(textBoxAnalysisResult);
             Controls.Add(panel2);
             Controls.Add(panelPathEDX);
             Controls.Add(panelPathDTSA);
             Controls.Add(graphControl1);
-            Controls.Add(this.comboBoxModelPath);
+            Controls.Add(comboBoxModelPath);
             Controls.Add(buttonOpenAnalyzer);
             Controls.Add(buttonOpenGenerator);
             Controls.Add(menuStrip1);
@@ -337,8 +362,8 @@
         private Crystallography.Controls.GraphControl graphControl1;
         private Panel panel2;
         private Label label7;
-        private TextBox textBoxSaveModelPath;
-        private Button buttonModel_SaveFolder;
+        private TextBox textBoxlPathSaveMode;
+        private Button buttonPathSaveMode;
         private TextBox textBoxPathEDX;
         private Panel panelPathEDX;
         private Label labelPathEDX;
@@ -349,5 +374,6 @@
         private Label labelPathDTSA;
         private ToolStripMenuItem dTSAIIFileToolStripMenuItem;
         private TextBox textBoxAnalysisResult;
+        private Crystallography.Controls.NumericBox numericBoxModel_Epochs;
     }
 }
