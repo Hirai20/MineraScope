@@ -50,7 +50,7 @@
             textBoxPathDTSA = new TextBox();
             labelPathDTSA = new Label();
             textBoxAnalysisResult = new TextBox();
-            numericBoxModel_Epochs = new Crystallography.Controls.NumericBox();
+            textBoxSpectrumFile = new TextBox();
             menuStrip1.SuspendLayout();
             panel2.SuspendLayout();
             panelPathEDX.SuspendLayout();
@@ -142,7 +142,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(222, 178);
+            graphControl1.Location = new Point(171, 178);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -155,7 +155,7 @@
             graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
             graphControl1.OriginPosition = new Point(40, 20);
-            graphControl1.Size = new Size(230, 131);
+            graphControl1.Size = new Size(292, 163);
             graphControl1.TabIndex = 108;
             graphControl1.UnitX = "";
             graphControl1.UnitY = "";
@@ -295,36 +295,24 @@
             textBoxAnalysisResult.ScrollBars = ScrollBars.Both;
             textBoxAnalysisResult.Size = new Size(426, 106);
             textBoxAnalysisResult.TabIndex = 112;
+            // 260427Codex: 初期表示でドロップ可能なスペクトル形式を案内します。
+            textBoxAnalysisResult.Text = ".msa または .emsa ファイルをファイルドラッグ＆ドロップしてください。";
             // 
-            // numericBoxModel_Epochs
+            // textBoxSpectrumFile
             // 
-            numericBoxModel_Epochs.BackColor = Color.Transparent;
-            numericBoxModel_Epochs.DecimalPlaces = 0;
-            numericBoxModel_Epochs.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.HeaderText = "並列数";
-            numericBoxModel_Epochs.Location = new Point(39, 178);
-            numericBoxModel_Epochs.Margin = new Padding(0);
-            numericBoxModel_Epochs.Maximum = 100000D;
-            numericBoxModel_Epochs.MaximumSize = new Size(1000, 28);
-            numericBoxModel_Epochs.Minimum = 1D;
-            numericBoxModel_Epochs.MinimumSize = new Size(1, 18);
-            numericBoxModel_Epochs.Name = "numericBoxModel_Epochs";
-            numericBoxModel_Epochs.RadianValue = 0.017453292519943295D;
-            numericBoxModel_Epochs.ShowUpDown = true;
-            numericBoxModel_Epochs.Size = new Size(144, 26);
-            numericBoxModel_Epochs.SmartIncrement = true;
-            numericBoxModel_Epochs.TabIndex = 113;
-            numericBoxModel_Epochs.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.Value = 1D;
+            textBoxSpectrumFile.Location = new Point(12, 110);
+            textBoxSpectrumFile.Name = "textBoxSpectrumFile";
+            textBoxSpectrumFile.Size = new Size(148, 23);
+            textBoxSpectrumFile.TabIndex = 113;
             // 
             // FormMain
-            // 
+            //
+            // 260427Codex: フォームの余白部分にもスペクトルファイルをドロップできるようにします。
+            AllowDrop = true;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(475, 465);
-            Controls.Add(numericBoxModel_Epochs);
+            Controls.Add(textBoxSpectrumFile);
             Controls.Add(textBoxAnalysisResult);
             Controls.Add(panel2);
             Controls.Add(panelPathEDX);
@@ -338,6 +326,8 @@
             Name = "FormMain";
             Text = "FormMain";
             Load += FormMain_Load;
+            DragDrop += FormMain_DragDrop;
+            DragEnter += FormMain_DragEnter;
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
             panel2.ResumeLayout(false);
@@ -374,6 +364,6 @@
         private Label labelPathDTSA;
         private ToolStripMenuItem dTSAIIFileToolStripMenuItem;
         private TextBox textBoxAnalysisResult;
-        private Crystallography.Controls.NumericBox numericBoxModel_Epochs;
+        private TextBox textBoxSpectrumFile;
     }
 }

@@ -72,7 +72,6 @@
             textBoxModel_Evaluation = new TextBox();
             buttonModel_Train = new Button();
             label5 = new Label();
-            groupBoxModel_LearningData = new GroupBox();
             numericBoxProbeCurrent = new Crystallography.Controls.NumericBox();
             numericBoxLiveTime = new Crystallography.Controls.NumericBox();
             buttonDelete = new Button();
@@ -116,10 +115,12 @@
             // 
             // buttonSpectrumGenerationRun
             // 
-            buttonSpectrumGenerationRun.Location = new Point(558, 666);
+            buttonSpectrumGenerationRun.AutoSize = true;
+            buttonSpectrumGenerationRun.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonSpectrumGenerationRun.Location = new Point(549, 581);
             buttonSpectrumGenerationRun.Margin = new Padding(3, 2, 3, 2);
             buttonSpectrumGenerationRun.Name = "buttonSpectrumGenerationRun";
-            buttonSpectrumGenerationRun.Size = new Size(77, 24);
+            buttonSpectrumGenerationRun.Size = new Size(41, 25);
             buttonSpectrumGenerationRun.TabIndex = 0;
             buttonSpectrumGenerationRun.Text = "実行";
             buttonSpectrumGenerationRun.UseVisualStyleBackColor = true;
@@ -393,7 +394,7 @@
             // labelCompositionCount
             // 
             labelCompositionCount.AutoSize = true;
-            labelCompositionCount.Location = new Point(199, 675);
+            labelCompositionCount.Location = new Point(198, 562);
             labelCompositionCount.Margin = new Padding(2, 0, 2, 0);
             labelCompositionCount.Name = "labelCompositionCount";
             labelCompositionCount.Size = new Size(99, 15);
@@ -403,7 +404,7 @@
             // textBoxCompositionCount
             // 
             textBoxCompositionCount.BackColor = Color.White;
-            textBoxCompositionCount.Location = new Point(327, 654);
+            textBoxCompositionCount.Location = new Point(338, 547);
             textBoxCompositionCount.Margin = new Padding(3, 2, 3, 2);
             textBoxCompositionCount.Multiline = true;
             textBoxCompositionCount.Name = "textBoxCompositionCount";
@@ -448,7 +449,6 @@
             // ModelTrain
             // 
             ModelTrain.Controls.Add(groupBox4);
-            ModelTrain.Controls.Add(groupBoxModel_LearningData);
             ModelTrain.Controls.Add(groupBoxComposition);
             ModelTrain.Location = new Point(664, 27);
             ModelTrain.Name = "ModelTrain";
@@ -469,7 +469,7 @@
             groupBox4.Controls.Add(textBoxModel_Evaluation);
             groupBox4.Controls.Add(buttonModel_Train);
             groupBox4.Controls.Add(label5);
-            groupBox4.Location = new Point(13, 136);
+            groupBox4.Location = new Point(10, 40);
             groupBox4.Name = "groupBox4";
             groupBox4.Size = new Size(520, 524);
             groupBox4.TabIndex = 43;
@@ -522,7 +522,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(133, 400);
+            graphControl1.Location = new Point(83, 286);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -666,15 +666,6 @@
             label5.TabIndex = 21;
             label5.Text = "訓練ログ";
             // 
-            // groupBoxModel_LearningData
-            // 
-            groupBoxModel_LearningData.Location = new Point(13, 31);
-            groupBoxModel_LearningData.Name = "groupBoxModel_LearningData";
-            groupBoxModel_LearningData.Size = new Size(510, 97);
-            groupBoxModel_LearningData.TabIndex = 42;
-            groupBoxModel_LearningData.TabStop = false;
-            groupBoxModel_LearningData.Text = "学習データ設定";
-            // 
             // numericBoxProbeCurrent
             // 
             numericBoxProbeCurrent.BackColor = Color.Transparent;
@@ -741,7 +732,7 @@
             SpectrumGeneration.Dock = DockStyle.Left;
             SpectrumGeneration.Location = new Point(3, 3);
             SpectrumGeneration.Name = "SpectrumGeneration";
-            SpectrumGeneration.Size = new Size(661, 725);
+            SpectrumGeneration.Size = new Size(661, 641);
             SpectrumGeneration.TabIndex = 88;
             SpectrumGeneration.TabStop = false;
             SpectrumGeneration.Text = "EDXスペクトル生成";
@@ -757,9 +748,10 @@
             groupBox1.Controls.Add(numericBoxBeamEnergy);
             groupBox1.Controls.Add(labelDetectorName);
             groupBox1.Controls.Add(textBoxDetectorName);
-            groupBox1.Location = new Point(5, 156);
+            groupBox1.Dock = DockStyle.Top;
+            groupBox1.Location = new Point(3, 19);
             groupBox1.Name = "groupBox1";
-            groupBox1.Size = new Size(640, 74);
+            groupBox1.Size = new Size(655, 74);
             groupBox1.TabIndex = 99;
             groupBox1.TabStop = false;
             groupBox1.Text = "SEM-EDX条件";
@@ -898,7 +890,7 @@
             groupBoxMineral.Controls.Add(flowLayoutPanel4);
             groupBoxMineral.Controls.Add(flowLayoutPanel2);
             groupBoxMineral.Controls.Add(groupBoxMineralInfo);
-            groupBoxMineral.Location = new Point(5, 232);
+            groupBoxMineral.Location = new Point(10, 99);
             groupBoxMineral.Name = "groupBoxMineral";
             groupBoxMineral.Size = new Size(640, 420);
             groupBoxMineral.TabIndex = 98;
@@ -971,7 +963,7 @@
             // statusStrip1
             // 
             statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripProgressBar1, toolStripStatusLabel1 });
-            statusStrip1.Location = new Point(3, 728);
+            statusStrip1.Location = new Point(3, 644);
             statusStrip1.Name = "statusStrip1";
             statusStrip1.Size = new Size(1191, 22);
             statusStrip1.TabIndex = 89;
@@ -992,7 +984,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1197, 753);
+            ClientSize = new Size(1197, 669);
             Controls.Add(ModelTrain);
             Controls.Add(SpectrumGeneration);
             Controls.Add(statusStrip1);
@@ -1066,7 +1058,6 @@
         private TextBox textBoxMineral_Name;
         private Label labelDetectorName;
         private TextBox textBoxDetectorName;
-        private GroupBox groupBoxModel_LearningData;
         private GroupBox groupBox4;
         private TextBox textBoxModel_Evaluation;
         private Button buttonModel_Save;
