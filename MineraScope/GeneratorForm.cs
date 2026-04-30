@@ -33,10 +33,8 @@ using Crystallography.Controls;
 namespace MineraScope
 {
     [MemoryPackable]
-    // 260416Codex: シミュレーション DTO 自体も正しい綴りへ統一します。
     public partial struct SimulationProperty
     {
-        // 260416Codex: DTO の公開メンバー名も正しい綴りへ揃えます。
         public string MineralGroupName;
         public string Atoms;
         //public (string Name, double Mol)[]               Atoms1;
@@ -114,7 +112,6 @@ namespace MineraScope
             }
         }
 
-        // 260416Codex: クラス名リネームに合わせてコンストラクタ名も更新します。
         public GeneratorForm()
         {
 
@@ -241,7 +238,6 @@ namespace MineraScope
                     numericBoxBeamEnergy.Value,
                     numericBoxLiveTime.Value,
                     numericBoxProbeCurrent.Value),
-                // 260430Codex: シミュレーション数と分解能は現行 Designer に残る NumericBox から読みます。
                 new SimulationExecutionSettings(
                     (int)numericBoxTarget.Value,
                     (double)numericBoxResolution.Value / 100,
@@ -407,7 +403,6 @@ namespace MineraScope
         private void UpdateCompositionCount()
         {
             var checkedSolutions = GetCheckedItems<SolidSolution>(checkedListBoxMineral);
-            // 260430Codex: 組成数プレビューも現行 NumericBox の値にそろえます。
             int targetCount = (int)numericBoxTarget.Value;
             double resolution = (double)numericBoxResolution.Value / 100;
             int totalCount = 0;
@@ -457,7 +452,6 @@ namespace MineraScope
                 ? string.Join($",{Environment.NewLine}", selectedSolution.Constraints)
                 : string.Empty;
             // 化学組成リストを表示
-            // 260430Codex: 選択鉱物の分割プレビューも現行 NumericBox の値にそろえます。
             double resolution = (double)numericBoxResolution.Value / 100;
             int targetCount = (int)numericBoxTarget.Value;
             // 固溶体を指定したmol%で分割

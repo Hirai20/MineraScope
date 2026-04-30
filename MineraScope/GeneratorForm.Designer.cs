@@ -59,6 +59,8 @@
             groupBox4 = new GroupBox();
             numericBoxValidationSplit = new Crystallography.Controls.NumericBox();
             graphControl1 = new Crystallography.Controls.GraphControl();
+            numericBoxResolution = new Crystallography.Controls.NumericBox();
+            numericBoxTarget = new Crystallography.Controls.NumericBox();
             numericBoxModel_EarlyStopping = new Crystallography.Controls.NumericBox();
             numericBoxModel_BatchSize = new Crystallography.Controls.NumericBox();
             numericBoxModel_Epochs = new Crystallography.Controls.NumericBox();
@@ -89,8 +91,7 @@
             statusStrip1 = new StatusStrip();
             toolStripProgressBar1 = new ToolStripProgressBar();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
-            numericBoxResolution = new Crystallography.Controls.NumericBox();
-            numericBoxTarget = new Crystallography.Controls.NumericBox();
+            buttonCalibration = new Button();
             groupBoxMineralInfo.SuspendLayout();
             groupBox2.SuspendLayout();
             groupBoxEndmembers.SuspendLayout();
@@ -501,6 +502,50 @@
             graphControl1.XLog = false;
             graphControl1.YLog = false;
             // 
+            // numericBoxResolution
+            //
+            numericBoxResolution.BackColor = Color.Transparent;
+            numericBoxResolution.DecimalPlaces = 0;
+            numericBoxResolution.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.HeaderText = "化学組成分解能";
+            numericBoxResolution.Location = new Point(27, 210);
+            numericBoxResolution.Margin = new Padding(0);
+            numericBoxResolution.MaximumSize = new Size(1000, 28);
+            numericBoxResolution.Minimum = 0D;
+            numericBoxResolution.MinimumSize = new Size(1, 18);
+            numericBoxResolution.Name = "numericBoxResolution";
+            numericBoxResolution.RadianValue = 0.17453292519943295D;
+            numericBoxResolution.ShowUpDown = true;
+            numericBoxResolution.Size = new Size(144, 26);
+            numericBoxResolution.SmartIncrement = true;
+            numericBoxResolution.TabIndex = 106;
+            numericBoxResolution.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.Value = 10D;
+            //
+            // numericBoxTarget
+            //
+            numericBoxTarget.BackColor = Color.Transparent;
+            numericBoxTarget.DecimalPlaces = 0;
+            numericBoxTarget.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.HeaderText = "シミュレーション数";
+            numericBoxTarget.Location = new Point(48, 73);
+            numericBoxTarget.Margin = new Padding(0);
+            numericBoxTarget.MaximumSize = new Size(1000, 28);
+            numericBoxTarget.Minimum = 0D;
+            numericBoxTarget.MinimumSize = new Size(1, 18);
+            numericBoxTarget.Name = "numericBoxTarget";
+            numericBoxTarget.RadianValue = 17.453292519943293D;
+            numericBoxTarget.ShowUpDown = true;
+            numericBoxTarget.Size = new Size(144, 26);
+            numericBoxTarget.SmartIncrement = true;
+            numericBoxTarget.TabIndex = 106;
+            numericBoxTarget.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.Value = 1000D;
+            //
             // numericBoxModel_EarlyStopping
             // 
             numericBoxModel_EarlyStopping.BackColor = Color.Transparent;
@@ -856,6 +901,7 @@
             flowLayoutPanel4.AutoSize = true;
             flowLayoutPanel4.Controls.Add(buttonUpdateList);
             flowLayoutPanel4.Controls.Add(buttonAddList);
+            flowLayoutPanel4.Controls.Add(buttonCalibration);
             flowLayoutPanel4.Dock = DockStyle.Bottom;
             flowLayoutPanel4.FlowDirection = FlowDirection.RightToLeft;
             flowLayoutPanel4.Location = new Point(3, 144);
@@ -934,49 +980,14 @@
             toolStripStatusLabel1.Size = new Size(118, 17);
             toolStripStatusLabel1.Text = "toolStripStatusLabel1";
             // 
-            // numericBoxResolution
+            // buttonCalibration
             // 
-            numericBoxResolution.BackColor = Color.Transparent;
-            numericBoxResolution.DecimalPlaces = 0;
-            numericBoxResolution.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.HeaderText = "化学組成分解能";
-            numericBoxResolution.Location = new Point(27, 210);
-            numericBoxResolution.Margin = new Padding(0);
-            numericBoxResolution.MaximumSize = new Size(1000, 28);
-            numericBoxResolution.Minimum = 0D;
-            numericBoxResolution.MinimumSize = new Size(1, 18);
-            numericBoxResolution.Name = "numericBoxResolution";
-            numericBoxResolution.RadianValue = 0.17453292519943295D;
-            numericBoxResolution.ShowUpDown = true;
-            numericBoxResolution.Size = new Size(144, 26);
-            numericBoxResolution.SmartIncrement = true;
-            numericBoxResolution.TabIndex = 106;
-            numericBoxResolution.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.Value = 10D;
-            // 
-            // numericBoxTarget
-            // 
-            numericBoxTarget.BackColor = Color.Transparent;
-            numericBoxTarget.DecimalPlaces = 0;
-            numericBoxTarget.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxTarget.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxTarget.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxTarget.HeaderText = "シミュレーション数";
-            numericBoxTarget.Location = new Point(48, 73);
-            numericBoxTarget.Margin = new Padding(0);
-            numericBoxTarget.MaximumSize = new Size(1000, 28);
-            numericBoxTarget.Minimum = 0D;
-            numericBoxTarget.MinimumSize = new Size(1, 18);
-            numericBoxTarget.Name = "numericBoxTarget";
-            numericBoxTarget.RadianValue = 17.453292519943293D;
-            numericBoxTarget.ShowUpDown = true;
-            numericBoxTarget.Size = new Size(144, 26);
-            numericBoxTarget.SmartIncrement = true;
-            numericBoxTarget.TabIndex = 106;
-            numericBoxTarget.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxTarget.Value = 1000D;
+            buttonCalibration.Location = new Point(304, 3);
+            buttonCalibration.Name = "buttonCalibration";
+            buttonCalibration.Size = new Size(135, 25);
+            buttonCalibration.TabIndex = 104;
+            buttonCalibration.Text = "EDXキャリブレーション";
+            buttonCalibration.UseVisualStyleBackColor = true;
             // 
             // GeneratorForm
             // 
@@ -1090,6 +1101,7 @@
         private Crystallography.Controls.NumericBox numericBoxParallel;
         private Crystallography.Controls.NumericBox numericBoxResolution;
         private Crystallography.Controls.NumericBox numericBoxTarget;
+        private Button buttonCalibration;
     }
 }
 
