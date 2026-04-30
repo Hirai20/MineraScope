@@ -3,10 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Xml.Serialization;
 using Tensorflow;
 using Tensorflow.Keras;
 using Tensorflow.Keras.Callbacks;
@@ -33,69 +29,8 @@ namespace MineraScope
             _logAction?.Invoke(message);
         }
 
-        // 260416Codex: スペクトルファイル判定と列挙の条件を共通化し、同じ拡張子判定の重複を減らします。
-        private const int SpectrumLength = 2048;
-
-        private static bool IsSpectrumFile(string filePath) =>
-            filePath.EndsWith(".msa", StringComparison.OrdinalIgnoreCase) ||
-            filePath.EndsWith(".emsa", StringComparison.OrdinalIgnoreCase);
-
-        private static string[] GetSpectrumFiles(string folderPath, SearchOption searchOption = SearchOption.AllDirectories) =>
-            Directory.EnumerateFiles(folderPath, "*.*", searchOption)
-                .Where(IsSpectrumFile)
-                .OrderBy(path => path)
-                .ToArray();
-
-        private static bool HasSpectrumFiles(string folderPath) =>
-            Directory.Exists(folderPath) && Directory.EnumerateFiles(folderPath, "*.*").Any(IsSpectrumFile);
-
-        // 260416Codex: 鉱物名から実際の学習フォルダを解決する分岐を helper に寄せ、分類と回帰の重複を減らします。
-        private static bool TryResolveMineralFolderPath(string trainingFolder, string mineralName, out string mineralFolderPath)
-        {
-            string combinedPath = Path.Combine(trainingFolder, mineralName);
-            if (Directory.Exists(combinedPath))
-            {
-                mineralFolderPath = combinedPath;
-                return true;
-            }
-
-            if (Path.GetFileName(trainingFolder) == mineralName || HasSpectrumFiles(trainingFolder))
-            {
-                mineralFolderPath = trainingFolder;
-                return true;
-            }
-
-            mineralFolderPath = string.Empty;
-            return false;
-        }
-
-        // 260416Codex: 2048 点スペクトルの読み込みと正規化を共通化し、学習と予測の重複処理を減らします。
-        private static float[]? LoadNormalizedSpectrum(string filePath)
-        {
-            var data = LoadMsaFile(filePath);
-            if (data.shape[0] != SpectrumLength)
-            {
-                return null;
-            }
-
-            var values = data.ToArray<float>();
-            NormalizeSpectrum(values);
-            return values;
-        }
-
-        private static void NormalizeSpectrum(float[] values)
-        {
-            float max = values.Max();
-            if (max <= 0)
-            {
-                return;
-            }
-
-            for (int i = 0; i < values.Length; i++)
-            {
-                values[i] /= max;
-            }
-        }
+        // 260430Codex: スペクトル長はローダー側の共通定数を参照し、学習モデル定義だけで使います。
+        private const int SpectrumLength = SpectrumDataLoader.SpectrumLength;
 
         // 260416Codex: 評価辞書から優先キー順で値を取る helper を追加し、回帰・分類で同じ流れを再利用します。
         private static double GetMetricValue<TMetric>(IReadOnlyDictionary<string, TMetric> metrics, int fallbackIndex, params string[] keys)
@@ -117,353 +52,10 @@ namespace MineraScope
             return 0;
         }
 
-        // 260416Codex: 端成分解析側でも共通のスペクトル列挙 helper を使い、条件分岐を読みやすくします。
-        public MineralFolder? AnalyzeMineralFolder(string folderPath)
-        {
-            var files = GetSpectrumFiles(folderPath);
+        // 260430Codex: 端成分解析はスペクトルデータ loader に委譲し、DeepLearning は学習/予測入口だけを持ちます。
+        public MineralFolder? AnalyzeMineralFolder(string folderPath) =>
+            SpectrumDataLoader.AnalyzeMineralFolder(folderPath);
 
-            if (files.Length == 0)
-            {
-                return null;
-            }
-
-            var mineralFolder = new MineralFolder
-            {
-                Name = Path.GetFileName(folderPath),
-                FolderPath = folderPath
-            };
-
-            // ファイル名から端成分を検出
-            var allComponents = new HashSet<string>();
-
-            foreach (var file in files)
-            {
-                var components = GetRegressionLabels(file);
-                if (components is not { Count: > 0 })
-                {
-                    continue;
-                }
-
-                foreach (var (comp, _) in components)
-                {
-                    allComponents.Add(comp);
-                }
-            }
-
-            // 2つ以上の端成分がある = 固溶体
-            mineralFolder.IsSolidSolution = allComponents.Count >= 2;
-            mineralFolder.EndMembers = mineralFolder.IsSolidSolution
-                ? allComponents.OrderBy(x => x).ToList()
-                : [];
-
-            return mineralFolder;
-        }
-
-        // 260416Codex: MSA 読み込みは using var と早期 continue を使って少し浅い構造に整理します。
-        static NDArray LoadMsaFile(string filePath)
-        {
-            var yValues = new List<float>();
-
-            using var reader = new StreamReader(filePath);
-            string? line;
-            while ((line = reader.ReadLine()) != null)
-            {
-                line = line.Trim();
-
-                if (string.IsNullOrEmpty(line) || line.StartsWith("#"))
-                {
-                    continue;
-                }
-
-                line = line.TrimEnd(',');
-
-                if (float.TryParse(line, NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
-                {
-                    yValues.Add(value);
-                }
-            }
-
-            return np.array(yValues.ToArray());
-        }
-
-        // 260416Codex: 回帰データ読み込みではスペクトル列挙と正規化 helper を使い、2 パス処理だけを目立たせます。
-        static (NDArray, NDArray, Dictionary<string, int>?) LoadRegressionData(string directory)
-        {
-            if (!Directory.Exists(directory))
-            {
-                return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 2)), null);
-            }
-
-            var files = GetSpectrumFiles(directory);
-            var spectraList = new List<float[]>();
-            var labelsList = new List<Dictionary<string, float>>();
-            var allComponents = new HashSet<string>();
-
-            // 第1パス: 端成分を収集
-            foreach (var filePath in files)
-            {
-                var components = GetRegressionLabels(filePath);
-                if (components is not { Count: > 0 })
-                {
-                    continue;
-                }
-
-                foreach (var (comp, _) in components)
-                {
-                    allComponents.Add(comp);
-                }
-            }
-
-            if (allComponents.Count == 0)
-            {
-                return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 2)), null);
-            }
-
-            var componentOrder = allComponents.OrderBy(x => x).ToList();
-            var componentIndex = componentOrder.Select((c, i) => new { c, i }).ToDictionary(x => x.c, x => x.i);
-
-            // 第2パス: データ読み込み
-            foreach (var filePath in files)
-            {
-                var data = LoadNormalizedSpectrum(filePath);
-                var components = GetRegressionLabels(filePath);
-
-                if (data == null || components is not { Count: > 0 })
-                {
-                    continue;
-                }
-
-                spectraList.Add(data);
-                labelsList.Add(components.ToDictionary(component => component.Component, component => component.Ratio));
-            }
-
-            if (spectraList.Count == 0)
-            {
-                return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, componentOrder.Count)), null);
-            }
-
-            // 配列化
-            int numSamples = spectraList.Count;
-            int numComponents = componentOrder.Count;
-            float[,] spectraArray = new float[numSamples, SpectrumLength];
-
-            for (int i = 0; i < numSamples; i++)
-            {
-                for (int j = 0; j < SpectrumLength; j++)
-                {
-                    spectraArray[i, j] = spectraList[i][j];
-                }
-            }
-
-            float[,] labelsArray = new float[numSamples, numComponents];
-            for (int i = 0; i < numSamples; i++)
-            {
-                var labelDict = labelsList[i];
-                for (int j = 0; j < numComponents; j++)
-                {
-                    string compName = componentOrder[j];
-                    labelsArray[i, j] = labelDict.ContainsKey(compName) ? labelDict[compName] : 0f;
-                }
-            }
-
-            return (np.array(spectraArray), np.array(labelsArray), componentIndex);
-        }
-
-        // 260416Codex: 回帰ラベル抽出は null を返すケースを型にも表して呼び出し側の意図を明確にします。
-        static List<(string Component, float Ratio)>? GetRegressionLabels(string filePath)
-        {
-            string filename = Path.GetFileNameWithoutExtension(filePath);
-
-            var pattern = @"([a-zA-Z0-9\s]+?)(0\.\d+|1\.0+)";
-            var matches = Regex.Matches(filename, pattern);
-
-            var components = new List<(string, float)>();
-
-            foreach (Match match in matches)
-            {
-                if (match.Groups.Count >= 3)
-                {
-                    string componentName = match.Groups[1].Value;
-                    string ratioStr = match.Groups[2].Value;
-
-                    if (float.TryParse(ratioStr, NumberStyles.Float, CultureInfo.InvariantCulture, out float ratio))
-                    {
-                        components.Add((componentName, ratio));
-                    }
-                }
-            }
-
-            return components.Count > 0 ? components : null;
-        }
-
-        // 260416Codex: 分類データ読み込みでもフォルダ解決とスペクトル正規化を helper に寄せて本筋を短くします。
-        static (NDArray, List<string>) LoadClassificationData(string TrainingFolder, List<string> targetMinerals)
-        {
-            var spectraList = new List<float[]>();
-            var labels = new List<string>();
-
-            // 指定された鉱物リストのフォルダだけを処理する
-            foreach (var mineralName in targetMinerals)
-            {
-                if (!TryResolveMineralFolderPath(TrainingFolder, mineralName, out var mineralFolderPath))
-                {
-                    continue; // 見つからない場合はスキップ
-                }
-
-                //  "Olivine_10mol%" でも "Olivine" としてラベル付けする
-                string labelName = mineralName.Split('_')[0];
-
-                // サブディレクトリも含めて .msa or.emsaファイルを検索
-                var files = GetSpectrumFiles(mineralFolderPath);
-
-                foreach (var filePath in files)
-                {
-                    var data = LoadNormalizedSpectrum(filePath);
-                    if (data == null)
-                    {
-                        continue;
-                    }
-
-                    spectraList.Add(data);
-                    labels.Add(labelName);
-                }
-            }
-
-            if (spectraList.Count == 0)
-            {
-                return (np.zeros(new Shape(0, SpectrumLength)), labels);
-            }
-
-            // NDArrayへの変換
-            int numSamples = spectraList.Count;
-            float[,] spectraArray = new float[numSamples, SpectrumLength];
-
-            for (int i = 0; i < numSamples; i++)
-            {
-                for (int j = 0; j < SpectrumLength; j++)
-                {
-                    spectraArray[i, j] = spectraList[i][j];
-                }
-            }
-
-            return (np.array(spectraArray), labels);
-        }
-
-        #region ラベルエンコーディングとデータ分割
-
-        static (NDArray, Dictionary<string, int>) EncodeLabels(List<string> labels)
-        {
-            var uniqueLabels = labels.Distinct().OrderBy(x => x).ToList();
-            var encoder = uniqueLabels.Select((label, index) => new { label, index })
-                                      .ToDictionary(x => x.label, x => x.index);
-
-            int[] encoded = labels.Select(label => encoder[label]).ToArray();
-            return (np.array(encoded), encoder);
-        }
-
-        static (NDArray xTrain, NDArray xTest, NDArray yTrain, NDArray yTest) TrainTestSplitClassification(NDArray X, NDArray y, float testSize = 0.2f, int randomState = 42)
-        {
-            int numSamples = (int)X.shape[0];
-            int testCount = (int)(numSamples * testSize);
-            int trainCount = numSamples - testCount;
-
-            var indices = Enumerable.Range(0, numSamples).ToArray();
-            var rng = new Random(randomState);
-
-            // Fisher-Yates シャッフル
-            for (int i = numSamples - 1; i > 0; i--)
-            {
-                int j = rng.Next(0, i + 1);
-                int temp = indices[i];
-                indices[i] = indices[j];
-                indices[j] = temp;
-            }
-
-            var trainIndices = indices.Take(trainCount).ToArray();
-            var testIndices = indices.Skip(trainCount).ToArray();
-
-            var xArray = X.ToArray<float>();
-            var yArray = y.ToArray<int>();
-
-            float[,] xTrainArray = new float[trainCount, 2048];
-            float[,] xTestArray = new float[testCount, 2048];
-            int[] yTrainArray = new int[trainCount];
-            int[] yTestArray = new int[testCount];
-
-            for (int i = 0; i < trainCount; i++)
-            {
-                int idx = trainIndices[i];
-                yTrainArray[i] = yArray[idx];
-                for (int j = 0; j < 2048; j++)
-                {
-                    xTrainArray[i, j] = xArray[idx * 2048 + j];
-                }
-            }
-
-            for (int i = 0; i < testCount; i++)
-            {
-                int idx = testIndices[i];
-                yTestArray[i] = yArray[idx];
-                for (int j = 0; j < 2048; j++)
-                {
-                    xTestArray[i, j] = xArray[idx * 2048 + j];
-                }
-            }
-
-            return (np.array(xTrainArray), np.array(xTestArray),
-                    np.array(yTrainArray), np.array(yTestArray));
-        }
-        static (NDArray xTrain, NDArray xTest, NDArray yTrain, NDArray yTest) TrainTestSplitRegression(
-           NDArray X, NDArray y, float testSize = 0.2f, int randomState = 42)
-        {
-            int nSamples = (int)X.shape[0];
-            int nFeatures = (int)X.shape[1];
-            int nLabels = (int)y.shape[1];
-
-            int nTest = (int)(nSamples * testSize);
-            int nTrain = nSamples - nTest;
-
-            var rnd = new Random(randomState);
-            int[] indices = Enumerable.Range(0, nSamples)
-                                      .OrderBy(_ => rnd.Next())
-                                      .ToArray();
-
-            float[,] xTrainArr = new float[nTrain, nFeatures];
-            float[,] xTestArr = new float[nTest, nFeatures];
-            float[,] yTrainArr = new float[nTrain, nLabels];
-            float[,] yTestArr = new float[nTest, nLabels];
-
-            var Xall = X.ToArray<float>();
-            var yall = y.ToArray<float>();
-
-            for (int i = 0; i < nTrain; i++)
-            {
-                int idx = indices[i];
-                for (int j = 0; j < nFeatures; j++)
-                    xTrainArr[i, j] = Xall[idx * nFeatures + j];
-
-                for (int k = 0; k < nLabels; k++)
-                    yTrainArr[i, k] = yall[idx * nLabels + k];
-            }
-
-            for (int i = 0; i < nTest; i++)
-            {
-                int idx = indices[nTrain + i];
-                for (int j = 0; j < nFeatures; j++)
-                    xTestArr[i, j] = Xall[idx * nFeatures + j];
-
-                for (int k = 0; k < nLabels; k++)
-                    yTestArr[i, k] = yall[idx * nLabels + k];
-            }
-
-            return (
-                np.array(xTrainArr),
-                np.array(xTestArr),
-                np.array(yTrainArr),
-                np.array(yTestArr)
-            );
-        }
-        #endregion
         #region モデル訓練
         public void RunTraining(List<string> mineralNames, string TrainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
         {
@@ -478,7 +70,7 @@ namespace MineraScope
             foreach (var mineralName in mineralNames)
             {
                 // 260430Codex: 回帰モデル対象フォルダの解決は共通 helper へ戻し、スペクトル判定を統一します。
-                if (!TryResolveMineralFolderPath(TrainingDataFolder, mineralName, out var mineralFolderPath))
+                if (!SpectrumDataLoader.TryResolveMineralFolderPath(TrainingDataFolder, mineralName, out var mineralFolderPath))
                 {
                     Log($"警告: {mineralName} のフォルダが見つかりません。スキップします。\n");
                     continue;
@@ -505,7 +97,7 @@ namespace MineraScope
 
             // データ読み込み
             Log("フォルダからスペクトルデータを読み込み中...");
-            var (allSpectra, allLabels, componentIdx) = LoadRegressionData(TrainingDataFolder);
+            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(TrainingDataFolder);
             ComponentIndex = componentIdx;
 
             if (allSpectra.shape[0] == 0 || ComponentIndex == null)
@@ -524,7 +116,7 @@ namespace MineraScope
             Log("");
 
             // データ分割
-            var (xTrain, xTest, yTrain, yTest) = TrainTestSplitRegression(
+            var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitRegression(
                 allSpectra, allLabels, testSize: 0.2f, randomState: 42);
             Log($"  訓練データ: {xTrain.shape[0]}件");
             Log($"  テストデータ: {xTest.shape[0]}件\n");
@@ -611,9 +203,9 @@ namespace MineraScope
             keras.backend.clear_session();
             tf.set_random_seed(42);
             Log($"\n 訓練データ読み込み中");
-            var (allSpectra, allLabelsList) = LoadClassificationData(TrainingDataFolder, mineralNames);
+            var (allSpectra, allLabelsList) = SpectrumDataLoader.LoadClassificationData(TrainingDataFolder, mineralNames);
             Log($"\n 読み込み完了 (合計 {allSpectra.shape[0]} 件)\n");
-            var (labelsEncoded, encoder) = EncodeLabels(allLabelsList);
+            var (labelsEncoded, encoder) = DeepLearningDataSplitter.EncodeLabels(allLabelsList);
             if (encoder.Count > 0)
             {
                 foreach (var kvp in encoder.OrderBy(x => x.Value))
@@ -622,7 +214,7 @@ namespace MineraScope
                     Log($"  [{kvp.Value}] {kvp.Key} ({count}件)");
                 }
             }
-            var (xTrain, xTest, yTrain, yTest) = TrainTestSplitClassification(allSpectra, labelsEncoded, testSize: testSplit, randomState: 42);
+            var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitClassification(allSpectra, labelsEncoded, testSize: testSplit, randomState: 42);
             Log($"訓練データ: {xTrain.shape[0]}");
             Log($"テストデータ: {xTest.shape[0]}\n");
 
@@ -730,7 +322,7 @@ namespace MineraScope
                 }
                 foreach (var filePath in files)
                 {
-                    var spectrum = LoadNormalizedSpectrum(filePath);
+                    var spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath);
                     if (spectrum == null)
                     {
                         continue;
@@ -814,96 +406,9 @@ namespace MineraScope
         }
         #endregion
         //分類モデルで予測された固溶体の化学組成を生成
-        // 260430Codex: 化学式生成は null guard と dictionary lookup を整理して早期 return で読みやすくします。
-        public string GenerateFormula(Dictionary<string, float> predictedRatios, string targetMineralName, string assemblyPath)
-        {
-            if (predictedRatios == null || predictedRatios.Count == 0)
-            {
-                return "";
-            }
-
-            string xmlPath = Path.Combine(assemblyPath, "MineralDatabase.xml");
-            if (!File.Exists(xmlPath))
-            {
-                return "";
-            }
-
-            XmlSerializer xml = new(typeof(SolidSolution[]));
-            using var fs = new FileStream(xmlPath, FileMode.Open);
-            var solidSolutions = xml.Deserialize(fs) as SolidSolution[];
-            if (solidSolutions == null)
-            {
-                return "";
-            }
-
-            // 260416Codex: ローカル変数の単純な綴りミスを直して読みやすくします。
-            var targetGroup = solidSolutions.FirstOrDefault(ss => ss.Name == targetMineralName);
-            if (targetGroup == null)
-            {
-                return "";
-            }
-
-            var targetElements = new List<string>();
-            int maxElementCount = targetGroup.Members.Max(ss => ss.Elements.Length);
-
-            for (int i = 0; i < maxElementCount; i++)
-            {
-                foreach (var member in targetGroup.Members)
-                {
-                    if (i < member.Elements.Length)
-                    {
-                        string symbol = member.Elements[i].Item1;
-                        if (!targetElements.Contains(symbol))
-                        {
-                            targetElements.Add(symbol);
-                        }
-                    }
-                }
-            }
-
-            //原子数を計算
-            var mineralDefinitions = new Dictionary<string, (string Element, double Count)[]>();
-
-            foreach (var member in targetGroup.Members)
-            {
-                string safeXmlName = member.Name.Trim();
-                mineralDefinitions.TryAdd(safeXmlName, member.Elements.Select(el => (el.Item1, el.Item2)).ToArray());
-            }
-
-            var finalAtoms = new Dictionary<string, double>();
-            foreach (var kvp in predictedRatios)
-            {
-                string endmemberName = kvp.Key.Trim();
-                double ratio = kvp.Value;
-                if (!mineralDefinitions.TryGetValue(endmemberName, out var atoms))
-                {
-                    continue;
-                }
-
-                foreach (var atom in atoms)
-                {
-                    finalAtoms.TryAdd(atom.Element, 0);
-                    finalAtoms[atom.Element] += atom.Count * ratio;
-                }
-            }
-
-            StringBuilder sb = new();
-            foreach (var element in targetElements)
-            {
-                double val = finalAtoms.TryGetValue(element, out double foundVal) ? foundVal : 0;
-                sb.Append($"{element}{val:F2}");
-            }
-            return sb.ToString();
-        }
-    }
-
-    // 260430Codex: DTO の既定値はプロパティ初期化子へ戻し、空コンストラクタを不要にします。
-    public class MineralFolder
-    {
-        public string Name { get; set; } = string.Empty;
-        public string FolderPath { get; set; } = string.Empty;
-        public bool IsSolidSolution { get; set; }  // 固溶体かどうか
-        public List<string> EndMembers { get; set; } = [];  // 端成分リスト
+        // 260430Codex: 既存公開メソッドは残し、化学式生成の実処理は専用 helper へ委譲します。
+        public string GenerateFormula(Dictionary<string, float> predictedRatios, string targetMineralName, string assemblyPath) =>
+            MineralFormulaGenerator.Generate(predictedRatios, targetMineralName, assemblyPath);
     }
 }
 
