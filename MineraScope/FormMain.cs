@@ -6,6 +6,8 @@ using System.Drawing;
 // 260424Codex: FormMain 側で共通パスの既定値を組み立てるために IO helper を使います。
 using System.IO;
 using System.Text;
+// 260430Codex: ドロップ後の自動判定を非同期に待つため Task を使います。
+using System.Threading.Tasks;
 using System.Windows.Forms;
 // 260427Codex: スペクトルグラフ用の Profile/PointD 型名を読みやすくします。
 using Crystallography;
@@ -20,6 +22,9 @@ namespace MineraScope
 
         // 260427Codex: ドロップされたスペクトルの実ファイルパスは表示名とは分けて保持します。
         private string? _spectrumFilePath;
+
+        // 260430Codex: FormMain での自動鉱物判定が重ならないようにします。
+        private bool _isPredictionRunning;
 
         // 260424Codex: モデル保存先は FormMain の共通パス欄から参照します。
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -70,9 +75,16 @@ namespace MineraScope
         // 260424Codex: 共通ファイルパス欄の既定値とフォルダ選択イベントをまとめます。
         private void InitializeFilePathSettings()
         {
+            // 260430Codex: 空欄のモデル保存先はユーザーごとの Documents 配下へ初期化します。
+            if (string.IsNullOrWhiteSpace(ModelPath))
+            {
+                ModelPath = DefaultStoragePaths.ModelsFolder;
+            }
+
+            // 260430Codex: 空欄の EDX/教師データ保存先はユーザーごとの Documents 配下へ初期化します。
             if (string.IsNullOrWhiteSpace(EdxOutputPath))
             {
-                EdxOutputPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "TrainingData");
+                EdxOutputPath = DefaultStoragePaths.TrainingDataFolder;
             }
 
             buttonPathSaveMode.Click += buttonFilePathBrowse_Click;
@@ -125,16 +137,16 @@ namespace MineraScope
                 AnalyzerForm.Visible = true;
         }
 
+        // 260430Codex: 判定中は追加ドロップを受け付けず、単一スペクトルだけをコピー可能にします。
         private void FormMain_DragEnter(object? sender, DragEventArgs e)
         {
-            // 260427Codex: 単一の msa/emsa ファイルだけをコピー操作として受け付けます。
-            e.Effect = TryGetSingleDroppedSpectrumFile(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Effect = TryGetAcceptedSpectrumFile(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
         }
 
-        private void FormMain_DragDrop(object? sender, DragEventArgs e)
+        // 260430Codex: スペクトル表示が成功したら FormMain 上で鉱物判定を自動実行します。
+        private async void FormMain_DragDrop(object? sender, DragEventArgs e)
         {
-            // 260427Codex: DragEnter で拒否済みの入力はここでは処理せず、通常は有効ファイルだけを読み込みます。
-            if (!TryGetSingleDroppedSpectrumFile(e, out var filePath))
+            if (!TryGetAcceptedSpectrumFile(e, out var filePath))
             {
                 return;
             }
@@ -150,6 +162,59 @@ namespace MineraScope
                     "スペクトルファイル",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
+                return;
+            }
+
+            await RunMineralPredictionAsync(filePath);
+        }
+
+        // 260430Codex: 判定中の再入力と単一スペクトル以外のドロップを同じ条件で拒否します。
+        private bool TryGetAcceptedSpectrumFile(DragEventArgs e, out string filePath)
+        {
+            if (_isPredictionRunning)
+            {
+                filePath = string.Empty;
+                return false;
+            }
+
+            return TryGetSingleDroppedSpectrumFile(e, out filePath);
+        }
+
+        // 260430Codex: FormMain の判定ログを結果欄へ追記します。
+        private void AnalysisLog(string message)
+            => TextBoxLogHelper.AppendLine(textBoxAnalysisResult, message);
+
+        // 260430Codex: ドロップされた単一スペクトルを FormMain の結果欄へ自動判定します。
+        private async Task RunMineralPredictionAsync(string filePath)
+        {
+            if (_isPredictionRunning)
+            {
+                return;
+            }
+
+            _isPredictionRunning = true;
+            textBoxAnalysisResult.Clear();
+            AnalysisLog("判定中...");
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(ModelPath))
+                {
+                    AnalysisLog("モデルの保存先フォルダが指定されていないか、存在しません。");
+                    return;
+                }
+
+                await new MineralPredictionWorkflow(AppContext.BaseDirectory, AnalysisLog)
+                    .RunAsync(ModelPath, new[] { filePath });
+            }
+            catch (Exception ex)
+            {
+                AnalysisLog($"\nエラー: {ex.Message}");
+                AnalysisLog($"スタックトレース: {ex.StackTrace}");
+            }
+            finally
+            {
+                _isPredictionRunning = false;
             }
         }
 

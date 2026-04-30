@@ -477,7 +477,7 @@ namespace MineraScope
             TrainClassificationModel(mineralNames, TrainingDataFolder, epochs, batchSize, patience, testSplit, classificationOutputPath);
             foreach (var mineralName in mineralNames)
             {
-                // 260416Codex: 回帰モデル対象のフォルダ解決も helper に寄せ、分類側と同じ判定を再利用します。
+                // 260430Codex: 回帰モデル対象フォルダの解決は共通 helper へ戻し、スペクトル判定を統一します。
                 if (!TryResolveMineralFolderPath(TrainingDataFolder, mineralName, out var mineralFolderPath))
                 {
                     Log($"警告: {mineralName} のフォルダが見つかりません。スキップします。\n");
@@ -485,6 +485,7 @@ namespace MineraScope
                 }
 
                 //  固溶体の場合は回帰モデルも訓練
+                // 260430Codex: 解析できないフォルダは固溶体ではないものとして安全にスキップします。
                 if (AnalyzeMineralFolder(mineralFolderPath)?.IsSolidSolution == true)
                 {
                     string regressionOutputPath = Path.Combine(outputPath, $"{mineralName}_Regression");
@@ -494,7 +495,7 @@ namespace MineraScope
             Log(" 指定された全鉱物の処理が完了しました");
         }
 
-        // 260416Codex: 回帰学習メソッドの不要な入れ子を外し、評価値取得も helper に寄せて流れを追いやすくします。
+        // 260430Codex: 回帰学習は余分な入れ子を外し、スペクトル長と評価値取得を共通 helper でそろえます。
         private void TrainRegressionModel(string mineralName, string TrainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
         {
             keras.backend.clear_session();
@@ -577,22 +578,19 @@ namespace MineraScope
             Log("モデル評価中");
             var score = model.evaluate(xTest, yTest);
 
-            double test_loss = GetMetricValue(score, 0, "loss");
-            double test_mae = GetMetricValue(score, 1, "mae", "mean_absolute_error");
+            double testLoss = GetMetricValue(score, 0, "loss");
+            double testMae = GetMetricValue(score, 1, "mae", "mean_absolute_error");
 
             Log($" 評価完了");
-            Log($"  Test Loss (MSE): {test_loss:F6}");
+            Log($"  Test Loss (MSE): {testLoss:F6}");
 
-            if (test_mae > 0)
+            if (testMae > 0)
             {
-                Log($"  Test MAE: {test_mae:F6}\n");
+                Log($"  Test MAE: {testMae:F6}\n");
             }
 
             // モデル保存
-            if (!Directory.Exists(outputPath))
-            {
-                Directory.CreateDirectory(outputPath);
-            }
+            Directory.CreateDirectory(outputPath);
 
             model.save(outputPath);
 
@@ -607,8 +605,7 @@ namespace MineraScope
 
             Log($" モデル保存完了: {outputPath}\n");
         }
-
-        // 260416Codex: 分類学習側もスペクトル長定数と評価値 helper を使って意図をそろえます。
+        // 260430Codex: 分類学習側も tuple 展開と共通評価 helper で回帰学習と読み方をそろえます。
         private void TrainClassificationModel(List<string> mineralNames, string TrainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
         {
             keras.backend.clear_session();
@@ -677,15 +674,12 @@ namespace MineraScope
 
             var score = model.evaluate(xTest, yTest);
 
-            double test_loss = GetMetricValue(score, 0, "loss");
-            double test_accuracy = GetMetricValue(score, 1, "accuracy");
+            double testLoss = GetMetricValue(score, 0, "loss");
+            double testAccuracy = GetMetricValue(score, 1, "accuracy");
 
-            Log($"Test loss: {test_loss:F4}");
-            Log($"Test accuracy: {test_accuracy * 100:F2}%");
-            if (!Directory.Exists(outputPath))
-            {
-                Directory.CreateDirectory(outputPath);
-            }
+            Log($"Test loss: {testLoss:F4}");
+            Log($"Test accuracy: {testAccuracy * 100:F2}%");
+            Directory.CreateDirectory(outputPath);
             string encoderPath = Path.Combine(outputPath, "labelEncoder.json");
             File.WriteAllText(encoderPath, System.Text.Json.JsonSerializer.Serialize(encoder));
 
@@ -696,7 +690,7 @@ namespace MineraScope
 
         #endregion
         #region 学習済みモデルを利用して予測
-        // 260416Codex: 予測処理でも共通の正規化 helper と null ガードを使い、分岐の意図を見やすくします。
+        // 260430Codex: 予測処理は共通の正規化 helper と null guard を使い、無効データを早期にスキップします。
         public void RunPrediction(string modelPath, List<string> files, string assemblyPath)
         {
             try
@@ -820,6 +814,7 @@ namespace MineraScope
         }
         #endregion
         //分類モデルで予測された固溶体の化学組成を生成
+        // 260430Codex: 化学式生成は null guard と dictionary lookup を整理して早期 return で読みやすくします。
         public string GenerateFormula(Dictionary<string, float> predictedRatios, string targetMineralName, string assemblyPath)
         {
             if (predictedRatios == null || predictedRatios.Count == 0)
@@ -833,7 +828,6 @@ namespace MineraScope
                 return "";
             }
 
-            // 260416Codex: XML 読み込みも using var と null ガードで整理し、後段の参照を素直にします。
             XmlSerializer xml = new(typeof(SolidSolution[]));
             using var fs = new FileStream(xmlPath, FileMode.Open);
             var solidSolutions = xml.Deserialize(fs) as SolidSolution[];
@@ -902,13 +896,14 @@ namespace MineraScope
             return sb.ToString();
         }
     }
+
+    // 260430Codex: DTO の既定値はプロパティ初期化子へ戻し、空コンストラクタを不要にします。
     public class MineralFolder
     {
-        // 260416Codex: DTO 既定値をプロパティ初期化子へ寄せ、空コンストラクタを不要にします。
         public string Name { get; set; } = string.Empty;
         public string FolderPath { get; set; } = string.Empty;
         public bool IsSolidSolution { get; set; }  // 固溶体かどうか
-        public List<string> EndMembers { get; set; } = [];
+        public List<string> EndMembers { get; set; } = [];  // 端成分リスト
     }
 }
 

@@ -38,8 +38,9 @@ namespace MineraScope
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
+            // 260430Codex: モデル保存先未指定時は Documents 配下の共通既定フォルダを使います。
             var modelOutputFolder = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Models")
+                ? DefaultStoragePaths.ModelsFolder
                 : request.Paths.ModelOutputFolder;
 
             return new ModelTrainingPlan(

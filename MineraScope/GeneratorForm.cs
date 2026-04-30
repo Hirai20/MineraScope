@@ -33,15 +33,17 @@ using Crystallography.Controls;
 namespace MineraScope
 {
     [MemoryPackable]
+    // 260416Codex: シミュレーション DTO 自体も正しい綴りへ統一します。
     public partial struct SimulationProperty
     {
+        // 260416Codex: DTO の公開メンバー名も正しい綴りへ揃えます。
         public string MineralGroupName;
         public string Atoms;
         //public (string Name, double Mol)[]               Atoms1;
         public (string ElementName, double Weight)[][] Atoms1;
         public (string Name, double Mol)[] Atoms2;
         public string DetectorName;
-        //　カーボン蒸着厚　（?）
+        //　カーボン蒸着厚　（nm）
         public double CarbonCoatThickness;
         // 加速電圧（kV）
         public double BeamEnergy;
@@ -65,7 +67,6 @@ namespace MineraScope
 
     public partial class GeneratorForm : Form
     {
-
         public FormMain FormMain;
 
         private readonly List<EndmemberControl> endmemberControls = [];
@@ -82,15 +83,14 @@ namespace MineraScope
         private readonly SimulationExecutionService _simulationExecutionService;
 
         private string AssemblyPath { get; } = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) ?? AppContext.BaseDirectory;
-        private string DesktopPath { get; } = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
         // 260416Codex: Python スクリプトはユーザーに見せない固定保存先へ集約します。
         private string PythonScriptOutputPath { get; } = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "MineraScope",
             "PythonScripts");
 
-        // 260424Codex: 親フォーム未接続時にも処理できるよう、教師データ既定フォルダを保持します。
-        private string DefaultTrainingDataPath => Path.Combine(DesktopPath, "TrainingData");
+        // 260430Codex: 親フォーム未接続時の教師データ既定値も Documents 配下の共通パスへそろえます。
+        private string DefaultTrainingDataPath => DefaultStoragePaths.TrainingDataFolder;
 
         // 260424Codex: EDX 出力先は FormMain の共通ファイル設定から参照します。
         private string EdxOutputPath => FormMain?.EdxOutputPath ?? DefaultTrainingDataPath;
@@ -114,6 +114,7 @@ namespace MineraScope
             }
         }
 
+        // 260416Codex: クラス名リネームに合わせてコンストラクタ名も更新します。
         public GeneratorForm()
         {
 
@@ -143,13 +144,7 @@ namespace MineraScope
             endmemberControls.AddRange([EndmemberControl1, EndmemberControl2]);
             BindMineralSolutions(LoadSolidSolutions());
 
-//#if DEBUG
-//            labelEndmembers_Resolution.Visible = true;
-//            numericUpDownEndmembers_Resolution.Visible = true;
-//#else
-//            labelEndmembers_Resolution.Visible = false;
-//            numericUpDownEndmembers_Resolution.Visible = false;
-//#endif
+            // 260430Codex: 旧 NumericUpDown の DEBUG 表示切替は対象コントロール廃止後の Designer と合わないため外します。
 
 
             Profile profile = new Profile();
@@ -246,6 +241,7 @@ namespace MineraScope
                     numericBoxBeamEnergy.Value,
                     numericBoxLiveTime.Value,
                     numericBoxProbeCurrent.Value),
+                // 260430Codex: シミュレーション数と分解能は現行 Designer に残る NumericBox から読みます。
                 new SimulationExecutionSettings(
                     (int)numericBoxTarget.Value,
                     (double)numericBoxResolution.Value / 100,
@@ -411,6 +407,7 @@ namespace MineraScope
         private void UpdateCompositionCount()
         {
             var checkedSolutions = GetCheckedItems<SolidSolution>(checkedListBoxMineral);
+            // 260430Codex: 組成数プレビューも現行 NumericBox の値にそろえます。
             int targetCount = (int)numericBoxTarget.Value;
             double resolution = (double)numericBoxResolution.Value / 100;
             int totalCount = 0;
@@ -460,6 +457,7 @@ namespace MineraScope
                 ? string.Join($",{Environment.NewLine}", selectedSolution.Constraints)
                 : string.Empty;
             // 化学組成リストを表示
+            // 260430Codex: 選択鉱物の分割プレビューも現行 NumericBox の値にそろえます。
             double resolution = (double)numericBoxResolution.Value / 100;
             int targetCount = (int)numericBoxTarget.Value;
             // 固溶体を指定したmol%で分割
@@ -711,6 +709,4 @@ namespace MineraScope
         }
     }
 }
-
-
 
