@@ -12,7 +12,6 @@ using Crystallography;
 
 namespace MineraScope
 {
-    // 260416Codex: メイン起動フォーム名を FormMain に統一します。
     public partial class FormMain : Form
     {
 

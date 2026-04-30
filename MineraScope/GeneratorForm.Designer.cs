@@ -1,6 +1,5 @@
 ﻿namespace MineraScope
 {
-    // 260416Codex: WinForms Designer 側の partial class 名も GeneratorForm に揃えます。
     partial class GeneratorForm
     {
         /// <summary>
@@ -30,17 +29,14 @@
         private void InitializeComponent()
         {
             buttonSpectrumGenerationRun = new Button();
-            numericUpDownEndmembers_Resolution = new NumericUpDown();
-            labelEndmembers_Resolution = new Label();
             groupBoxMineralInfo = new GroupBox();
             groupBox2 = new GroupBox();
             textBoxEndmembers_Constraints = new TextBox();
             labelEndmembers_Constraints = new Label();
             labelEndmembers_CompositionLists = new Label();
-            numericUpDownMineral_Target = new NumericUpDown();
             textBoxEndmembers_CompositionLists = new TextBox();
-            labelMineral_Target = new Label();
             labelMemo = new Label();
+            textBoxMemo = new TextBox();
             labelMineralInfo_Name = new Label();
             textBoxMineral_Name = new TextBox();
             groupBoxEndmembers = new GroupBox();
@@ -52,7 +48,6 @@
             flowLayoutPanel3 = new FlowLayoutPanel();
             EndmemberControl1 = new EndmemberControl();
             EndmemberControl2 = new EndmemberControl();
-            textBoxMemo = new TextBox();
             buttonAddList = new Button();
             buttonUpdateList = new Button();
             labelCompositionCount = new Label();
@@ -68,10 +63,10 @@
             numericBoxModel_BatchSize = new Crystallography.Controls.NumericBox();
             numericBoxModel_Epochs = new Crystallography.Controls.NumericBox();
             buttonAllSelect = new Button();
-            checkedListBoxTrainMinerals = new CheckedListBox();
             textBoxModel_Evaluation = new TextBox();
             buttonModel_Train = new Button();
             label5 = new Label();
+            checkedListBoxTrainMinerals = new CheckedListBox();
             numericBoxProbeCurrent = new Crystallography.Controls.NumericBox();
             numericBoxLiveTime = new Crystallography.Controls.NumericBox();
             buttonDelete = new Button();
@@ -94,10 +89,10 @@
             statusStrip1 = new StatusStrip();
             toolStripProgressBar1 = new ToolStripProgressBar();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).BeginInit();
+            numericBoxResolution = new Crystallography.Controls.NumericBox();
+            numericBoxTarget = new Crystallography.Controls.NumericBox();
             groupBoxMineralInfo.SuspendLayout();
             groupBox2.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownMineral_Target).BeginInit();
             groupBoxEndmembers.SuspendLayout();
             panelEndmembers.SuspendLayout();
             flowLayoutPanel3.SuspendLayout();
@@ -126,30 +121,11 @@
             buttonSpectrumGenerationRun.UseVisualStyleBackColor = true;
             buttonSpectrumGenerationRun.Click += buttonSpectrumGenerationRun_Click;
             // 
-            // numericUpDownEndmembers_Resolution
-            // 
-            numericUpDownEndmembers_Resolution.Location = new Point(102, 69);
-            numericUpDownEndmembers_Resolution.Name = "numericUpDownEndmembers_Resolution";
-            numericUpDownEndmembers_Resolution.Size = new Size(42, 23);
-            numericUpDownEndmembers_Resolution.TabIndex = 19;
-            numericUpDownEndmembers_Resolution.Value = new decimal(new int[] { 10, 0, 0, 0 });
-            numericUpDownEndmembers_Resolution.ValueChanged += numericUpDownSolidSolution_Resolution_ValueChanged;
-            numericUpDownEndmembers_Resolution.Enter += numericUpDownSolidSolution_Resolution_ValueChanged;
-            // 
-            // labelEndmembers_Resolution
-            // 
-            labelEndmembers_Resolution.AutoSize = true;
-            labelEndmembers_Resolution.Location = new Point(9, 71);
-            labelEndmembers_Resolution.Margin = new Padding(2, 0, 2, 0);
-            labelEndmembers_Resolution.Name = "labelEndmembers_Resolution";
-            labelEndmembers_Resolution.Size = new Size(91, 15);
-            labelEndmembers_Resolution.TabIndex = 20;
-            labelEndmembers_Resolution.Text = "化学組成分解能";
-            // 
             // groupBoxMineralInfo
             // 
             groupBoxMineralInfo.Controls.Add(groupBox2);
             groupBoxMineralInfo.Controls.Add(labelMemo);
+            groupBoxMineralInfo.Controls.Add(textBoxMemo);
             groupBoxMineralInfo.Controls.Add(labelMineralInfo_Name);
             groupBoxMineralInfo.Controls.Add(textBoxMineral_Name);
             groupBoxMineralInfo.Controls.Add(groupBoxEndmembers);
@@ -164,13 +140,9 @@
             // groupBox2
             // 
             groupBox2.Controls.Add(textBoxEndmembers_Constraints);
-            groupBox2.Controls.Add(labelEndmembers_Resolution);
             groupBox2.Controls.Add(labelEndmembers_Constraints);
-            groupBox2.Controls.Add(numericUpDownEndmembers_Resolution);
             groupBox2.Controls.Add(labelEndmembers_CompositionLists);
-            groupBox2.Controls.Add(numericUpDownMineral_Target);
             groupBox2.Controls.Add(textBoxEndmembers_CompositionLists);
-            groupBox2.Controls.Add(labelMineral_Target);
             groupBox2.Location = new Point(310, 50);
             groupBox2.Name = "groupBox2";
             groupBox2.Size = new Size(317, 181);
@@ -205,16 +177,6 @@
             labelEndmembers_CompositionLists.TabIndex = 96;
             labelEndmembers_CompositionLists.Text = "化学組成リスト";
             // 
-            // numericUpDownMineral_Target
-            // 
-            numericUpDownMineral_Target.Location = new Point(256, 71);
-            numericUpDownMineral_Target.Maximum = new decimal(new int[] { 10000, 0, 0, 0 });
-            numericUpDownMineral_Target.Name = "numericUpDownMineral_Target";
-            numericUpDownMineral_Target.Size = new Size(50, 23);
-            numericUpDownMineral_Target.TabIndex = 101;
-            numericUpDownMineral_Target.Value = new decimal(new int[] { 1000, 0, 0, 0 });
-            numericUpDownMineral_Target.ValueChanged += numericUpDownMineral_Target_ValueChanged;
-            // 
             // textBoxEndmembers_CompositionLists
             // 
             textBoxEndmembers_CompositionLists.Location = new Point(17, 122);
@@ -224,16 +186,6 @@
             textBoxEndmembers_CompositionLists.Size = new Size(288, 51);
             textBoxEndmembers_CompositionLists.TabIndex = 95;
             // 
-            // labelMineral_Target
-            // 
-            labelMineral_Target.AutoSize = true;
-            labelMineral_Target.Location = new Point(164, 71);
-            labelMineral_Target.Margin = new Padding(2, 0, 2, 0);
-            labelMineral_Target.Name = "labelMineral_Target";
-            labelMineral_Target.Size = new Size(87, 15);
-            labelMineral_Target.TabIndex = 102;
-            labelMineral_Target.Text = "シミュレーション数";
-            // 
             // labelMemo
             // 
             labelMemo.AutoSize = true;
@@ -242,6 +194,13 @@
             labelMemo.Size = new Size(40, 15);
             labelMemo.TabIndex = 93;
             labelMemo.Text = "memo";
+            // 
+            // textBoxMemo
+            // 
+            textBoxMemo.Location = new Point(299, 22);
+            textBoxMemo.Name = "textBoxMemo";
+            textBoxMemo.Size = new Size(120, 23);
+            textBoxMemo.TabIndex = 94;
             // 
             // labelMineralInfo_Name
             // 
@@ -362,13 +321,6 @@
             EndmemberControl2.Size = new Size(260, 23);
             EndmemberControl2.TabIndex = 88;
             // 
-            // textBoxMemo
-            // 
-            textBoxMemo.Location = new Point(299, 22);
-            textBoxMemo.Name = "textBoxMemo";
-            textBoxMemo.Size = new Size(120, 23);
-            textBoxMemo.TabIndex = 94;
-            // 
             // buttonAddList
             // 
             buttonAddList.AutoSize = true;
@@ -461,11 +413,12 @@
             // 
             groupBox4.Controls.Add(numericBoxValidationSplit);
             groupBox4.Controls.Add(graphControl1);
+            groupBox4.Controls.Add(numericBoxResolution);
+            groupBox4.Controls.Add(numericBoxTarget);
             groupBox4.Controls.Add(numericBoxModel_EarlyStopping);
             groupBox4.Controls.Add(numericBoxModel_BatchSize);
             groupBox4.Controls.Add(numericBoxModel_Epochs);
             groupBox4.Controls.Add(buttonAllSelect);
-            groupBox4.Controls.Add(checkedListBoxTrainMinerals);
             groupBox4.Controls.Add(textBoxModel_Evaluation);
             groupBox4.Controls.Add(buttonModel_Train);
             groupBox4.Controls.Add(label5);
@@ -522,7 +475,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(83, 286);
+            graphControl1.Location = new Point(48, 297);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -626,17 +579,6 @@
             buttonAllSelect.UseVisualStyleBackColor = true;
             buttonAllSelect.Click += buttonAllSelect_Click;
             // 
-            // checkedListBoxTrainMinerals
-            // 
-            checkedListBoxTrainMinerals.FormattingEnabled = true;
-            checkedListBoxTrainMinerals.HorizontalScrollbar = true;
-            checkedListBoxTrainMinerals.Location = new Point(19, 22);
-            checkedListBoxTrainMinerals.MultiColumn = true;
-            checkedListBoxTrainMinerals.Name = "checkedListBoxTrainMinerals";
-            checkedListBoxTrainMinerals.ScrollAlwaysVisible = true;
-            checkedListBoxTrainMinerals.Size = new Size(488, 94);
-            checkedListBoxTrainMinerals.TabIndex = 101;
-            // 
             // textBoxModel_Evaluation
             // 
             textBoxModel_Evaluation.Location = new Point(19, 247);
@@ -665,6 +607,17 @@
             label5.Size = new Size(49, 15);
             label5.TabIndex = 21;
             label5.Text = "訓練ログ";
+            // 
+            // checkedListBoxTrainMinerals
+            // 
+            checkedListBoxTrainMinerals.FormattingEnabled = true;
+            checkedListBoxTrainMinerals.HorizontalScrollbar = true;
+            checkedListBoxTrainMinerals.Location = new Point(319, 51);
+            checkedListBoxTrainMinerals.MultiColumn = true;
+            checkedListBoxTrainMinerals.Name = "checkedListBoxTrainMinerals";
+            checkedListBoxTrainMinerals.ScrollAlwaysVisible = true;
+            checkedListBoxTrainMinerals.Size = new Size(311, 76);
+            checkedListBoxTrainMinerals.TabIndex = 101;
             // 
             // numericBoxProbeCurrent
             // 
@@ -886,6 +839,7 @@
             // 
             // groupBoxMineral
             // 
+            groupBoxMineral.Controls.Add(checkedListBoxTrainMinerals);
             groupBoxMineral.Controls.Add(checkedListBoxMineral);
             groupBoxMineral.Controls.Add(flowLayoutPanel4);
             groupBoxMineral.Controls.Add(flowLayoutPanel2);
@@ -980,6 +934,50 @@
             toolStripStatusLabel1.Size = new Size(118, 17);
             toolStripStatusLabel1.Text = "toolStripStatusLabel1";
             // 
+            // numericBoxResolution
+            // 
+            numericBoxResolution.BackColor = Color.Transparent;
+            numericBoxResolution.DecimalPlaces = 0;
+            numericBoxResolution.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.HeaderText = "化学組成分解能";
+            numericBoxResolution.Location = new Point(27, 210);
+            numericBoxResolution.Margin = new Padding(0);
+            numericBoxResolution.MaximumSize = new Size(1000, 28);
+            numericBoxResolution.Minimum = 0D;
+            numericBoxResolution.MinimumSize = new Size(1, 18);
+            numericBoxResolution.Name = "numericBoxResolution";
+            numericBoxResolution.RadianValue = 0.17453292519943295D;
+            numericBoxResolution.ShowUpDown = true;
+            numericBoxResolution.Size = new Size(144, 26);
+            numericBoxResolution.SmartIncrement = true;
+            numericBoxResolution.TabIndex = 106;
+            numericBoxResolution.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.Value = 10D;
+            // 
+            // numericBoxTarget
+            // 
+            numericBoxTarget.BackColor = Color.Transparent;
+            numericBoxTarget.DecimalPlaces = 0;
+            numericBoxTarget.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.HeaderText = "シミュレーション数";
+            numericBoxTarget.Location = new Point(48, 73);
+            numericBoxTarget.Margin = new Padding(0);
+            numericBoxTarget.MaximumSize = new Size(1000, 28);
+            numericBoxTarget.Minimum = 0D;
+            numericBoxTarget.MinimumSize = new Size(1, 18);
+            numericBoxTarget.Name = "numericBoxTarget";
+            numericBoxTarget.RadianValue = 17.453292519943293D;
+            numericBoxTarget.ShowUpDown = true;
+            numericBoxTarget.Size = new Size(144, 26);
+            numericBoxTarget.SmartIncrement = true;
+            numericBoxTarget.TabIndex = 106;
+            numericBoxTarget.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxTarget.Value = 1000D;
+            // 
             // GeneratorForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -992,12 +990,10 @@
             Name = "GeneratorForm";
             Padding = new Padding(3);
             FormClosing += GeneratorForm_FormClosing;
-            ((System.ComponentModel.ISupportInitialize)numericUpDownEndmembers_Resolution).EndInit();
             groupBoxMineralInfo.ResumeLayout(false);
             groupBoxMineralInfo.PerformLayout();
             groupBox2.ResumeLayout(false);
             groupBox2.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)numericUpDownMineral_Target).EndInit();
             groupBoxEndmembers.ResumeLayout(false);
             groupBoxEndmembers.PerformLayout();
             panelEndmembers.ResumeLayout(false);
@@ -1029,8 +1025,6 @@
         #endregion
         private Button buttonSpectrumGenerationRun;
         private TextBox textBoxDTSALog;
-        private NumericUpDown numericUpDownEndmembers_Resolution;
-        private Label labelEndmembers_Resolution;
         private GroupBox groupBoxMineralInfo;
         private GroupBox groupBoxComposition;
         private Label labelCompositionName;
@@ -1070,8 +1064,6 @@
         private TextBox textBoxMemo;
         private Label labelMemo;
         private Button buttonReset;
-        private Label labelMineral_Target;
-        private NumericUpDown numericUpDownMineral_Target;
         private CheckedListBox checkedListBoxTrainMinerals;
         private Button buttonAllSelect;
         private ProgressBar progressBar1;
@@ -1096,6 +1088,8 @@
         private Crystallography.Controls.NumericBox numericBoxValidationSplit;
         private Crystallography.Controls.NumericBox numericBoxCount;
         private Crystallography.Controls.NumericBox numericBoxParallel;
+        private Crystallography.Controls.NumericBox numericBoxResolution;
+        private Crystallography.Controls.NumericBox numericBoxTarget;
     }
 }
 

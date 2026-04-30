@@ -1,6 +1,5 @@
 ﻿namespace MineraScope
 {
-    // 260416Codex: Designer 側の partial class 名も FormMain に合わせます。
     partial class FormMain
     {
         /// <summary>
@@ -295,7 +294,6 @@
             textBoxAnalysisResult.ScrollBars = ScrollBars.Both;
             textBoxAnalysisResult.Size = new Size(426, 106);
             textBoxAnalysisResult.TabIndex = 112;
-            // 260427Codex: 初期表示でドロップ可能なスペクトル形式を案内します。
             textBoxAnalysisResult.Text = ".msa または .emsa ファイルをファイルドラッグ＆ドロップしてください。";
             // 
             // textBoxSpectrumFile
@@ -306,8 +304,7 @@
             textBoxSpectrumFile.TabIndex = 113;
             // 
             // FormMain
-            //
-            // 260427Codex: フォームの余白部分にもスペクトルファイルをドロップできるようにします。
+            // 
             AllowDrop = true;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
@@ -347,7 +344,6 @@
         private MenuStrip menuStrip1;
         private ToolStripMenuItem fileToolStripMenuItem;
         private ToolStripMenuItem folderSettingToolStripMenuItem;
-        // 260416Codex: InitializeComponent で使用している名前にフィールド宣言を揃えます。
         private ComboBox comboBoxModelPath;
         private Crystallography.Controls.GraphControl graphControl1;
         private Panel panel2;

@@ -33,10 +33,8 @@ using Crystallography.Controls;
 namespace MineraScope
 {
     [MemoryPackable]
-    // 260416Codex: シミュレーション DTO 自体も正しい綴りへ統一します。
     public partial struct SimulationProperty
     {
-        // 260416Codex: DTO の公開メンバー名も正しい綴りへ揃えます。
         public string MineralGroupName;
         public string Atoms;
         //public (string Name, double Mol)[]               Atoms1;
@@ -65,11 +63,9 @@ namespace MineraScope
 
 
 
-    // 260416Codex: 生成系の責務が伝わるように Form 名を GeneratorForm へ変更します。
     public partial class GeneratorForm : Form
     {
 
-        // 260416Codex: 親フォーム参照名を FormMain に統一します。
         public FormMain FormMain;
 
         private readonly List<EndmemberControl> endmemberControls = [];
@@ -118,7 +114,6 @@ namespace MineraScope
             }
         }
 
-        // 260416Codex: クラス名リネームに合わせてコンストラクタ名も更新します。
         public GeneratorForm()
         {
 
@@ -137,7 +132,7 @@ namespace MineraScope
             // 260424Codex: 教師データ一覧は FormMain の EDX/教師データパスから初期表示します。
             RefreshTrainingMineralListFromMain();
 
-            
+
 
 
             //var fs1 = new FileStream(AssemblyPath + "\\MineralDatabase.xml", FileMode.Create);
@@ -148,13 +143,13 @@ namespace MineraScope
             endmemberControls.AddRange([EndmemberControl1, EndmemberControl2]);
             BindMineralSolutions(LoadSolidSolutions());
 
-#if DEBUG
-            labelEndmembers_Resolution.Visible = true;
-            numericUpDownEndmembers_Resolution.Visible = true;
-#else
-            labelEndmembers_Resolution.Visible = false;
-            numericUpDownEndmembers_Resolution.Visible = false;
-#endif
+//#if DEBUG
+//            labelEndmembers_Resolution.Visible = true;
+//            numericUpDownEndmembers_Resolution.Visible = true;
+//#else
+//            labelEndmembers_Resolution.Visible = false;
+//            numericUpDownEndmembers_Resolution.Visible = false;
+//#endif
 
 
             Profile profile = new Profile();
@@ -252,8 +247,8 @@ namespace MineraScope
                     numericBoxLiveTime.Value,
                     numericBoxProbeCurrent.Value),
                 new SimulationExecutionSettings(
-                    (int)numericUpDownMineral_Target.Value,
-                    (double)numericUpDownEndmembers_Resolution.Value / 100,
+                    (int)numericBoxTarget.Value,
+                    (double)numericBoxResolution.Value / 100,
                     (int)numericBoxCount.Value,
                     (int)numericBoxParallel.Value),
                 new ModelTrainingSettings(
@@ -416,8 +411,8 @@ namespace MineraScope
         private void UpdateCompositionCount()
         {
             var checkedSolutions = GetCheckedItems<SolidSolution>(checkedListBoxMineral);
-            int targetCount = (int)numericUpDownMineral_Target.Value;
-            double resolution = (double)numericUpDownEndmembers_Resolution.Value / 100;
+            int targetCount = (int)numericBoxTarget.Value;
+            double resolution = (double)numericBoxResolution.Value / 100;
             int totalCount = 0;
             var builder = new StringBuilder();
 
@@ -465,8 +460,8 @@ namespace MineraScope
                 ? string.Join($",{Environment.NewLine}", selectedSolution.Constraints)
                 : string.Empty;
             // 化学組成リストを表示
-            double resolution = (double)numericUpDownEndmembers_Resolution.Value / 100;
-            int targetCount = (int)numericUpDownMineral_Target.Value;
+            double resolution = (double)numericBoxResolution.Value / 100;
+            int targetCount = (int)numericBoxTarget.Value;
             // 固溶体を指定したmol%で分割
             var compositions = selectedSolution.Divide(resolution, targetCount);
 

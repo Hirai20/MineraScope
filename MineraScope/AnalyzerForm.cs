@@ -7,7 +7,6 @@ namespace MineraScope
 {
     public partial class AnalyzerForm : Form
     {
-        // 260416Codex: 親フォーム参照名を FormMain に統一します。
         public FormMain FormMain;
 
 
@@ -54,7 +53,7 @@ namespace MineraScope
                 return;
             }
 
-            listBoxSpectrumFiles.Items.Clear();
+            listBoxSpectrumFiles.Items.Clear();      
             listBoxSpectrumFiles.Items.AddRange(spectrumFiles);
         }
 
