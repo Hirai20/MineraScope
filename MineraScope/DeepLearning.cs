@@ -52,6 +52,28 @@ namespace MineraScope
             return 0;
         }
 
+        // 260507Codex: TensorFlow.Keras 0.15.0 では val_loss が履歴に出ない場合があるため、学習を止めない loss 監視の EarlyStopping を共通生成します。
+        private static EarlyStopping CreateEarlyStopping(Model model, int epochs, int patience)
+        {
+            var cbParams = new CallbackParams
+            {
+                Model = model,
+                Epochs = epochs,
+                Verbose = 1
+            };
+
+            return new EarlyStopping(
+                parameters: cbParams,
+                monitor: "loss",
+                patience: patience,
+                verbose: 1,
+                mode: "auto",
+                baseline: float.NaN,
+                restore_best_weights: true,
+                start_from_epoch: 0
+            );
+        }
+
         // 260430Codex: 端成分解析はスペクトルデータ loader に委譲し、DeepLearning は学習/予測入口だけを持ちます。
         public MineralFolder? AnalyzeMineralFolder(string folderPath) =>
             SpectrumDataLoader.AnalyzeMineralFolder(folderPath);
@@ -116,8 +138,9 @@ namespace MineraScope
             Log("");
 
             // データ分割
+            // 260507Codex: UI のテスト分割率を回帰学習にも反映します。
             var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitRegression(
-                allSpectra, allLabels, testSize: 0.2f, randomState: 42);
+                allSpectra, allLabels, testSize: testSplit, randomState: 42);
             Log($"  訓練データ: {xTrain.shape[0]}件");
             Log($"  テストデータ: {xTest.shape[0]}件\n");
 
@@ -140,28 +163,13 @@ namespace MineraScope
                 metrics: new[] { "mae" }
             );
 
-            // EarlyStopping
-            var cbParams = new CallbackParams
-            {
-                Model = model,
-                Epochs = epochs,
-                Verbose = 1
-            };
-
-            var earlyStop = new EarlyStopping(
-                parameters: cbParams,
-                monitor: "val_loss",
-                patience: patience,
-                verbose: 1,
-                mode: "auto",
-                baseline: float.NaN,
-                restore_best_weights: true,
-                start_from_epoch: 0
-            );
+            // 260507Codex: EarlyStopping は共通 helper で作成し、val_loss 欠落時の KeyNotFoundException を避けます。
+            var earlyStop = CreateEarlyStopping(model, epochs, patience);
             model.fit(
                 xTrain,
                 yTrain,
-                batch_size: 16,
+                // 260507Codex: UI から渡されたバッチサイズを回帰学習にも反映します。
+                batch_size: batchSize,
                 epochs: epochs,
                 validation_split: 0.1f,
                 callbacks: new List<ICallback> { earlyStop }
@@ -234,30 +242,15 @@ namespace MineraScope
                 metrics: new[] { "accuracy" }
             );
 
-            //EarlyStopping
-            var cbParams = new CallbackParams
-            {
-                Model = model,  // 監視対象のモデル
-                Epochs = epochs, // 最大エポック数
-                Verbose = 1      // ログ出力あり
-            };
-
-            var earlyStop = new EarlyStopping(
-                parameters: cbParams,
-                monitor: "val_loss",
-                patience: patience,
-                verbose: 1,
-                mode: "auto",
-                baseline: float.NaN,
-                restore_best_weights: true,
-                start_from_epoch: 0
-            );
+            // 260507Codex: EarlyStopping は共通 helper で作成し、val_loss 欠落時の KeyNotFoundException を避けます。
+            var earlyStop = CreateEarlyStopping(model, epochs, patience);
             Log("訓練中...");
             //Fit
             model.fit(
                 xTrain,
                 yTrain,
-                batch_size: 32,
+                // 260507Codex: UI から渡されたバッチサイズを分類学習にも反映します。
+                batch_size: batchSize,
                 epochs: epochs,
                 validation_split: 0.2f,
                 callbacks: new List<ICallback> { earlyStop }
