@@ -30,6 +30,21 @@ namespace MineraScope
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string ModelPath { get => textBoxlPathSaveMode.Text; set => textBoxlPathSaveMode.Text = value; }
 
+        // 260507Codex: 判定ではモデル群の親フォルダではなく、コンボボックスで選んだ直下のモデルフォルダを使います。
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string SelectedModelPath
+        {
+            get
+            {
+                if (comboBoxModelPath.SelectedItem is not string selectedModelName || string.IsNullOrWhiteSpace(ModelPath))
+                {
+                    return string.Empty;
+                }
+
+                return Path.Combine(ModelPath, selectedModelName);
+            }
+        }
+
         // 260424Codex: 生成スペクトル出力先と教師データ参照先は同じフォルダとして親フォームで管理します。
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string EdxOutputPath { get => textBoxPathEDX.Text; set => textBoxPathEDX.Text = value; }
@@ -50,6 +65,8 @@ namespace MineraScope
             InitializeComponent();
             // 260424Codex: 共通ファイルパス設定は FormMain 側で初期化して子フォームから参照します。
             InitializeFilePathSettings();
+            // 260507Codex: 起動時に既定モデル保存先の直下フォルダをモデル選択欄へ反映します。
+            RefreshModelPathList();
             // 260427Codex: フォーム上のどの UI 部品に落としても同じスペクトル入力として扱います。
             EnableSpectrumDropOnChildControls(this);
         }
@@ -90,6 +107,9 @@ namespace MineraScope
             buttonPathSaveMode.Click += buttonFilePathBrowse_Click;
             buttonPathDTSA.Click += buttonFilePathBrowse_Click;
             buttonPathEDX.Click += buttonFilePathBrowse_Click;
+
+            // 260507Codex: モデル保存先を手入力で変更した場合も、直下のモデル候補を選択欄へ反映します。
+            textBoxlPathSaveMode.TextChanged += (_, _) => RefreshModelPathList();
         }
 
         // 260424Codex: FormMain 上の 3 つのパス欄からフォルダ選択を行います。
@@ -98,8 +118,9 @@ namespace MineraScope
             TextBox? targetTextBox = sender switch
             {
                 Button button when button == buttonPathSaveMode => textBoxlPathSaveMode,
-                Button button when button == buttonPathDTSA => textBoxPathEDX,
-                Button button when button == buttonPathEDX => textBoxPathDTSA,
+                // 260507Codex: ボタン名と保存先 TextBox の対応を名前通りに揃えます。
+                Button button when button == buttonPathDTSA => textBoxPathDTSA,
+                Button button when button == buttonPathEDX => textBoxPathEDX,
                 _ => null
             };
 
@@ -110,8 +131,42 @@ namespace MineraScope
 
             if (FolderSelectionHelper.TrySelectFolder(targetTextBox))
             {
+                // 260507Codex: モデル保存先を参照変更した直後に、直下フォルダのモデル候補を更新します。
+                if (targetTextBox == textBoxlPathSaveMode)
+                {
+                    RefreshModelPathList();
+                }
+
                 GeneratorForm?.RefreshTrainingMineralListFromMain();
             }
+        }
+
+        // 260507Codex: モデル保存先フォルダの直下にある各フォルダを、使用モデルとして選べるようにします。
+        private void RefreshModelPathList()
+        {
+            string previousSelection = comboBoxModelPath.SelectedItem as string ?? string.Empty;
+
+            comboBoxModelPath.BeginUpdate();
+            comboBoxModelPath.Items.Clear();
+
+            if (Directory.Exists(ModelPath))
+            {
+                foreach (string directoryPath in Directory.GetDirectories(ModelPath).OrderBy(Path.GetFileName))
+                {
+                    comboBoxModelPath.Items.Add(Path.GetFileName(directoryPath));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(previousSelection) && comboBoxModelPath.Items.Contains(previousSelection))
+            {
+                comboBoxModelPath.SelectedItem = previousSelection;
+            }
+            else if (comboBoxModelPath.Items.Count > 0)
+            {
+                comboBoxModelPath.SelectedIndex = 0;
+            }
+
+            comboBoxModelPath.EndUpdate();
         }
 
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
@@ -198,14 +253,17 @@ namespace MineraScope
 
             try
             {
-                if (string.IsNullOrWhiteSpace(ModelPath))
+                // 260507Codex: 親フォルダだけでなく、comboBoxModelPath で選択されたモデルフォルダまで確認します。
+                string selectedModelPath = SelectedModelPath;
+                if (string.IsNullOrWhiteSpace(selectedModelPath))
                 {
-                    AnalysisLog("モデルの保存先フォルダが指定されていないか、存在しません。");
+                    AnalysisLog("使用するモデルフォルダが選択されていません。");
                     return;
                 }
 
                 await new MineralPredictionWorkflow(AppContext.BaseDirectory, AnalysisLog)
-                    .RunAsync(ModelPath, new[] { filePath });
+                    // 260507Codex: 選択中のモデルフォルダを予測ワークフローへ渡します。
+                    .RunAsync(selectedModelPath, new[] { filePath });
             }
             catch (Exception ex)
             {

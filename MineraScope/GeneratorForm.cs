@@ -79,6 +79,25 @@ namespace MineraScope
         private readonly SimulationPlanBuilder _simulationPlanBuilder;
         // 260416Codex: 計算済み plan の出力と実行を Form から分離し、UI は起動トリガーだけを担当します。
         private readonly SimulationExecutionService _simulationExecutionService;
+        // 260507Codex: Designer 手作業で追加される新 UI 部品を、Designer 直編集なしで実行時に捕まえます。
+        private SplitContainer _splitContainerMineral;
+        // 260507Codex: 下部ドロワーの高さ制御対象を名前検索で保持します。
+        private TableLayoutPanel _tableLayoutPanelMain;
+        // 260507Codex: 詳細設定とログを差し替えて表示する下部領域です。
+        private Panel _panelBottomDrawer;
+        // 260507Codex: 詳細設定用の退避パネルは Designer 側の名前を優先して解決します。
+        private Control _advancedSettingsContent;
+        // 260507Codex: 実行ログ用の退避パネルはなければ既存ログ TextBox を使います。
+        private Control _modelLogContent;
+        // 260507Codex: 詳細設定ドロワーも CheckBox で表示状態を表します。
+        private CheckBox _checkBoxToggleAdvancedSettings;
+        // 260507Codex: 旧案の詳細設定ボタンが残っていても動くように後方互換で接続します。
+        private Button _buttonToggleAdvancedSettings;
+        // 260507Codex: 現在ドロワーに表示している内容を記録し、再押下で閉じられるようにします。
+        private Control _currentBottomDrawerContent;
+
+        // 260507Codex: 下部ドロワーの標準高さを UI 初期化と開閉処理で共有します。
+        private const float BottomDrawerDefaultHeight = 180F;
 
         private string AssemblyPath { get; } = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) ?? AppContext.BaseDirectory;
         // 260416Codex: Python スクリプトはユーザーに見せない固定保存先へ集約します。
@@ -117,6 +136,8 @@ namespace MineraScope
 
 
             InitializeComponent();
+            // 260507Codex: Designer 手作業で追加される新レイアウト部品を実行時に初期化します。
+            ConfigureGeneratorLayoutRuntimeState();
             _deepLearning = new(TrainLog);
             // 260416Codex: 既存 helper を Form 初期化時に束ねておき、以降のイベント処理を薄く保ちます。
             _mineralDatabaseRepository = new(AssemblyPath);
@@ -144,11 +165,232 @@ namespace MineraScope
             // 260430Codex: 旧 NumericUpDown の DEBUG 表示切替は対象コントロール廃止後の Designer と合わないため外します。
 
 
-            Profile profile = new Profile();
-            profile.Pt = [new PointD(0, 1), new PointD(1, 1), new PointD(2, 3), new PointD(3, 1), new PointD(4, 2)];
-            graphControl1.Profile = profile;
+            //Profile profile = new Profile();
+            //profile.Pt = [new PointD(0, 1), new PointD(1, 1), new PointD(2, 3), new PointD(3, 1), new PointD(4, 2)];
+            //graphControl1.Profile = profile;
 
 
+        }
+
+        // 260507Codex: Designer を直接編集せず、手作業追加された名前付きコントロールだけを実行時に解決します。
+        private void ConfigureGeneratorLayoutRuntimeState()
+        {
+            _splitContainerMineral = FindFirstExistingControl<SplitContainer>("splitContainerMineral");
+            _tableLayoutPanelMain = FindFirstExistingControl<TableLayoutPanel>("tableLayoutPanelMain");
+            _panelBottomDrawer = FindFirstExistingControl<Panel>("panelBottomDrawer");
+            _advancedSettingsContent = FindFirstExistingControl<Control>(
+                "panelAdvancedSettings",
+                "panelAdvancedSettingsContent",
+                "groupBoxTrainModel",
+                "groupBoxAdvancedSettings",
+                "groupBoxDetailSettings");
+            _modelLogContent = FindFirstExistingControl<Control>(
+                "panelModelLog",
+                "panelModelLogContent",
+                "panelExecutionLog",
+                "groupBoxModelLog")
+                ?? textBoxModelLog;
+            // 260507Codex: 詳細設定はコマンドバー側に置く CheckBox を短い名前でも拾います。
+            _checkBoxToggleAdvancedSettings = FindFirstExistingControl<CheckBox>(
+                "checkBoxAdvanced",
+                "checkBoxDetails",
+                "checkBoxToggleAdvancedSettings");
+            _buttonToggleAdvancedSettings = FindFirstExistingControl<Button>("buttonToggleAdvancedSettings");
+
+            if (_splitContainerMineral is not null)
+            {
+                // 260507Codex: 鉱物詳細の CheckBox 廃止後は、右ペインを初期表示に寄せます。
+                _splitContainerMineral.Panel2Collapsed = false;
+            }
+
+            ConfigureBottomDrawerInitialState();
+
+            buttonSpectrumGenerationRun.Visible = false;
+            buttonModelTrain.Text = "モデルを作成";
+
+            HookGeneratorLayoutButtons();
+            UpdateAdvancedSettingsButtonText();
+        }
+
+        // 260507Codex: 下部ドロワーの初期状態を Designer 側の Row 3 に合わせて閉じた状態へ寄せます。
+        private void ConfigureBottomDrawerInitialState()
+        {
+            if (_panelBottomDrawer is not null)
+            {
+                _panelBottomDrawer.Visible = false;
+                _panelBottomDrawer.AutoScroll = true;
+            }
+
+            SetBottomDrawerRowHeight(0F);
+        }
+
+        // 260507Codex: Designer 側で追加された詳細設定 CheckBox または旧ボタンに Code Behind の動作だけを接続します。
+        private void HookGeneratorLayoutButtons()
+        {
+            if (_checkBoxToggleAdvancedSettings is not null)
+            {
+                _checkBoxToggleAdvancedSettings.CheckedChanged -= checkBoxToggleAdvancedSettings_CheckedChanged;
+                _checkBoxToggleAdvancedSettings.CheckedChanged += checkBoxToggleAdvancedSettings_CheckedChanged;
+            }
+            else if (_buttonToggleAdvancedSettings is not null)
+            {
+                _buttonToggleAdvancedSettings.Click -= buttonToggleAdvancedSettings_Click;
+                _buttonToggleAdvancedSettings.Click += buttonToggleAdvancedSettings_Click;
+            }
+        }
+
+        // 260507Codex: 新 UI の名前候補を再帰検索し、未配置時は null で安全に抜けられるようにします。
+        private T FindFirstExistingControl<T>(params string[] names)
+            where T : Control
+        {
+            foreach (var name in names)
+            {
+                // 260507Codex: Controls.Find の戻り値を型で絞り、最初に見つかった対象だけを返します。
+                if (Controls.Find(name, searchAllChildren: true).OfType<T>().FirstOrDefault() is { } control)
+                {
+                    return control;
+                }
+            }
+
+            // 260507Codex: auto-generated 扱いの partial なので nullable 注釈ではなく null 許容の実運用に合わせます。
+            return null;
+        }
+
+        // 260507Codex: 詳細設定ドロワーを同じボタンで表示と非表示に切り替えます。
+        private void buttonToggleAdvancedSettings_Click(object sender, EventArgs e)
+        {
+            if (_advancedSettingsContent is null)
+            {
+                UpdateAdvancedSettingsButtonText();
+                return;
+            }
+
+            SetAdvancedSettingsVisible(!IsBottomDrawerShowing(_advancedSettingsContent));
+        }
+
+        // 260507Codex: 詳細設定 CheckBox のチェック状態を下部ドロワー表示へ同期します。
+        private void checkBoxToggleAdvancedSettings_CheckedChanged(object sender, EventArgs e)
+        {
+            if (sender is not CheckBox checkBox)
+            {
+                return;
+            }
+
+            SetAdvancedSettingsVisible(checkBox.Checked);
+        }
+
+        // 260507Codex: 詳細設定ドロワーの表示状態を一か所で切り替えます。
+        private void SetAdvancedSettingsVisible(bool visible)
+        {
+            if (_advancedSettingsContent is null)
+            {
+                UpdateAdvancedSettingsButtonText();
+                return;
+            }
+
+            if (visible)
+            {
+                ShowBottomDrawer(_advancedSettingsContent);
+            }
+            else if (IsBottomDrawerShowing(_advancedSettingsContent))
+            {
+                HideBottomDrawer();
+            }
+            else
+            {
+                UpdateAdvancedSettingsButtonText();
+            }
+        }
+
+        // 260507Codex: 下部ドロワーに詳細設定またはログを差し替えて表示します。
+        private void ShowBottomDrawer(Control content, float height = BottomDrawerDefaultHeight)
+        {
+            if (_panelBottomDrawer is null)
+            {
+                return;
+            }
+
+            _panelBottomDrawer.SuspendLayout();
+            try
+            {
+                _panelBottomDrawer.Controls.Clear();
+                _panelBottomDrawer.Controls.Add(content);
+                content.Dock = DockStyle.Fill;
+                content.Visible = true;
+                _currentBottomDrawerContent = content;
+                _panelBottomDrawer.Visible = true;
+                SetBottomDrawerRowHeight(height);
+            }
+            finally
+            {
+                _panelBottomDrawer.ResumeLayout(performLayout: true);
+            }
+
+            _tableLayoutPanelMain?.PerformLayout();
+            UpdateAdvancedSettingsButtonText();
+        }
+
+        // 260507Codex: 下部ドロワーを閉じ、TableLayoutPanel の Row 3 を 0px に戻します。
+        private void HideBottomDrawer()
+        {
+            if (_panelBottomDrawer is not null)
+            {
+                _panelBottomDrawer.Visible = false;
+            }
+
+            _currentBottomDrawerContent = null;
+            SetBottomDrawerRowHeight(0F);
+            _tableLayoutPanelMain?.PerformLayout();
+            UpdateAdvancedSettingsButtonText();
+        }
+
+        // 260507Codex: モデル作成開始時にログ表示用コンテンツへドロワーを切り替えます。
+        private void ShowModelLogDrawer()
+        {
+            if (_modelLogContent is not null)
+            {
+                ShowBottomDrawer(_modelLogContent);
+            }
+        }
+
+        // 260507Codex: RowStyles が Designer 側で未作成の場合も落ちないように高さ変更を保護します。
+        private void SetBottomDrawerRowHeight(float height)
+        {
+            if (_tableLayoutPanelMain is null || _tableLayoutPanelMain.RowStyles.Count <= 3)
+            {
+                return;
+            }
+
+            _tableLayoutPanelMain.RowStyles[3].SizeType = SizeType.Absolute;
+            _tableLayoutPanelMain.RowStyles[3].Height = height;
+        }
+
+        // 260507Codex: 現在の下部ドロワー内容が指定コンテンツかを開閉ボタンから判定します。
+        private bool IsBottomDrawerShowing(Control content) =>
+            _panelBottomDrawer is { Visible: true }
+            && ReferenceEquals(_currentBottomDrawerContent, content);
+
+        // 260507Codex: 詳細設定ドロワーの表示状態に合わせてボタン文言を更新します。
+        private void UpdateAdvancedSettingsButtonText()
+        {
+            bool advancedVisible = _advancedSettingsContent is not null
+                && IsBottomDrawerShowing(_advancedSettingsContent);
+
+            if (_checkBoxToggleAdvancedSettings is not null)
+            {
+                _checkBoxToggleAdvancedSettings.Text = "詳細設定を表示";
+                if (_checkBoxToggleAdvancedSettings.Checked != advancedVisible)
+                {
+                    _checkBoxToggleAdvancedSettings.Checked = advancedVisible;
+                }
+            }
+
+            if (_buttonToggleAdvancedSettings is not null)
+            {
+                _buttonToggleAdvancedSettings.Text = advancedVisible
+                    ? "詳細設定を非表示"
+                    : "詳細設定を表示";
+            }
         }
 
         // 260416Codex: XML 読み込みは repository へ移したため、Form 側は委譲だけにします。
@@ -413,7 +655,7 @@ namespace MineraScope
                 var comps = solution.Divide(resolution, targetCount);
                 if (comps == null)
                 {
-                    textBoxCompositionCount.Text = "計算出来ません";
+                    //textBoxCompositionCount.Text = "計算出来ません";
                     return;
                 }
 
@@ -428,7 +670,7 @@ namespace MineraScope
             }
 
             builder.Append($"合計: {totalCount} 組成");
-            textBoxCompositionCount.Text = builder.ToString();
+            //textBoxCompositionCount.Text = builder.ToString();
         }
         #endregion
         #region 選択されている鉱物の条件式、化学組成リストを更新・表示
@@ -440,11 +682,11 @@ namespace MineraScope
             {
                 textBoxEndmembers_Constraints.Text = "";
                 textBoxEndmembers_CompositionLists.Text = "";
-                textBoxMineral_Name.Text = "";
+                textBoxMineralName.Text = "";
                 textBoxMemo.Text = "";
                 return;
             }
-            textBoxMineral_Name.Text = selectedSolution.Name;
+            textBoxMineralName.Text = selectedSolution.Name;
             textBoxMemo.Text = selectedSolution.Formula;
 
             // 条件式を表示
@@ -500,7 +742,7 @@ namespace MineraScope
             }
 
             solution = new SolidSolution(
-                textBoxMineral_Name.Text.Trim(),
+                textBoxMineralName.Text.Trim(),
                 textBoxMemo.Text.Trim(),
                 members,
                 ParseConstraints());
@@ -644,10 +886,13 @@ namespace MineraScope
 
         #endregion
         private void TrainLog(string message)
-            => TextBoxLogHelper.AppendLine(textBoxModel_Evaluation, message);
+            => TextBoxLogHelper.AppendLine(textBoxModelLog, message);
         //分類モデル
         private async void buttonModel_Train_Click(object sender, EventArgs e)
         {
+            // 260507Codex: モデル作成時は下部ドロワーをログ表示へ切り替えてから既存学習処理を走らせます。
+            ShowModelLogDrawer();
+
             // 260416Codex: 学習開始も request -> plan -> workflow の流れに揃え、今後の統合実行へつなげます。
             var request = CreateModelCreationRequest();
             var trainingPlan = _modelTrainingWorkflow.CreatePlan(request);
@@ -662,8 +907,8 @@ namespace MineraScope
             ModelOutputPath = trainingPlan.ModelOutputFolder;
 
             //  UIロックとログクリア
-            buttonModel_Train.Enabled = false;
-            textBoxModel_Evaluation.Clear();
+            buttonModelTrain.Enabled = false;
+            textBoxModelLog.Clear();
 
             try
             {
@@ -672,7 +917,7 @@ namespace MineraScope
             }
             finally
             {
-                buttonModel_Train.Enabled = true;
+                buttonModelTrain.Enabled = true;
             }
         }
 
@@ -703,4 +948,3 @@ namespace MineraScope
         }
     }
 }
-

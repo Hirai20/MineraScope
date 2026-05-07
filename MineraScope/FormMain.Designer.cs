@@ -219,10 +219,9 @@
             panelPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             panelPathEDX.Controls.Add(labelPathEDX);
             panelPathEDX.Controls.Add(textBoxPathEDX);
-            panelPathEDX.Controls.Add(buttonPathDTSA);
             panelPathEDX.Location = new Point(171, 139);
             panelPathEDX.Name = "panelPathEDX";
-            panelPathEDX.Size = new Size(304, 33);
+            panelPathEDX.Size = new Size(273, 31);
             panelPathEDX.TabIndex = 110;
             // 
             // labelPathEDX
@@ -238,7 +237,7 @@
             // 
             buttonPathDTSA.AutoSize = true;
             buttonPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathDTSA.Location = new Point(275, 5);
+            buttonPathDTSA.Location = new Point(447, 103);
             buttonPathDTSA.Name = "buttonPathDTSA";
             buttonPathDTSA.Size = new Size(26, 25);
             buttonPathDTSA.TabIndex = 1;
@@ -249,19 +248,18 @@
             // 
             panelPathDTSA.AutoSize = true;
             panelPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panelPathDTSA.Controls.Add(buttonPathEDX);
             panelPathDTSA.Controls.Add(textBoxPathDTSA);
             panelPathDTSA.Controls.Add(labelPathDTSA);
             panelPathDTSA.Location = new Point(171, 100);
             panelPathDTSA.Name = "panelPathDTSA";
-            panelPathDTSA.Size = new Size(304, 33);
+            panelPathDTSA.Size = new Size(273, 31);
             panelPathDTSA.TabIndex = 109;
             // 
             // buttonPathEDX
             // 
             buttonPathEDX.AutoSize = true;
             buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathEDX.Location = new Point(275, 5);
+            buttonPathEDX.Location = new Point(449, 142);
             buttonPathEDX.Name = "buttonPathEDX";
             buttonPathEDX.Size = new Size(26, 25);
             buttonPathEDX.TabIndex = 1;
@@ -309,7 +307,9 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(475, 465);
+            Controls.Add(buttonPathEDX);
             Controls.Add(textBoxSpectrumFile);
+            Controls.Add(buttonPathDTSA);
             Controls.Add(textBoxAnalysisResult);
             Controls.Add(panel2);
             Controls.Add(panelPathEDX);
