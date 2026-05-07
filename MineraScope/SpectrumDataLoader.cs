@@ -96,6 +96,11 @@ namespace MineraScope
         // 260430Codex: 2048 点スペクトルの読み込みと正規化を学習・予測で共通利用します。
         public static float[]? LoadNormalizedSpectrum(string filePath)
         {
+            if (!File.Exists(filePath))
+            {
+                return null;
+            }
+
             var data = LoadMsaFile(filePath);
             if (data.shape[0] != SpectrumLength)
             {
@@ -147,6 +152,96 @@ namespace MineraScope
             }
 
             return np.array(yValues.ToArray());
+        }
+
+        // 260507Codex: manifest の Completed から選ばれた spectrum だけを分類学習データへ変換します。
+        public static (NDArray Spectra, List<string> Labels) LoadClassificationData(
+            IReadOnlyList<SpectrumTrainingPool> trainingPools)
+        {
+            var spectraList = new List<float[]>();
+            var labels = new List<string>();
+
+            foreach (var pool in trainingPools)
+            {
+                foreach (var sample in pool.Samples)
+                {
+                    var data = LoadNormalizedSpectrum(sample.FilePath);
+                    if (data == null)
+                    {
+                        continue;
+                    }
+
+                    spectraList.Add(data);
+                    labels.Add(pool.MineralName);
+                }
+            }
+
+            if (spectraList.Count == 0)
+            {
+                return (np.zeros(new Shape(0, SpectrumLength)), labels);
+            }
+
+            return (CreateSpectraArray(spectraList), labels);
+        }
+
+        // 260507Codex: manifest の endmemberFractions を回帰ラベルの正本として使います。
+        public static (NDArray Spectra, NDArray Labels, Dictionary<string, int>? ComponentIndex) LoadRegressionData(
+            SpectrumTrainingPool trainingPool)
+        {
+            if (trainingPool.EndmemberNames.Count == 0)
+            {
+                return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 0)), null);
+            }
+
+            var componentOrder = trainingPool.EndmemberNames
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name)
+                .ToList();
+
+            if (componentOrder.Count == 0)
+            {
+                return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 0)), null);
+            }
+
+            var componentIndex = componentOrder
+                .Select((component, index) => new { component, index })
+                .ToDictionary(x => x.component, x => x.index);
+
+            var spectraList = new List<float[]>();
+            var labelsList = new List<IReadOnlyDictionary<string, double>>();
+
+            foreach (var sample in trainingPool.Samples)
+            {
+                var data = LoadNormalizedSpectrum(sample.FilePath);
+                if (data == null)
+                {
+                    continue;
+                }
+
+                spectraList.Add(data);
+                labelsList.Add(sample.EndmemberFractions);
+            }
+
+            if (spectraList.Count == 0)
+            {
+                return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, componentOrder.Count)), null);
+            }
+
+            float[,] labelsArray = new float[spectraList.Count, componentOrder.Count];
+            for (int i = 0; i < labelsList.Count; i++)
+            {
+                var labelDict = labelsList[i];
+                for (int j = 0; j < componentOrder.Count; j++)
+                {
+                    string componentName = componentOrder[j];
+                    labelsArray[i, j] = labelDict.TryGetValue(componentName, out double ratio)
+                        ? (float)ratio
+                        : 0f;
+                }
+            }
+
+            return (CreateSpectraArray(spectraList), np.array(labelsArray), componentIndex);
         }
 
         // 260430Codex: 回帰モデル用のスペクトル行列、ラベル行列、端成分 index を作ります。

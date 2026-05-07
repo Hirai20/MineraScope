@@ -1,6 +1,7 @@
 using Crystallography;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using xFunc.Maths;
@@ -47,8 +48,7 @@ namespace MineraScope
                 return null!;
             }
 
-            var allRatios = GetRatios(Members.Length, resolution, 1);
-            var validRatios = allRatios.Where(r => CapableComposition(r.ToArray())).ToList();
+            var validRatios = EnumerateCandidateFractions(resolution).Select(ratio => ratio.ToList()).ToList();
 
             if (targetCount < validRatios.Count)
             {
@@ -65,13 +65,56 @@ namespace MineraScope
                 {
                     AddWeights(totalWeights, Members[i].Elements, ratio[i]);
                     fileNameBuilder.Append(Members[i].Name);
-                    fileNameBuilder.Append(ratio[i].ToString("F3"));
+                    fileNameBuilder.Append(ratio[i].ToString("F3", CultureInfo.InvariantCulture));
                 }
 
                 results.Add((fileNameBuilder.ToString(), NormalizeWeights(totalWeights)));
             }
 
             return results.ToArray();
+        }
+
+        // 260507Codex: 新方式の pool 予約用に、分解能と制約だけで全候補比率を列挙します。
+        public double[][] EnumerateCandidateFractions(double resolution)
+        {
+            if (Members.Length == 1)
+            {
+                return [[1.0]];
+            }
+
+            if (resolution <= 0)
+            {
+                return [];
+            }
+
+            return GetRatios(Members.Length, resolution, 1)
+                .Select(ratio => ratio.ToArray())
+                .Where(CapableComposition)
+                .ToArray();
+        }
+
+        // 260507Codex: manifest の endmemberFractions へ保存する端成分比率を鉱物定義順で作ります。
+        public Dictionary<string, double> CreateEndmemberFractionMap(double[] fractions)
+        {
+            var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < Members.Length && i < fractions.Length; i++)
+            {
+                result[Members[i].Name] = fractions[i];
+            }
+
+            return result;
+        }
+
+        // 260507Codex: DTSA-II に渡す元素重量比を、manifest 予約済みの端成分比率から再構築します。
+        public (string ElementName, double Weight)[] CalculateCompositionWeights(double[] fractions)
+        {
+            var totalWeights = new Dictionary<string, double>();
+            for (int i = 0; i < Members.Length && i < fractions.Length; i++)
+            {
+                AddWeights(totalWeights, Members[i].Elements, fractions[i]);
+            }
+
+            return NormalizeWeights(totalWeights);
         }
 
         // 260416Codex: 単一メンバー時も複数メンバー時も同じ正規化ロジックを通すようにします。

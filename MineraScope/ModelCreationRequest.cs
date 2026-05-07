@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace MineraScope
 {
-    // 260416Codex: 画面のファイル系入力を 1 つの値オブジェクトへまとめ、ワークフロー側へそのまま渡せる形にします。
+    // 260507Codex: 画面上の共通パスを、pool 作成・DTSA 実行・モデル保存へ渡す入力としてまとめます。
     internal sealed record ModelCreationPaths(
         string SpectrumOutputFolder,
         string ScriptOutputFolder,
@@ -10,7 +10,7 @@ namespace MineraScope
         string TeacherDataFolder,
         string ModelOutputFolder);
 
-    // 260416Codex: SEM-EDX 条件を UI から分離し、将来の一致判定ロジックでも再利用しやすくします。
+    // 260507Codex: pool の conditionKey に含める現行 EDX 条件を明示します。
     internal sealed record SemEdxCondition(
         string DetectorName,
         double CarbonCoatThickness,
@@ -18,26 +18,24 @@ namespace MineraScope
         double LiveTime,
         double ProbeCurrent);
 
-    // 260416Codex: シミュレーション側の実行条件をまとめ、ボタンごとの差し替えを簡単にします。
+    // 260507Codex: target は学習に使用したい件数、parallel は不足分生成のジョブ分割数として扱います。
     internal sealed record SimulationExecutionSettings(
-        int TargetCompositionCount,
+        int TargetSpectrumCount,
         double ResolutionStep,
-        int RunCount,
         int ParallelCount);
 
-    // 260416Codex: 学習設定を DTO 化して、Form から DeepLearning 呼び出しまでの依存を弱めます。
+    // 260507Codex: 学習条件は conditionKey から外し、モデル作成時だけ使う設定として分離します。
     internal sealed record ModelTrainingSettings(
         int Epochs,
         int BatchSize,
         int EarlyStoppingPatience,
         float ValidationSplit);
 
-    // 260416Codex: 現在の GeneratorForm の状態を 1 回で表せる request を作り、段階的な workflow 化の入口にします。
+    // 260507Codex: モデル作成対象は checkedListBoxMineral のチェック済み SolidSolution だけに統一します。
     internal sealed record ModelCreationRequest(
         ModelCreationPaths Paths,
         SemEdxCondition SemEdxCondition,
         SimulationExecutionSettings Simulation,
         ModelTrainingSettings Training,
-        IReadOnlyList<SolidSolution> SelectedMineralSolutions,
-        IReadOnlyList<string> SelectedTrainingMinerals);
+        IReadOnlyList<SolidSolution> SelectedMineralSolutions);
 }

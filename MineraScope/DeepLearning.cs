@@ -79,7 +79,33 @@ namespace MineraScope
             SpectrumDataLoader.AnalyzeMineralFolder(folderPath);
 
         #region モデル訓練
-        public void RunTraining(List<string> mineralNames, string TrainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
+        // 260507Codex: 新方式では manifest の Completed から選ばれた spectrum だけを学習に使います。
+        internal void RunTraining(IReadOnlyList<SpectrumTrainingPool> trainingPools, int epochs, int batchSize, int patience, float testSplit, string outputPath)
+        {
+            if (!Directory.Exists(outputPath))
+            {
+                Log("モデルの保存先を指定してください。");
+                return;
+            }
+
+            var orderedPools = trainingPools
+                .Where(pool => pool.Samples.Count > 0)
+                .OrderBy(pool => pool.MineralName)
+                .ToArray();
+
+            string classificationOutputPath = Path.Combine(outputPath, "AllMinerals_Classification");
+            TrainClassificationModel(orderedPools, epochs, batchSize, patience, testSplit, classificationOutputPath);
+
+            foreach (var pool in orderedPools.Where(pool => pool.EndmemberNames.Count >= 2))
+            {
+                string regressionOutputPath = Path.Combine(outputPath, $"{pool.MineralName}_Regression");
+                TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath);
+            }
+
+            Log(" 指定された全鉱物の処理が完了しました");
+        }
+
+        public void RunTraining(List<string> mineralNames, string trainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
         {
             if (!Directory.Exists(outputPath))
             {
@@ -88,11 +114,11 @@ namespace MineraScope
             }
             string classificationOutputPath = Path.Combine(outputPath, "AllMinerals_Classification");
 
-            TrainClassificationModel(mineralNames, TrainingDataFolder, epochs, batchSize, patience, testSplit, classificationOutputPath);
+            TrainClassificationModel(mineralNames, trainingDataFolder, epochs, batchSize, patience, testSplit, classificationOutputPath);
             foreach (var mineralName in mineralNames)
             {
                 // 260430Codex: 回帰モデル対象フォルダの解決は共通 helper へ戻し、スペクトル判定を統一します。
-                if (!SpectrumDataLoader.TryResolveMineralFolderPath(TrainingDataFolder, mineralName, out var mineralFolderPath))
+                if (!SpectrumDataLoader.TryResolveMineralFolderPath(trainingDataFolder, mineralName, out var mineralFolderPath))
                 {
                     Log($"警告: {mineralName} のフォルダが見つかりません。スキップします。\n");
                     continue;
@@ -109,17 +135,107 @@ namespace MineraScope
             Log(" 指定された全鉱物の処理が完了しました");
         }
 
-        // 260430Codex: 回帰学習は余分な入れ子を外し、スペクトル長と評価値取得を共通 helper でそろえます。
-        private void TrainRegressionModel(string mineralName, string TrainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
+        // 260507Codex: manifest の endmemberFractions から回帰ラベルを作り、ファイル名パースを通らずに学習します。
+        private void TrainRegressionModel(SpectrumTrainingPool trainingPool, int epochs, int batchSize, int patience, float testSplit, string outputPath)
         {
             keras.backend.clear_session();
             tf.set_random_seed(42);
             Log("端成分割合予測モデル \n");
-            Log($"訓練データフォルダ: {TrainingDataFolder}");
+            Log($"対象鉱物: {trainingPool.MineralName}");
+
+            Log("manifest からスペクトルデータを読み込み中...");
+            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(trainingPool);
+            ComponentIndex = componentIdx;
+
+            if (allSpectra.shape[0] == 0 || ComponentIndex == null)
+            {
+                Log("エラー: 端成分情報が見つかりません。");
+                return;
+            }
+
+            Log($"  ファイル数: {allSpectra.shape[0]}");
+            Log($"  端成分数: {ComponentIndex.Count}");
+            Log($"  端成分一覧:");
+            foreach (var kvp in ComponentIndex.OrderBy(x => x.Value))
+            {
+                Log($"    [{kvp.Value}] {kvp.Key}");
+            }
+            Log("");
+
+            var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitRegression(
+                allSpectra, allLabels, testSize: testSplit, randomState: 42);
+            Log($"  訓練データ: {xTrain.shape[0]}件");
+            Log($"  テストデータ: {xTest.shape[0]}件\n");
+
+            int numComponents = ComponentIndex.Count;
+
+            var model = keras.Sequential(new List<ILayer>
+            {
+                keras.layers.Dense(64, activation: "relu", input_shape: new Shape(SpectrumLength)),
+                keras.layers.Dense(64, activation: "relu"),
+                keras.layers.Dense(numComponents)
+            });
+
+            Log($"  入力: {SpectrumLength}次元スペクトル");
+            Log($"  隠れ層: Dense(64, relu) → Dense(64, relu)");
+
+            model.compile(
+                optimizer: keras.optimizers.Adam(),
+                loss: keras.losses.MeanSquaredError(),
+                metrics: new[] { "mae" }
+            );
+
+            var earlyStop = CreateEarlyStopping(model, epochs, patience);
+            model.fit(
+                xTrain,
+                yTrain,
+                batch_size: batchSize,
+                epochs: epochs,
+                validation_split: testSplit,
+                callbacks: new List<ICallback> { earlyStop }
+            );
+
+            Log("モデル評価中");
+            var score = model.evaluate(xTest, yTest);
+
+            double testLoss = GetMetricValue(score, 0, "loss");
+            double testMae = GetMetricValue(score, 1, "mae", "mean_absolute_error");
+
+            Log($" 評価完了");
+            Log($"  Test Loss (MSE): {testLoss:F6}");
+
+            if (testMae > 0)
+            {
+                Log($"  Test MAE: {testMae:F6}\n");
+            }
+
+            Directory.CreateDirectory(outputPath);
+
+            model.save(outputPath);
+
+            string componentPath = Path.Combine(outputPath, "componentIndex.json");
+            File.WriteAllText(componentPath, System.Text.Json.JsonSerializer.Serialize(componentIdx));
+
+            string modelTypePath = Path.Combine(outputPath, "modelType.txt");
+            File.WriteAllText(modelTypePath, "regression");
+
+            string mineralNamePath = Path.Combine(outputPath, "mineralName.txt");
+            File.WriteAllText(mineralNamePath, trainingPool.MineralName);
+
+            Log($" モデル保存完了: {outputPath}\n");
+        }
+
+        // 260430Codex: 回帰学習は余分な入れ子を外し、スペクトル長と評価値取得を共通 helper でそろえます。
+        private void TrainRegressionModel(string mineralName, string trainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
+        {
+            keras.backend.clear_session();
+            tf.set_random_seed(42);
+            Log("端成分割合予測モデル \n");
+            Log($"訓練データフォルダ: {trainingDataFolder}");
 
             // データ読み込み
             Log("フォルダからスペクトルデータを読み込み中...");
-            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(TrainingDataFolder);
+            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(trainingDataFolder);
             ComponentIndex = componentIdx;
 
             if (allSpectra.shape[0] == 0 || ComponentIndex == null)
@@ -206,12 +322,77 @@ namespace MineraScope
             Log($" モデル保存完了: {outputPath}\n");
         }
         // 260430Codex: 分類学習側も tuple 展開と共通評価 helper で回帰学習と読み方をそろえます。
-        private void TrainClassificationModel(List<string> mineralNames, string TrainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
+        // 260507Codex: 新方式の分類学習は manifest 由来の pool だけを読み込みます。
+        private void TrainClassificationModel(IReadOnlyList<SpectrumTrainingPool> trainingPools, int epochs, int batchSize, int patience, float testSplit, string outputPath)
         {
             keras.backend.clear_session();
             tf.set_random_seed(42);
             Log($"\n 訓練データ読み込み中");
-            var (allSpectra, allLabelsList) = SpectrumDataLoader.LoadClassificationData(TrainingDataFolder, mineralNames);
+            var (allSpectra, allLabelsList) = SpectrumDataLoader.LoadClassificationData(trainingPools);
+            Log($"\n 読み込み完了 (合計 {allSpectra.shape[0]} 件)\n");
+            var (labelsEncoded, encoder) = DeepLearningDataSplitter.EncodeLabels(allLabelsList);
+            if (encoder.Count > 0)
+            {
+                foreach (var kvp in encoder.OrderBy(x => x.Value))
+                {
+                    int count = allLabelsList.Count(l => l == kvp.Key);
+                    Log($"  [{kvp.Value}] {kvp.Key} ({count}件)");
+                }
+            }
+
+            var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitClassification(allSpectra, labelsEncoded, testSize: testSplit, randomState: 42);
+            Log($"訓練データ: {xTrain.shape[0]}");
+            Log($"テストデータ: {xTest.shape[0]}\n");
+
+            int numClasses = encoder.Count;
+
+            var model = keras.Sequential(new List<ILayer>
+                {
+                    keras.layers.Dense(128, activation: "relu", input_shape: new Shape(SpectrumLength)),
+                    keras.layers.Dense(64, activation: "relu"),
+                    keras.layers.Dense(numClasses, activation: "softmax")
+                });
+
+            model.compile(
+                optimizer: keras.optimizers.Adam(),
+                loss: keras.losses.SparseCategoricalCrossentropy(),
+                metrics: new[] { "accuracy" }
+            );
+
+            var earlyStop = CreateEarlyStopping(model, epochs, patience);
+            Log("訓練中...");
+            model.fit(
+                xTrain,
+                yTrain,
+                batch_size: batchSize,
+                epochs: epochs,
+                validation_split: testSplit,
+                callbacks: new List<ICallback> { earlyStop }
+             );
+            Log("モデル評価中");
+
+            var score = model.evaluate(xTest, yTest);
+
+            double testLoss = GetMetricValue(score, 0, "loss");
+            double testAccuracy = GetMetricValue(score, 1, "accuracy");
+
+            Log($"Test loss: {testLoss:F4}");
+            Log($"Test accuracy: {testAccuracy * 100:F2}%");
+            Directory.CreateDirectory(outputPath);
+            string encoderPath = Path.Combine(outputPath, "labelEncoder.json");
+            File.WriteAllText(encoderPath, System.Text.Json.JsonSerializer.Serialize(encoder));
+
+            string modelTypePath = Path.Combine(outputPath, "modelType.txt");
+            File.WriteAllText(modelTypePath, "classification");
+            model.save(outputPath);
+        }
+
+        private void TrainClassificationModel(List<string> mineralNames, string trainingDataFolder, int epochs, int batchSize, int patience, float testSplit, string outputPath)
+        {
+            keras.backend.clear_session();
+            tf.set_random_seed(42);
+            Log($"\n 訓練データ読み込み中");
+            var (allSpectra, allLabelsList) = SpectrumDataLoader.LoadClassificationData(trainingDataFolder, mineralNames);
             Log($"\n 読み込み完了 (合計 {allSpectra.shape[0]} 件)\n");
             var (labelsEncoded, encoder) = DeepLearningDataSplitter.EncodeLabels(allLabelsList);
             if (encoder.Count > 0)

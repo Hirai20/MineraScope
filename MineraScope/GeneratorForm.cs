@@ -71,12 +71,12 @@ namespace MineraScope
         private readonly DeepLearning _deepLearning;
         // 260416Codex: 鉱物 DB の入出力を repository に寄せ、Form の責務を UI 側へ戻していきます。
         private readonly MineralDatabaseRepository _mineralDatabaseRepository;
-        // 260416Codex: 教師データ走査を service 化し、今後の新 UI でも同じロジックを使えるようにします。
-        private readonly TrainingDataScanner _trainingDataScanner;
         // 260416Codex: 学習開始処理を workflow 化し、ボタンイベントから直接 DeepLearning を叩かない形へ寄せます。
         private readonly ModelTrainingWorkflow _modelTrainingWorkflow;
         // 260416Codex: シミュレーション実行計画の組み立てを service 化し、完成 UI へ向けた差し替え点を明確にします。
         private readonly SimulationPlanBuilder _simulationPlanBuilder;
+        // 260507Codex: manifest/pool を正本にした不足確認・予約・学習入力作成を担当します。
+        private readonly SpectrumPoolWorkflow _spectrumPoolWorkflow;
         // 260416Codex: 計算済み plan の出力と実行を Form から分離し、UI は起動トリガーだけを担当します。
         private readonly SimulationExecutionService _simulationExecutionService;
         // 260507Codex: Designer 手作業で追加される新 UI 部品を、Designer 直編集なしで実行時に捕まえます。
@@ -98,6 +98,8 @@ namespace MineraScope
 
         // 260507Codex: 下部ドロワーの標準高さを UI 初期化と開閉処理で共有します。
         private const float BottomDrawerDefaultHeight = 180F;
+        // 260508Codex: GeneratorForm の設定ファイル名を保存・復元で共有します。
+        private const string UserSettingsFileName = "GeneratorFormSettings.json";
 
         private string AssemblyPath { get; } = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) ?? AppContext.BaseDirectory;
         // 260416Codex: Python スクリプトはユーザーに見せない固定保存先へ集約します。
@@ -133,43 +135,74 @@ namespace MineraScope
 
         public GeneratorForm()
         {
-
-
             InitializeComponent();
+            // 260507Codex: 明示リストに入れた生成・EDX・学習設定だけを前回値から復元します。
+            LoadUserSettings();
             // 260507Codex: Designer 手作業で追加される新レイアウト部品を実行時に初期化します。
             ConfigureGeneratorLayoutRuntimeState();
             _deepLearning = new(TrainLog);
             // 260416Codex: 既存 helper を Form 初期化時に束ねておき、以降のイベント処理を薄く保ちます。
             _mineralDatabaseRepository = new(AssemblyPath);
-            _trainingDataScanner = new(_deepLearning.AnalyzeMineralFolder);
             _modelTrainingWorkflow = new(_deepLearning);
             _simulationPlanBuilder = new();
+            _spectrumPoolWorkflow = new(new SpectrumPoolRepository(new SpectrumConditionKeyBuilder()), _simulationPlanBuilder);
             // 260416Codex: スクリプト生成と外部実行は専用 service へまとめ、Form から I/O 詳細を隠します。
             _simulationExecutionService = new(new SimulationScriptGenerator());
             // 260416Codex: 固定保存先を事前作成し、設定 UI には表示しないようにします。
             Directory.CreateDirectory(PythonScriptOutputPath);
-            // 260424Codex: 教師データ一覧は FormMain の EDX/教師データパスから初期表示します。
-            RefreshTrainingMineralListFromMain();
-
-
-
-
-            //var fs1 = new FileStream(AssemblyPath + "\\MineralDatabase.xml", FileMode.Create);
-            //xml.Serialize(fs1, ss);
-            //var data = ss[1].Divide(0.1);
             // 260416Codex: DB 初期化は repository にまとめ、Form からファイル操作の詳細を外します。
             _mineralDatabaseRepository.EnsureInitialized();
             endmemberControls.AddRange([EndmemberControl1, EndmemberControl2]);
             BindMineralSolutions(LoadSolidSolutions());
 
             // 260430Codex: 旧 NumericUpDown の DEBUG 表示切替は対象コントロール廃止後の Designer と合わないため外します。
+        }
 
+        // 260507Codex: ログ、組成候補、選択中鉱物詳細を除外して設定値だけを復元します。
+        private void LoadUserSettings()
+        {
+            if (!FormUserSettingsStore.Exists(UserSettingsFileName))
+            {
+                return;
+            }
 
-            //Profile profile = new Profile();
-            //profile.Pt = [new PointD(0, 1), new PointD(1, 1), new PointD(2, 3), new PointD(3, 1), new PointD(4, 2)];
-            //graphControl1.Profile = profile;
+            var settings = FormUserSettingsStore.Load<GeneratorFormUserSettings>(UserSettingsFileName);
+            textBoxDetectorName.Text = settings.DetectorName;
+            textBoxModelName.Text = settings.ModelName;
+            numericBoxTarget.Value = settings.TargetSpectrumCount;
+            numericBoxParallel.Value = settings.ParallelCount;
+            numericBoxResolution.Value = settings.Resolution;
+            numericBoxModel_Epochs.Value = settings.Epochs;
+            numericBoxModel_BatchSize.Value = settings.BatchSize;
+            numericBoxModel_EarlyStopping.Value = settings.EarlyStopping;
+            numericBoxValidationSplit.Value = settings.ValidationSplit;
+            numericBoxProbeCurrent.Value = settings.ProbeCurrent;
+            numericBoxLiveTime.Value = settings.LiveTime;
+            numericBoxBeamEnergy.Value = settings.BeamEnergy;
+            numericBoxCarbonThickness.Value = settings.CarbonThickness;
+        }
 
-
+        // 260507Codex: 次回起動で戻す対象を明示し、CheckedListBox のチェック状態は保存しません。
+        private void SaveUserSettings()
+        {
+            FormUserSettingsStore.Save(
+                UserSettingsFileName,
+                new GeneratorFormUserSettings
+                {
+                    DetectorName = textBoxDetectorName.Text,
+                    ModelName = textBoxModelName.Text,
+                    TargetSpectrumCount = numericBoxTarget.Value,
+                    ParallelCount = numericBoxParallel.Value,
+                    Resolution = numericBoxResolution.Value,
+                    Epochs = numericBoxModel_Epochs.Value,
+                    BatchSize = numericBoxModel_BatchSize.Value,
+                    EarlyStopping = numericBoxModel_EarlyStopping.Value,
+                    ValidationSplit = numericBoxValidationSplit.Value,
+                    ProbeCurrent = numericBoxProbeCurrent.Value,
+                    LiveTime = numericBoxLiveTime.Value,
+                    BeamEnergy = numericBoxBeamEnergy.Value,
+                    CarbonThickness = numericBoxCarbonThickness.Value
+                });
         }
 
         // 260507Codex: Designer を直接編集せず、手作業追加された名前付きコントロールだけを実行時に解決します。
@@ -347,10 +380,12 @@ namespace MineraScope
         // 260507Codex: モデル作成開始時にログ表示用コンテンツへドロワーを切り替えます。
         private void ShowModelLogDrawer()
         {
-            if (_modelLogContent is not null)
+            if (_modelLogContent is null)
             {
-                ShowBottomDrawer(_modelLogContent);
+                return;
             }
+
+            ShowBottomDrawer(_modelLogContent);
         }
 
         // 260507Codex: RowStyles が Designer 側で未作成の場合も落ちないように高さ変更を保護します。
@@ -426,44 +461,6 @@ namespace MineraScope
         private static T[] GetCheckedItems<T>(CheckedListBox listBox) =>
             listBox.CheckedItems.Cast<T>().ToArray();
 
-        // 260424Codex: UI のチェック状態を読む処理はフォーム本体に置き、参照元を追いやすくします。
-        private static string[] GetCheckedStrings(CheckedListBox listBox) =>
-            listBox.CheckedItems
-                .Cast<object>()
-                .Select(item => item?.ToString())
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .Cast<string>()
-                .ToArray();
-
-        // 260424Codex: 生成側の UI 選択をフォーム内で集約し、学習候補との同期に使います。
-        private HashSet<string> GetSelectedGeneratorMineralNames() =>
-            new(
-                GetCheckedItems<SolidSolution>(checkedListBoxMineral).Select(solution => solution.Name),
-                StringComparer.OrdinalIgnoreCase);
-
-        // 260424Codex: CheckedListBox の項目入れ替えは UI 更新 helper としてフォーム本体にまとめます。
-        private static void ReplaceItems(CheckedListBox listBox, IEnumerable<string> items)
-        {
-            listBox.Items.Clear();
-            listBox.Items.AddRange(items.Cast<object>().ToArray());
-        }
-
-        // 260424Codex: 名前集合に基づくチェック反映も UI 状態操作としてフォーム側に残します。
-        private static void SetCheckedStates(CheckedListBox listBox, ISet<string> checkedNames)
-        {
-            for (int i = 0; i < listBox.Items.Count; i++)
-            {
-                // 260424Codex: auto-generated 扱いのファイルでも nullable 注釈警告が増えない形で空値を扱います。
-                string itemName = listBox.Items[i]?.ToString() ?? string.Empty;
-                if (string.IsNullOrWhiteSpace(itemName))
-                {
-                    continue;
-                }
-
-                listBox.SetItemChecked(i, checkedNames.Contains(itemName));
-            }
-        }
-
         // 260424Codex: 画面入力の読み取りは partial に逃がさず、フォーム本体で request に変換します。
         private ModelCreationRequest CreateModelCreationRequest() =>
             new(
@@ -483,54 +480,93 @@ namespace MineraScope
                 new SimulationExecutionSettings(
                     (int)numericBoxTarget.Value,
                     (double)numericBoxResolution.Value / 100,
-                    (int)numericBoxCount.Value,
                     (int)numericBoxParallel.Value),
                 new ModelTrainingSettings(
                     (int)numericBoxModel_Epochs.Value,
                     (int)numericBoxModel_BatchSize.Value,
                     (int)numericBoxModel_EarlyStopping.Value,
                     (float)numericBoxValidationSplit.Value / 100f),
-                GetCheckedItems<SolidSolution>(checkedListBoxMineral),
-                GetCheckedStrings(checkedListBoxTrainMinerals));
+                GetCheckedItems<SolidSolution>(checkedListBoxMineral));
 
-        // 260424Codex: 教師データ一覧の再構築は UI リスト操作なのでフォーム本体に置きます。
-        private void RefreshTrainingMineralList(string trainingPath)
+        // 260507Codex: manifest/pool フローに必要な最低限の画面入力を実行前に検証します。
+        private static string ValidateModelCreationRequest(ModelCreationRequest request, bool requireDtsaPath)
         {
-            HashSet<string> checkedNames = new(GetCheckedStrings(checkedListBoxTrainMinerals), StringComparer.OrdinalIgnoreCase);
-            checkedNames.UnionWith(GetSelectedGeneratorMineralNames());
-
-            checkedListBoxTrainMinerals.BeginUpdate();
-            try
+            if (request.SelectedMineralSolutions.Count == 0)
             {
-                ReplaceItems(checkedListBoxTrainMinerals, _trainingDataScanner.Scan(trainingPath));
-                SetCheckedStates(checkedListBoxTrainMinerals, checkedNames);
+                return "モデル作成対象の鉱物が選択されていません。";
             }
-            finally
-            {
-                checkedListBoxTrainMinerals.EndUpdate();
-            }
-        }
 
-        // 260424Codex: 生成側の選択を学習候補へ反映する UI 同期もフォーム本体で追えるようにします。
-        private void SyncTrainingSelectionFromSelectedMinerals()
-        {
-            HashSet<string> checkedNames = new(GetCheckedStrings(checkedListBoxTrainMinerals), StringComparer.OrdinalIgnoreCase);
-            checkedNames.UnionWith(GetSelectedGeneratorMineralNames());
-            SetCheckedStates(checkedListBoxTrainMinerals, checkedNames);
+            if (request.Simulation.TargetSpectrumCount <= 0)
+            {
+                return "1 鉱物あたりの学習 spectrum 数を 1 以上にしてください。";
+            }
+
+            if (request.Simulation.ResolutionStep <= 0)
+            {
+                return "化学組成分解能を 0 より大きい値にしてください。";
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Paths.SpectrumOutputFolder))
+            {
+                return "スペクトル pool の保存先を指定してください。";
+            }
+
+            if (requireDtsaPath && string.IsNullOrWhiteSpace(request.Paths.DtsaFolder))
+            {
+                return "DTSA-II のフォルダを指定してください。";
+            }
+
+            return string.Empty;
         }
 
         // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
         private async void buttonSpectrumGenerationRun_Click(object sender, EventArgs e)
         {
             var request = CreateModelCreationRequest();
-            // 260416Codex: plan を先に作っておき、後から不足分判定や追加アクションを差し込みやすくします。
-            var plan = _simulationPlanBuilder.CreatePlan(request);
-            if (plan.Batches.Count == 0)
+            string validationMessage = ValidateModelCreationRequest(request, requireDtsaPath: true);
+            if (!string.IsNullOrEmpty(validationMessage))
             {
+                MessageBox.Show(validationMessage, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            // 260416Codex: 実行時の計算結果出力と DTSA 起動は service に委譲し、Form 側は非同期制御に専念します。
-            await _simulationExecutionService.RunAsync(plan);
+
+            // 260507Codex: manifest の Completed 不足分だけを予約し、予約済み spectrum から実行 plan を作ります。
+            var plan = _spectrumPoolWorkflow.CreateMissingSimulationPlan(request, out var shortages);
+            if (plan.Batches.Count == 0)
+            {
+                string message = shortages.Count == 0
+                    ? "不足している spectrum はありません。"
+                    : SpectrumPoolWorkflow.FormatShortageMessage(shortages);
+                MessageBox.Show(message, "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            buttonSpectrumGenerationRun.Enabled = false;
+            try
+            {
+                // 260507Codex: 実行結果を受け取り、生成成功/失敗を manifest の status へ反映します。
+                var results = await _simulationExecutionService.RunAsync(plan);
+                _spectrumPoolWorkflow.ApplySimulationResults(results);
+            }
+            finally
+            {
+                buttonSpectrumGenerationRun.Enabled = true;
+            }
+
+            var remainingShortages = _spectrumPoolWorkflow.GetShortages(request);
+            if (remainingShortages.Count > 0)
+            {
+                MessageBox.Show(
+                    SpectrumPoolWorkflow.FormatShortageMessage(remainingShortages),
+                    "スペクトル生成",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            else
+            {
+                buttonSpectrumGenerationRun.Visible = false;
+                MessageBox.Show("必要な spectrum pool がそろいました。", "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
         #region EndmemberControl
         // EndmemberControlに端成分の情報を設定
@@ -587,9 +623,7 @@ namespace MineraScope
         // 260416Codex: 端成分 UI 更新の分岐を早期 return ベースに整理
         private void UpdateEndmemberUI()
         {
-            var selectedSolution = checkedListBoxMineral.SelectedItem as SolidSolution;
-
-            if (selectedSolution == null)
+            if (checkedListBoxMineral.SelectedItem is not SolidSolution selectedSolution)
             {
                 // 260416Codex: 未選択時の初期表示を helper で統一
                 ResetVisibleEndmemberControls();
@@ -602,7 +636,7 @@ namespace MineraScope
             ResetVisibleEndmemberControls();
             var members = selectedSolution.Members;
 
-            if (members == null)
+            if (members is null)
             {
                 // 260416Codex: メンバー未設定時も既定表示に寄せる
                 ShowDefaultEndmemberControls();
@@ -645,22 +679,21 @@ namespace MineraScope
         private void UpdateCompositionCount()
         {
             var checkedSolutions = GetCheckedItems<SolidSolution>(checkedListBoxMineral);
-            int targetCount = (int)numericBoxTarget.Value;
             double resolution = (double)numericBoxResolution.Value / 100;
             int totalCount = 0;
             var builder = new StringBuilder();
 
             foreach (var solution in checkedSolutions)
             {
-                var comps = solution.Divide(resolution, targetCount);
-                if (comps == null)
+                var candidates = solution.EnumerateCandidateFractions(resolution);
+                if (candidates.Length == 0)
                 {
                     //textBoxCompositionCount.Text = "計算出来ません";
                     return;
                 }
 
-                totalCount += comps.Length;
-                builder.AppendLine($"{solution.Name}: {comps.Length} 組成");
+                totalCount += candidates.Length;
+                builder.AppendLine($"{solution.Name}: {candidates.Length} 組成候補");
                 textBoxEndmembers_Constraints.Text = string.Join(Environment.NewLine, solution.Constraints);
             }
 
@@ -695,12 +728,11 @@ namespace MineraScope
                 : string.Empty;
             // 化学組成リストを表示
             double resolution = (double)numericBoxResolution.Value / 100;
-            int targetCount = (int)numericBoxTarget.Value;
-            // 固溶体を指定したmol%で分割
-            var compositions = selectedSolution.Divide(resolution, targetCount);
+            // 260507Codex: target は学習件数なので、組成リスト表示は分解能からの全候補を使います。
+            var compositions = selectedSolution.EnumerateCandidateFractions(resolution);
 
             // 分割できなかった場合（resolution=0など）
-            if (compositions == null)
+            if (compositions.Length == 0)
             {
                 textBoxEndmembers_CompositionLists.Text = "計算できません";
             }
@@ -708,10 +740,17 @@ namespace MineraScope
             {
                 textBoxEndmembers_CompositionLists.Text = string.Join(
                     Environment.NewLine,
-                    compositions.Select(data => data.FileName));
+                    compositions.Take(200).Select(ratio => FormatFractionMap(selectedSolution, ratio)));
             }
         }
         #endregion
+        // 260507Codex: 組成候補表示は端成分名と比率だけにし、ファイル名生成ルールから切り離します。
+        private static string FormatFractionMap(SolidSolution solution, double[] fractions) =>
+            string.Join(
+                ", ",
+                solution.Members.Select((member, index) =>
+                    $"{member.Name}: {(index < fractions.Length ? fractions[index] : 0):F3}"));
+
         #region EndmemberControlの追加と削除
         private void buttonAddEndmemberControl_Click(object sender, EventArgs e)
         {
@@ -720,14 +759,16 @@ namespace MineraScope
 
         private void buttonRemoveEndmemberControl_Click(object sender, EventArgs e)
         {
-            if (endmemberControls.Count > 1)
+            if (endmemberControls.Count <= 1)
             {
-                var lastControl = endmemberControls.Last();
-
-                endmemberControls.Remove(lastControl);
-                // メモリ解放
-                lastControl.Dispose();
+                return;
             }
+
+            var lastControl = endmemberControls.Last();
+
+            endmemberControls.Remove(lastControl);
+            // メモリ解放
+            lastControl.Dispose();
         }
         #endregion
 
@@ -759,11 +800,8 @@ namespace MineraScope
         // 260416Codex: BeginInvoke で行う一覧再計算を helper 化し、イベント側の重複を減らします。
         private void BeginInvokeMineralSelectionRefresh()
         {
-            BeginInvoke(new Action(() =>
-            {
-                RefreshCompositionViews();
-                SyncTrainingSelectionFromSelectedMinerals();
-            }));
+            // 260508Codex: 旧学習リスト同期がなくなったため、遅延実行する処理を再描画だけに絞ります。
+            BeginInvoke(new Action(RefreshCompositionViews));
         }
 
         // 260416Codex: 永続化後の再バインド手順を 1 か所に寄せて追加・更新・削除を揃えます。
@@ -808,14 +846,6 @@ namespace MineraScope
             UpdateSelectedSolution();
         }
 
-        // 260424Codex: FormMain に移した教師データパスから学習候補一覧を更新します。
-        public void RefreshTrainingMineralListFromMain()
-        {
-            if (Directory.Exists(TeacherDataPath))
-            {
-                RefreshTrainingMineralList(TeacherDataPath);
-            }
-        }
         #region リストに追加・更新・削除・初期化メソッド
         #region 追加メソッド
         // 260416Codex: 追加時の入力変換を helper ベースに統一
@@ -876,15 +906,6 @@ namespace MineraScope
         }
         #endregion
         #endregion
-        //深層学習
-        #region データ読み込み
-        private void ScanMineralFolders(string TrainingPath)
-        {
-            // 260416Codex: 既存メソッド名は残しつつ、中身は service ベースの実装へ差し替えます。
-            RefreshTrainingMineralList(TrainingPath);
-        }
-
-        #endregion
         private void TrainLog(string message)
             => TextBoxLogHelper.AppendLine(textBoxModelLog, message);
         //分類モデル
@@ -895,7 +916,27 @@ namespace MineraScope
 
             // 260416Codex: 学習開始も request -> plan -> workflow の流れに揃え、今後の統合実行へつなげます。
             var request = CreateModelCreationRequest();
-            var trainingPlan = _modelTrainingWorkflow.CreatePlan(request);
+            string requestValidationMessage = ValidateModelCreationRequest(request, requireDtsaPath: false);
+            if (!string.IsNullOrEmpty(requestValidationMessage))
+            {
+                MessageBox.Show(requestValidationMessage, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // 260507Codex: 学習前に pool manifest の Completed 件数を確認し、不足があれば学習へ進みません。
+            var trainingPools = _spectrumPoolWorkflow.CreateTrainingPools(request, out var shortages);
+            if (shortages.Count > 0)
+            {
+                buttonSpectrumGenerationRun.Visible = true;
+                MessageBox.Show(
+                    SpectrumPoolWorkflow.FormatShortageMessage(shortages),
+                    "スペクトル不足",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            var trainingPlan = _modelTrainingWorkflow.CreatePlan(request, trainingPools);
             var validationMessage = _modelTrainingWorkflow.Validate(trainingPlan);
             if (validationMessage is not null)
             {
@@ -905,6 +946,7 @@ namespace MineraScope
 
             // 260424Codex: 既定保存先へ解決された結果を FormMain の共通パスへ反映します。
             ModelOutputPath = trainingPlan.ModelOutputFolder;
+            buttonSpectrumGenerationRun.Visible = false;
 
             //  UIロックとログクリア
             buttonModelTrain.Enabled = false;
@@ -923,16 +965,14 @@ namespace MineraScope
 
         private void buttonAllSelect_Click(object sender, EventArgs e)
         {
-            var targetList = checkedListBoxTrainMinerals;
-
-            if (targetList.Items.Count == 0)
+            if (checkedListBoxMineral.Items.Count == 0)
             {
                 return;
             }
 
             // 260416Codex: 現在状態から次の一括チェック状態を決め、反映処理は helper に委譲します。
-            bool newState = targetList.CheckedItems.Count != targetList.Items.Count;
-            SetCheckedStateForAllItems(targetList, newState);
+            bool newState = checkedListBoxMineral.CheckedItems.Count != checkedListBoxMineral.Items.Count;
+            SetCheckedStateForAllItems(checkedListBoxMineral, newState);
         }
 
         private void numericUpDownMineral_Target_ValueChanged(object sender, EventArgs e)
@@ -942,6 +982,8 @@ namespace MineraScope
 
         private void GeneratorForm_FormClosing(object sender, FormClosingEventArgs e)
         {
+            // 260507Codex: 非表示にする前に、明示リストの設定値だけを保存します。
+            SaveUserSettings();
             // 260416Codex: 閉じる操作は破棄せず非表示にするだけなので未使用のローカルを削除します。
             e.Cancel = true;
             Visible = false;

@@ -26,9 +26,14 @@ namespace MineraScope
         // 260430Codex: FormMain での自動鉱物判定が重ならないようにします。
         private bool _isPredictionRunning;
 
+        // 260507Codex: モデル一覧の再構築後に前回選択していたモデル名を復元します。
+        private string _savedSelectedModelName = string.Empty;
+        // 260508Codex: FormMain の設定ファイル名を保存・復元で共有します。
+        private const string UserSettingsFileName = "FormMainSettings.json";
+
         // 260424Codex: モデル保存先は FormMain の共通パス欄から参照します。
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public string ModelPath { get => textBoxlPathSaveMode.Text; set => textBoxlPathSaveMode.Text = value; }
+        public string ModelPath { get => textBoxlPathSaveModel.Text; set => textBoxlPathSaveModel.Text = value; }
 
         // 260507Codex: 判定ではモデル群の親フォルダではなく、コンボボックスで選んだ直下のモデルフォルダを使います。
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -63,12 +68,52 @@ namespace MineraScope
         public FormMain()
         {
             InitializeComponent();
+            // 260507Codex: 共通パス欄は前回終了時の入力値を先に復元します。
+            LoadUserSettings();
             // 260424Codex: 共通ファイルパス設定は FormMain 側で初期化して子フォームから参照します。
             InitializeFilePathSettings();
             // 260507Codex: 起動時に既定モデル保存先の直下フォルダをモデル選択欄へ反映します。
             RefreshModelPathList();
             // 260427Codex: フォーム上のどの UI 部品に落としても同じスペクトル入力として扱います。
             EnableSpectrumDropOnChildControls(this);
+            // 260507Codex: Designer を触らず、終了時に明示リストの設定だけ保存します。
+            FormClosing += FormMain_FormClosing;
+        }
+
+        // 260507Codex: ログや spectrum 表示を除き、共通パス欄だけを復元します。
+        private void LoadUserSettings()
+        {
+            var settings = FormUserSettingsStore.Load<FormMainUserSettings>(UserSettingsFileName);
+            if (!string.IsNullOrWhiteSpace(settings.ModelPath))
+            {
+                ModelPath = settings.ModelPath;
+            }
+
+            _savedSelectedModelName = settings.SelectedModelName;
+
+            if (!string.IsNullOrWhiteSpace(settings.EdxOutputPath))
+            {
+                EdxOutputPath = settings.EdxOutputPath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.DtsaPath))
+            {
+                DtsaPath = settings.DtsaPath;
+            }
+        }
+
+        // 260507Codex: 次回起動時に共通パス欄だけを戻せるよう、終了時に保存します。
+        private void FormMain_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            FormUserSettingsStore.Save(
+                UserSettingsFileName,
+                new FormMainUserSettings
+                {
+                    ModelPath = ModelPath,
+                    SelectedModelName = comboBoxModelPath.SelectedItem as string ?? string.Empty,
+                    EdxOutputPath = EdxOutputPath,
+                    DtsaPath = DtsaPath
+                });
         }
 
         private void FormMain_Load(object sender, EventArgs e)
@@ -78,8 +123,6 @@ namespace MineraScope
                 Visible = false,
                 FormMain = this
             };
-            // 260424Codex: 親フォーム設定を割り当てたあと、教師データ一覧を最新パスで初期化します。
-            GeneratorForm.RefreshTrainingMineralListFromMain();
 
             // 260416Codex: 解析フォーム側の親参照も同じ名前へ統一します。
             AnalyzerForm = new AnalyzerForm
@@ -109,7 +152,7 @@ namespace MineraScope
             buttonPathEDX.Click += buttonFilePathBrowse_Click;
 
             // 260507Codex: モデル保存先を手入力で変更した場合も、直下のモデル候補を選択欄へ反映します。
-            textBoxlPathSaveMode.TextChanged += (_, _) => RefreshModelPathList();
+            textBoxlPathSaveModel.TextChanged += (_, _) => RefreshModelPathList();
         }
 
         // 260424Codex: FormMain 上の 3 つのパス欄からフォルダ選択を行います。
@@ -117,7 +160,7 @@ namespace MineraScope
         {
             TextBox? targetTextBox = sender switch
             {
-                Button button when button == buttonPathSaveMode => textBoxlPathSaveMode,
+                Button button when button == buttonPathSaveMode => textBoxlPathSaveModel,
                 // 260507Codex: ボタン名と保存先 TextBox の対応を名前通りに揃えます。
                 Button button when button == buttonPathDTSA => textBoxPathDTSA,
                 Button button when button == buttonPathEDX => textBoxPathEDX,
@@ -132,12 +175,10 @@ namespace MineraScope
             if (FolderSelectionHelper.TrySelectFolder(targetTextBox))
             {
                 // 260507Codex: モデル保存先を参照変更した直後に、直下フォルダのモデル候補を更新します。
-                if (targetTextBox == textBoxlPathSaveMode)
+                if (targetTextBox == textBoxlPathSaveModel)
                 {
                     RefreshModelPathList();
                 }
-
-                GeneratorForm?.RefreshTrainingMineralListFromMain();
             }
         }
 
@@ -145,6 +186,9 @@ namespace MineraScope
         private void RefreshModelPathList()
         {
             string previousSelection = comboBoxModelPath.SelectedItem as string ?? string.Empty;
+            string preferredSelection = !string.IsNullOrWhiteSpace(previousSelection)
+                ? previousSelection
+                : _savedSelectedModelName;
 
             comboBoxModelPath.BeginUpdate();
             comboBoxModelPath.Items.Clear();
@@ -157,9 +201,9 @@ namespace MineraScope
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(previousSelection) && comboBoxModelPath.Items.Contains(previousSelection))
+            if (!string.IsNullOrWhiteSpace(preferredSelection) && comboBoxModelPath.Items.Contains(preferredSelection))
             {
-                comboBoxModelPath.SelectedItem = previousSelection;
+                comboBoxModelPath.SelectedItem = preferredSelection;
             }
             else if (comboBoxModelPath.Items.Count > 0)
             {
@@ -171,25 +215,27 @@ namespace MineraScope
 
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
         {
-            // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに GeneratorForm を残します。
-            //var form = new GeneratorForm();
-            //form.Show(this);
-            // 260424Codex: 手入力された共通パスも開く直前に GeneratorForm の教師データ一覧へ反映します。
-            GeneratorForm.RefreshTrainingMineralListFromMain();
             if (GeneratorForm.Visible)
+            {
                 GeneratorForm.BringToFront();
+            }
             else
+            {
                 GeneratorForm.Visible = true;
-
+            }
         }
 
         private void buttonOpenAnalyzer_Click(object sender, EventArgs e)
         {
             // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに AnalyzerForm を残します。
             if (AnalyzerForm.Visible)
+            {
                 AnalyzerForm.BringToFront();
+            }
             else
+            {
                 AnalyzerForm.Visible = true;
+            }
         }
 
         // 260430Codex: 判定中は追加ドロップを受け付けず、単一スペクトルだけをコピー可能にします。

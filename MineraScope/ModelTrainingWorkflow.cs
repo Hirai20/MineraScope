@@ -6,75 +6,58 @@ using System.Threading.Tasks;
 
 namespace MineraScope
 {
-    // 260416Codex: 学習実行前に確定した値を plan として切り出し、Form 側の分岐を薄く保ちます。
+    // 260507Codex: manifest から選ばれた学習入力とモデル保存先を学習 workflow の plan にします。
     internal sealed record ModelTrainingPlan(
-        string TrainingDataFolder,
         string ModelOutputFolder,
-        IReadOnlyList<string> TargetMinerals,
+        IReadOnlyList<SpectrumTrainingPool> TrainingPools,
         ModelTrainingSettings Settings);
 
-    // 260416Codex: モデル学習の入力確定・検証・実行を Form から分離し、新しい生成画面でも再利用できるようにします。
+    // 260507Codex: モデル学習の検証と DeepLearning 呼び出しを Form から分離します。
     internal sealed class ModelTrainingWorkflow
     {
         private readonly DeepLearning _deepLearning;
 
-        // 260416Codex: 既存の DeepLearning 実装をそのまま使いながら、UI との結合だけを弱めます。
         public ModelTrainingWorkflow(DeepLearning deepLearning)
         {
             _deepLearning = deepLearning ?? throw new ArgumentNullException(nameof(deepLearning));
         }
 
-        // 260416Codex: 学習対象は専用リストを優先し、未選択なら生成側でチェックされた鉱物名へ自然にフォールバックさせます。
-        public ModelTrainingPlan CreatePlan(ModelCreationRequest request)
+        // 260507Codex: 学習対象は pool workflow が抽出した Completed spectrum だけにします。
+        public ModelTrainingPlan CreatePlan(
+            ModelCreationRequest request,
+            IReadOnlyList<SpectrumTrainingPool> trainingPools)
         {
-            var targetMinerals = request.SelectedTrainingMinerals.Count > 0
-                ? request.SelectedTrainingMinerals
-                    .Where(name => !string.IsNullOrWhiteSpace(name))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray()
-                : request.SelectedMineralSolutions
-                    .Select(solution => solution.Name)
-                    .Where(name => !string.IsNullOrWhiteSpace(name))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-
-            // 260430Codex: モデル保存先未指定時は Documents 配下の共通既定フォルダを使います。
-            var modelOutputFolder = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
+            string modelOutputFolder = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
                 ? DefaultStoragePaths.ModelsFolder
                 : request.Paths.ModelOutputFolder;
 
-            return new ModelTrainingPlan(
-                request.Paths.TeacherDataFolder,
-                modelOutputFolder,
-                targetMinerals,
-                request.Training);
+            return new ModelTrainingPlan(modelOutputFolder, trainingPools, request.Training);
         }
 
-        // 260416Codex: 学習前のエラーメッセージを service 側で揃え、Form は表示に専念できるようにします。
+        // 260507Codex: target 未設定や pool 不足は学習開始前に止めます。
         public string? Validate(ModelTrainingPlan plan)
         {
-            if (plan.TargetMinerals.Count == 0)
+            if (plan.TrainingPools.Count == 0)
             {
-                return "学習対象の鉱物が選択されていません。";
+                return "モデル作成対象の鉱物が選択されていないか、学習可能な spectrum がありません。";
             }
 
-            if (!Directory.Exists(plan.TrainingDataFolder))
+            if (plan.TrainingPools.Any(pool => pool.Samples.Count == 0))
             {
-                return "訓練データフォルダが見つかりません。";
+                return "学習可能な spectrum がない鉱物があります。";
             }
 
             return null;
         }
 
-        // 260416Codex: 実行前に保存先を確実に作成し、既存 DeepLearning.RunTraining へ必要値だけ渡します。
+        // 260507Codex: DeepLearning へ manifest ベースの学習入力を渡します。
         public Task RunAsync(ModelTrainingPlan plan)
         {
             Directory.CreateDirectory(plan.ModelOutputFolder);
 
             return Task.Run(() =>
                 _deepLearning.RunTraining(
-                    plan.TargetMinerals.ToList(),
-                    plan.TrainingDataFolder,
+                    plan.TrainingPools,
                     plan.Settings.Epochs,
                     plan.Settings.BatchSize,
                     plan.Settings.EarlyStoppingPatience,

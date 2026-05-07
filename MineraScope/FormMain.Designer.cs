@@ -38,16 +38,16 @@
             graphControl1 = new Crystallography.Controls.GraphControl();
             panel2 = new Panel();
             label7 = new Label();
-            textBoxlPathSaveMode = new TextBox();
+            textBoxlPathSaveModel = new TextBox();
             buttonPathSaveMode = new Button();
             textBoxPathEDX = new TextBox();
             panelPathEDX = new Panel();
             labelPathEDX = new Label();
             buttonPathDTSA = new Button();
             panelPathDTSA = new Panel();
-            buttonPathEDX = new Button();
             textBoxPathDTSA = new TextBox();
             labelPathDTSA = new Label();
+            buttonPathEDX = new Button();
             textBoxAnalysisResult = new TextBox();
             textBoxSpectrumFile = new TextBox();
             menuStrip1.SuspendLayout();
@@ -172,7 +172,7 @@
             panel2.AutoSize = true;
             panel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             panel2.Controls.Add(label7);
-            panel2.Controls.Add(textBoxlPathSaveMode);
+            panel2.Controls.Add(textBoxlPathSaveModel);
             panel2.Controls.Add(buttonPathSaveMode);
             panel2.Location = new Point(171, 58);
             panel2.Name = "panel2";
@@ -188,12 +188,12 @@
             label7.TabIndex = 24;
             label7.Text = "モデルの保存先";
             // 
-            // textBoxlPathSaveMode
+            // textBoxlPathSaveModel
             // 
-            textBoxlPathSaveMode.Location = new Point(115, 10);
-            textBoxlPathSaveMode.Name = "textBoxlPathSaveMode";
-            textBoxlPathSaveMode.Size = new Size(155, 23);
-            textBoxlPathSaveMode.TabIndex = 23;
+            textBoxlPathSaveModel.Location = new Point(115, 10);
+            textBoxlPathSaveModel.Name = "textBoxlPathSaveModel";
+            textBoxlPathSaveModel.Size = new Size(155, 23);
+            textBoxlPathSaveModel.TabIndex = 23;
             // 
             // buttonPathSaveMode
             // 
@@ -255,17 +255,6 @@
             panelPathDTSA.Size = new Size(273, 31);
             panelPathDTSA.TabIndex = 109;
             // 
-            // buttonPathEDX
-            // 
-            buttonPathEDX.AutoSize = true;
-            buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathEDX.Location = new Point(449, 142);
-            buttonPathEDX.Name = "buttonPathEDX";
-            buttonPathEDX.Size = new Size(26, 25);
-            buttonPathEDX.TabIndex = 1;
-            buttonPathEDX.Text = "...";
-            buttonPathEDX.UseVisualStyleBackColor = true;
-            // 
             // textBoxPathDTSA
             // 
             textBoxPathDTSA.Location = new Point(115, 5);
@@ -282,6 +271,17 @@
             labelPathDTSA.Size = new Size(105, 15);
             labelPathDTSA.TabIndex = 15;
             labelPathDTSA.Text = "DTSA-Ⅱファイルパス";
+            // 
+            // buttonPathEDX
+            // 
+            buttonPathEDX.AutoSize = true;
+            buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonPathEDX.Location = new Point(449, 142);
+            buttonPathEDX.Name = "buttonPathEDX";
+            buttonPathEDX.Size = new Size(26, 25);
+            buttonPathEDX.TabIndex = 1;
+            buttonPathEDX.Text = "...";
+            buttonPathEDX.UseVisualStyleBackColor = true;
             // 
             // textBoxAnalysisResult
             // 
@@ -348,7 +348,7 @@
         private Crystallography.Controls.GraphControl graphControl1;
         private Panel panel2;
         private Label label7;
-        private TextBox textBoxlPathSaveMode;
+        private TextBox textBoxlPathSaveModel;
         private Button buttonPathSaveMode;
         private TextBox textBoxPathEDX;
         private Panel panelPathEDX;
