@@ -7,7 +7,6 @@ namespace MineraScope
         string SpectrumOutputFolder,
         string ScriptOutputFolder,
         string DtsaFolder,
-        string TeacherDataFolder,
         string ModelOutputFolder);
 
     // 260507Codex: pool の conditionKey に含める現行 EDX 条件を明示します。
@@ -34,6 +33,8 @@ namespace MineraScope
     // 260507Codex: モデル作成対象は checkedListBoxMineral のチェック済み SolidSolution だけに統一します。
     internal sealed record ModelCreationRequest(
         ModelCreationPaths Paths,
+        // 260508Codex: 学習成果物はモデル保存先の直下ではなく、画面のモデル名フォルダ配下へ保存します。
+        string ModelName,
         SemEdxCondition SemEdxCondition,
         SimulationExecutionSettings Simulation,
         ModelTrainingSettings Training,

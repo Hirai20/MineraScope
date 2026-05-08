@@ -27,9 +27,11 @@ namespace MineraScope
             ModelCreationRequest request,
             IReadOnlyList<SpectrumTrainingPool> trainingPools)
         {
-            string modelOutputFolder = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
+            string modelRootFolder = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
                 ? DefaultStoragePaths.ModelsFolder
                 : request.Paths.ModelOutputFolder;
+            // 260508Codex: 学習成果物は FormMain が一覧できる親フォルダ直下のモデル名フォルダへまとめます。
+            string modelOutputFolder = Path.Combine(modelRootFolder, request.ModelName);
 
             return new ModelTrainingPlan(modelOutputFolder, trainingPools, request.Training);
         }

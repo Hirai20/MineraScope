@@ -17,8 +17,9 @@ namespace MineraScope
     public partial class FormMain : Form
     {
 
-        public GeneratorForm GeneratorForm;
-        public AnalyzerForm AnalyzerForm;
+        // 260508Codex: modeless 子フォームは Load で生成するため、フィールド初期化時点は null 許容を明示的に抑えます。
+        public GeneratorForm GeneratorForm = null!;
+        public AnalyzerForm AnalyzerForm = null!;
 
         // 260427Codex: ドロップされたスペクトルの実ファイルパスは表示名とは分けて保持します。
         private string? _spectrumFilePath;
@@ -53,10 +54,6 @@ namespace MineraScope
         // 260424Codex: 生成スペクトル出力先と教師データ参照先は同じフォルダとして親フォームで管理します。
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string EdxOutputPath { get => textBoxPathEDX.Text; set => textBoxPathEDX.Text = value; }
-
-        // 260424Codex: GeneratorForm から教師データ欄を消すため、教師データパスは EDX 出力先と共有します。
-        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public string TeacherDataPath => EdxOutputPath;
 
         // 260424Codex: DTSA-II のパスも親フォームが保持し、子フォームはこの値を参照します。
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -105,6 +102,9 @@ namespace MineraScope
         // 260507Codex: 次回起動時に共通パス欄だけを戻せるよう、終了時に保存します。
         private void FormMain_FormClosing(object? sender, FormClosingEventArgs e)
         {
+            // 260508Codex: GeneratorForm が非表示のままでも、アプリ終了時に現在値を保存します。
+            GeneratorForm?.SaveUserSettings();
+
             FormUserSettingsStore.Save(
                 UserSettingsFileName,
                 new FormMainUserSettings
@@ -172,23 +172,30 @@ namespace MineraScope
                 return;
             }
 
-            if (FolderSelectionHelper.TrySelectFolder(targetTextBox))
+            if (!FolderSelectionHelper.TrySelectFolder(targetTextBox))
             {
-                // 260507Codex: モデル保存先を参照変更した直後に、直下フォルダのモデル候補を更新します。
-                if (targetTextBox == textBoxlPathSaveModel)
-                {
-                    RefreshModelPathList();
-                }
+                return;
+            }
+
+            if (targetTextBox == textBoxlPathSaveModel)
+            {
+                // 260508Codex: モデル保存先を参照変更した直後に、直下フォルダのモデル候補を更新します。
+                RefreshModelPathList();
             }
         }
 
         // 260507Codex: モデル保存先フォルダの直下にある各フォルダを、使用モデルとして選べるようにします。
-        private void RefreshModelPathList()
+        // 260508Codex: GeneratorForm の学習完了後にも、作成されたモデル名を選択状態で一覧更新できるようにします。
+        public void RefreshModelPathList(string preferredModelName = "")
         {
             string previousSelection = comboBoxModelPath.SelectedItem as string ?? string.Empty;
-            string preferredSelection = !string.IsNullOrWhiteSpace(previousSelection)
-                ? previousSelection
-                : _savedSelectedModelName;
+            string preferredSelection = preferredModelName;
+            if (string.IsNullOrWhiteSpace(preferredSelection))
+            {
+                preferredSelection = !string.IsNullOrWhiteSpace(previousSelection)
+                    ? previousSelection
+                    : _savedSelectedModelName;
+            }
 
             comboBoxModelPath.BeginUpdate();
             comboBoxModelPath.Items.Clear();
