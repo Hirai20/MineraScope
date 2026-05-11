@@ -28,7 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
-            buttonSpectrumGenerationRun = new Button();
+            buttonRunSpectrumGeneration = new Button();
             groupBoxMineralInfo = new GroupBox();
             panelMineralName = new Panel();
             labelMineralName = new Label();
@@ -36,33 +36,35 @@
             panelMemo = new Panel();
             labelMemo = new Label();
             textBoxMemo = new TextBox();
-            groupBox2 = new GroupBox();
-            textBoxEndmembers_Constraints = new TextBox();
-            labelEndmembers_Constraints = new Label();
-            labelEndmembers_CompositionLists = new Label();
-            textBoxEndmembers_CompositionLists = new TextBox();
+            groupBoxSampling = new GroupBox();
+            textBoxConstraints = new TextBox();
+            labelConstraints = new Label();
+            labelCompositionList = new Label();
+            textBoxCompositionList = new TextBox();
             groupBoxEndmembers = new GroupBox();
             panelEndmembers = new Panel();
             flowLayoutPanelEndmembers = new FlowLayoutPanel();
             EndmemberControl1 = new EndmemberControl();
             EndmemberControl2 = new EndmemberControl();
-            buttonEndmember_Delete = new Button();
-            buttonEndmember_Add = new Button();
-            labelEndmember_Formula = new Label();
-            labelEndmember_Name = new Label();
-            buttonAddList = new Button();
-            buttonUpdateList = new Button();
-            checkedListBoxMineral = new CheckedListBox();
-            groupBoxTrainModel = new GroupBox();
-            groupBox4 = new GroupBox();
-            numericBoxModel_Epochs = new Crystallography.Controls.NumericBox();
+            buttonEndmemberDelete = new Button();
+            buttonEndmemberAdd = new Button();
+            labelEndmemberFormula = new Label();
+            labelEndmemberName = new Label();
+            buttonAddMineral = new Button();
+            buttonUpdateMineral = new Button();
+            checkedListBoxMinerals = new CheckedListBox();
+            groupBoxAdvancedSettings = new GroupBox();
+            groupBoxModelSettings = new GroupBox();
+            flowLayoutPanelModelSettings = new FlowLayoutPanel();
+            numericBoxEpochs = new Crystallography.Controls.NumericBox();
+            numericBoxBatchSize = new Crystallography.Controls.NumericBox();
+            numericBoxEarlyStopping = new Crystallography.Controls.NumericBox();
             numericBoxValidationSplit = new Crystallography.Controls.NumericBox();
-            numericBoxModel_EarlyStopping = new Crystallography.Controls.NumericBox();
-            numericBoxModel_BatchSize = new Crystallography.Controls.NumericBox();
-            groupBox3 = new GroupBox();
-            numericBoxParallel = new Crystallography.Controls.NumericBox();
-            numericBoxTrainingSpectrumCount = new Crystallography.Controls.NumericBox();
+            groupBoxSpectrumSettings = new GroupBox();
+            flowLayoutPanelSpectrumSettings = new FlowLayoutPanel();
+            numericBoxSpectraPerMineral = new Crystallography.Controls.NumericBox();
             numericBoxResolution = new Crystallography.Controls.NumericBox();
+            numericBoxParallel = new Crystallography.Controls.NumericBox();
             buttonCalibration = new Button();
             panelModelLog = new Panel();
             labelModelLog = new Label();
@@ -72,72 +74,72 @@
             numericBoxProbeCurrent = new Crystallography.Controls.NumericBox();
             numericBoxLiveTime = new Crystallography.Controls.NumericBox();
             buttonDelete = new Button();
-            groupBoxModelGeneration = new GroupBox();
+            groupBoxModelCreation = new GroupBox();
             tableLayoutPanelMain = new TableLayoutPanel();
-            groupBoxEDXsetting = new GroupBox();
-            panel1 = new Panel();
+            groupBoxEDXSettings = new GroupBox();
+            flowLayoutPanelEDXSettings = new FlowLayoutPanel();
+            panelDetectorName = new Panel();
             labelDetectorName = new Label();
             textBoxDetectorName = new TextBox();
-            numericBoxCarbonThickness = new Crystallography.Controls.NumericBox();
-            groupBox5 = new GroupBox();
-            label2 = new Label();
             numericBoxBeamEnergy = new Crystallography.Controls.NumericBox();
+            numericBoxCarbonThickness = new Crystallography.Controls.NumericBox();
             panelCommandBar = new Panel();
             panelModelName = new Panel();
-            label1 = new Label();
+            labelModelName = new Label();
             textBoxModelName = new TextBox();
             checkBoxAdvanced = new CheckBox();
             panelBottomDrawer = new Panel();
             groupBoxMineral = new GroupBox();
-            flowLayoutPanel2 = new FlowLayoutPanel();
+            flowLayoutPanelMineralActions = new FlowLayoutPanel();
             buttonAllDelete = new Button();
             buttonReset = new Button();
             statusStrip1 = new StatusStrip();
             toolStripProgressBar1 = new ToolStripProgressBar();
             toolStripStatusLabel1 = new ToolStripStatusLabel();
-            backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
             groupBoxMineralInfo.SuspendLayout();
             panelMineralName.SuspendLayout();
             panelMemo.SuspendLayout();
-            groupBox2.SuspendLayout();
+            groupBoxSampling.SuspendLayout();
             groupBoxEndmembers.SuspendLayout();
             panelEndmembers.SuspendLayout();
             flowLayoutPanelEndmembers.SuspendLayout();
-            groupBoxTrainModel.SuspendLayout();
-            groupBox4.SuspendLayout();
-            groupBox3.SuspendLayout();
+            groupBoxAdvancedSettings.SuspendLayout();
+            groupBoxModelSettings.SuspendLayout();
+            flowLayoutPanelModelSettings.SuspendLayout();
+            groupBoxSpectrumSettings.SuspendLayout();
+            flowLayoutPanelSpectrumSettings.SuspendLayout();
             panelModelLog.SuspendLayout();
-            groupBoxModelGeneration.SuspendLayout();
+            groupBoxModelCreation.SuspendLayout();
             tableLayoutPanelMain.SuspendLayout();
-            groupBoxEDXsetting.SuspendLayout();
-            panel1.SuspendLayout();
-            groupBox5.SuspendLayout();
+            groupBoxEDXSettings.SuspendLayout();
+            flowLayoutPanelEDXSettings.SuspendLayout();
+            panelDetectorName.SuspendLayout();
             panelCommandBar.SuspendLayout();
             panelModelName.SuspendLayout();
             panelBottomDrawer.SuspendLayout();
             groupBoxMineral.SuspendLayout();
-            flowLayoutPanel2.SuspendLayout();
+            flowLayoutPanelMineralActions.SuspendLayout();
             statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
-            // buttonSpectrumGenerationRun
+            // buttonRunSpectrumGeneration
             // 
-            buttonSpectrumGenerationRun.AutoSize = true;
-            buttonSpectrumGenerationRun.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonSpectrumGenerationRun.Location = new Point(800, 3);
-            buttonSpectrumGenerationRun.Margin = new Padding(3, 2, 3, 2);
-            buttonSpectrumGenerationRun.Name = "buttonSpectrumGenerationRun";
-            buttonSpectrumGenerationRun.Size = new Size(41, 25);
-            buttonSpectrumGenerationRun.TabIndex = 0;
-            buttonSpectrumGenerationRun.Text = "実行";
-            buttonSpectrumGenerationRun.UseVisualStyleBackColor = true;
-            buttonSpectrumGenerationRun.Click += buttonSpectrumGenerationRun_Click;
+            buttonRunSpectrumGeneration.AutoSize = true;
+            buttonRunSpectrumGeneration.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonRunSpectrumGeneration.Location = new Point(800, 3);
+            buttonRunSpectrumGeneration.Margin = new Padding(3, 2, 3, 2);
+            buttonRunSpectrumGeneration.Name = "buttonRunSpectrumGeneration";
+            buttonRunSpectrumGeneration.Size = new Size(41, 25);
+            buttonRunSpectrumGeneration.TabIndex = 0;
+            buttonRunSpectrumGeneration.Text = "実行";
+            buttonRunSpectrumGeneration.UseVisualStyleBackColor = true;
+            buttonRunSpectrumGeneration.Click += buttonSpectrumGenerationRun_Click;
             // 
             // groupBoxMineralInfo
             // 
             groupBoxMineralInfo.Controls.Add(panelMineralName);
             groupBoxMineralInfo.Controls.Add(panelMemo);
-            groupBoxMineralInfo.Controls.Add(groupBox2);
+            groupBoxMineralInfo.Controls.Add(groupBoxSampling);
             groupBoxMineralInfo.Controls.Add(groupBoxEndmembers);
             groupBoxMineralInfo.Location = new Point(354, 50);
             groupBoxMineralInfo.Name = "groupBoxMineralInfo";
@@ -200,54 +202,54 @@
             textBoxMemo.Size = new Size(120, 23);
             textBoxMemo.TabIndex = 94;
             // 
-            // groupBox2
+            // groupBoxSampling
             // 
-            groupBox2.Controls.Add(textBoxEndmembers_Constraints);
-            groupBox2.Controls.Add(labelEndmembers_Constraints);
-            groupBox2.Controls.Add(labelEndmembers_CompositionLists);
-            groupBox2.Controls.Add(textBoxEndmembers_CompositionLists);
-            groupBox2.Location = new Point(318, 50);
-            groupBox2.Name = "groupBox2";
-            groupBox2.Size = new Size(266, 167);
-            groupBox2.TabIndex = 103;
-            groupBox2.TabStop = false;
-            groupBox2.Text = "サンプリング条件";
+            groupBoxSampling.Controls.Add(textBoxConstraints);
+            groupBoxSampling.Controls.Add(labelConstraints);
+            groupBoxSampling.Controls.Add(labelCompositionList);
+            groupBoxSampling.Controls.Add(textBoxCompositionList);
+            groupBoxSampling.Location = new Point(318, 50);
+            groupBoxSampling.Name = "groupBoxSampling";
+            groupBoxSampling.Size = new Size(266, 167);
+            groupBoxSampling.TabIndex = 103;
+            groupBoxSampling.TabStop = false;
+            groupBoxSampling.Text = "サンプリング条件";
             // 
-            // textBoxEndmembers_Constraints
+            // textBoxConstraints
             // 
-            textBoxEndmembers_Constraints.Location = new Point(18, 37);
-            textBoxEndmembers_Constraints.Multiline = true;
-            textBoxEndmembers_Constraints.Name = "textBoxEndmembers_Constraints";
-            textBoxEndmembers_Constraints.ScrollBars = ScrollBars.Both;
-            textBoxEndmembers_Constraints.Size = new Size(230, 44);
-            textBoxEndmembers_Constraints.TabIndex = 93;
+            textBoxConstraints.Location = new Point(18, 37);
+            textBoxConstraints.Multiline = true;
+            textBoxConstraints.Name = "textBoxConstraints";
+            textBoxConstraints.ScrollBars = ScrollBars.Both;
+            textBoxConstraints.Size = new Size(230, 44);
+            textBoxConstraints.TabIndex = 93;
             // 
-            // labelEndmembers_Constraints
+            // labelConstraints
             // 
-            labelEndmembers_Constraints.AutoSize = true;
-            labelEndmembers_Constraints.Location = new Point(107, 19);
-            labelEndmembers_Constraints.Name = "labelEndmembers_Constraints";
-            labelEndmembers_Constraints.Size = new Size(43, 15);
-            labelEndmembers_Constraints.TabIndex = 94;
-            labelEndmembers_Constraints.Text = "条件式";
+            labelConstraints.AutoSize = true;
+            labelConstraints.Location = new Point(107, 19);
+            labelConstraints.Name = "labelConstraints";
+            labelConstraints.Size = new Size(43, 15);
+            labelConstraints.TabIndex = 94;
+            labelConstraints.Text = "条件式";
             // 
-            // labelEndmembers_CompositionLists
+            // labelCompositionList
             // 
-            labelEndmembers_CompositionLists.AutoSize = true;
-            labelEndmembers_CompositionLists.Location = new Point(85, 84);
-            labelEndmembers_CompositionLists.Name = "labelEndmembers_CompositionLists";
-            labelEndmembers_CompositionLists.Size = new Size(80, 15);
-            labelEndmembers_CompositionLists.TabIndex = 96;
-            labelEndmembers_CompositionLists.Text = "化学組成リスト";
+            labelCompositionList.AutoSize = true;
+            labelCompositionList.Location = new Point(85, 84);
+            labelCompositionList.Name = "labelCompositionList";
+            labelCompositionList.Size = new Size(80, 15);
+            labelCompositionList.TabIndex = 96;
+            labelCompositionList.Text = "化学組成リスト";
             // 
-            // textBoxEndmembers_CompositionLists
+            // textBoxCompositionList
             // 
-            textBoxEndmembers_CompositionLists.Location = new Point(18, 102);
-            textBoxEndmembers_CompositionLists.Multiline = true;
-            textBoxEndmembers_CompositionLists.Name = "textBoxEndmembers_CompositionLists";
-            textBoxEndmembers_CompositionLists.ScrollBars = ScrollBars.Both;
-            textBoxEndmembers_CompositionLists.Size = new Size(230, 59);
-            textBoxEndmembers_CompositionLists.TabIndex = 95;
+            textBoxCompositionList.Location = new Point(18, 102);
+            textBoxCompositionList.Multiline = true;
+            textBoxCompositionList.Name = "textBoxCompositionList";
+            textBoxCompositionList.ScrollBars = ScrollBars.Both;
+            textBoxCompositionList.Size = new Size(230, 59);
+            textBoxCompositionList.TabIndex = 95;
             // 
             // groupBoxEndmembers
             // 
@@ -266,10 +268,10 @@
             panelEndmembers.AutoSize = true;
             panelEndmembers.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             panelEndmembers.Controls.Add(flowLayoutPanelEndmembers);
-            panelEndmembers.Controls.Add(buttonEndmember_Delete);
-            panelEndmembers.Controls.Add(buttonEndmember_Add);
-            panelEndmembers.Controls.Add(labelEndmember_Formula);
-            panelEndmembers.Controls.Add(labelEndmember_Name);
+            panelEndmembers.Controls.Add(buttonEndmemberDelete);
+            panelEndmembers.Controls.Add(buttonEndmemberAdd);
+            panelEndmembers.Controls.Add(labelEndmemberFormula);
+            panelEndmembers.Controls.Add(labelEndmemberName);
             panelEndmembers.Location = new Point(4, 20);
             panelEndmembers.Name = "panelEndmembers";
             panelEndmembers.Size = new Size(291, 127);
@@ -306,135 +308,189 @@
             EndmemberControl2.Size = new Size(260, 23);
             EndmemberControl2.TabIndex = 88;
             // 
-            // buttonEndmember_Delete
+            // buttonEndmemberDelete
             // 
-            buttonEndmember_Delete.AutoSize = true;
-            buttonEndmember_Delete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonEndmember_Delete.Font = new Font("Yu Gothic UI", 8F);
-            buttonEndmember_Delete.Location = new Point(249, 101);
-            buttonEndmember_Delete.Name = "buttonEndmember_Delete";
-            buttonEndmember_Delete.Size = new Size(39, 23);
-            buttonEndmember_Delete.TabIndex = 98;
-            buttonEndmember_Delete.Text = "削除";
-            buttonEndmember_Delete.UseVisualStyleBackColor = true;
-            buttonEndmember_Delete.Click += buttonRemoveEndmemberControl_Click;
+            buttonEndmemberDelete.AutoSize = true;
+            buttonEndmemberDelete.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonEndmemberDelete.Font = new Font("Yu Gothic UI", 8F);
+            buttonEndmemberDelete.Location = new Point(249, 101);
+            buttonEndmemberDelete.Name = "buttonEndmemberDelete";
+            buttonEndmemberDelete.Size = new Size(39, 23);
+            buttonEndmemberDelete.TabIndex = 98;
+            buttonEndmemberDelete.Text = "削除";
+            buttonEndmemberDelete.UseVisualStyleBackColor = true;
+            buttonEndmemberDelete.Click += buttonRemoveEndmemberControl_Click;
             // 
-            // buttonEndmember_Add
+            // buttonEndmemberAdd
             // 
-            buttonEndmember_Add.AutoSize = true;
-            buttonEndmember_Add.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonEndmember_Add.Font = new Font("Yu Gothic UI", 8F);
-            buttonEndmember_Add.Location = new Point(204, 101);
-            buttonEndmember_Add.Name = "buttonEndmember_Add";
-            buttonEndmember_Add.Size = new Size(39, 23);
-            buttonEndmember_Add.TabIndex = 100;
-            buttonEndmember_Add.Text = "追加";
-            buttonEndmember_Add.UseVisualStyleBackColor = true;
-            buttonEndmember_Add.Click += buttonAddEndmemberControl_Click;
+            buttonEndmemberAdd.AutoSize = true;
+            buttonEndmemberAdd.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonEndmemberAdd.Font = new Font("Yu Gothic UI", 8F);
+            buttonEndmemberAdd.Location = new Point(204, 101);
+            buttonEndmemberAdd.Name = "buttonEndmemberAdd";
+            buttonEndmemberAdd.Size = new Size(39, 23);
+            buttonEndmemberAdd.TabIndex = 100;
+            buttonEndmemberAdd.Text = "追加";
+            buttonEndmemberAdd.UseVisualStyleBackColor = true;
+            buttonEndmemberAdd.Click += buttonAddEndmemberControl_Click;
             // 
-            // labelEndmember_Formula
+            // labelEndmemberFormula
             // 
-            labelEndmember_Formula.AutoSize = true;
-            labelEndmember_Formula.Location = new Point(176, 0);
-            labelEndmember_Formula.Margin = new Padding(60, 0, 0, 0);
-            labelEndmember_Formula.Name = "labelEndmember_Formula";
-            labelEndmember_Formula.Size = new Size(55, 15);
-            labelEndmember_Formula.TabIndex = 76;
-            labelEndmember_Formula.Text = "化学組成";
+            labelEndmemberFormula.AutoSize = true;
+            labelEndmemberFormula.Location = new Point(176, 0);
+            labelEndmemberFormula.Margin = new Padding(60, 0, 0, 0);
+            labelEndmemberFormula.Name = "labelEndmemberFormula";
+            labelEndmemberFormula.Size = new Size(55, 15);
+            labelEndmemberFormula.TabIndex = 76;
+            labelEndmemberFormula.Text = "化学組成";
             // 
-            // labelEndmember_Name
+            // labelEndmemberName
             // 
-            labelEndmember_Name.AutoSize = true;
-            labelEndmember_Name.Location = new Point(41, 0);
-            labelEndmember_Name.Margin = new Padding(60, 0, 0, 0);
-            labelEndmember_Name.Name = "labelEndmember_Name";
-            labelEndmember_Name.Size = new Size(43, 15);
-            labelEndmember_Name.TabIndex = 75;
-            labelEndmember_Name.Text = "鉱物名";
+            labelEndmemberName.AutoSize = true;
+            labelEndmemberName.Location = new Point(41, 0);
+            labelEndmemberName.Margin = new Padding(60, 0, 0, 0);
+            labelEndmemberName.Name = "labelEndmemberName";
+            labelEndmemberName.Size = new Size(43, 15);
+            labelEndmemberName.TabIndex = 75;
+            labelEndmemberName.Text = "鉱物名";
             // 
-            // buttonAddList
+            // buttonAddMineral
             // 
-            buttonAddList.AutoSize = true;
-            buttonAddList.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonAddList.Location = new Point(3, 3);
-            buttonAddList.Name = "buttonAddList";
-            buttonAddList.Size = new Size(41, 25);
-            buttonAddList.TabIndex = 96;
-            buttonAddList.Text = "追加";
-            buttonAddList.UseVisualStyleBackColor = true;
-            buttonAddList.Click += buttonAddList_Click;
+            buttonAddMineral.AutoSize = true;
+            buttonAddMineral.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonAddMineral.Location = new Point(3, 3);
+            buttonAddMineral.Name = "buttonAddMineral";
+            buttonAddMineral.Size = new Size(41, 25);
+            buttonAddMineral.TabIndex = 96;
+            buttonAddMineral.Text = "追加";
+            buttonAddMineral.UseVisualStyleBackColor = true;
+            buttonAddMineral.Click += buttonAddList_Click;
             // 
-            // buttonUpdateList
+            // buttonUpdateMineral
             // 
-            buttonUpdateList.AutoSize = true;
-            buttonUpdateList.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonUpdateList.Location = new Point(151, 3);
-            buttonUpdateList.Name = "buttonUpdateList";
-            buttonUpdateList.Size = new Size(41, 25);
-            buttonUpdateList.TabIndex = 99;
-            buttonUpdateList.Text = "更新";
-            buttonUpdateList.UseVisualStyleBackColor = true;
-            buttonUpdateList.Click += buttonUpdate_Click;
+            buttonUpdateMineral.AutoSize = true;
+            buttonUpdateMineral.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonUpdateMineral.Location = new Point(151, 3);
+            buttonUpdateMineral.Name = "buttonUpdateMineral";
+            buttonUpdateMineral.Size = new Size(41, 25);
+            buttonUpdateMineral.TabIndex = 99;
+            buttonUpdateMineral.Text = "更新";
+            buttonUpdateMineral.UseVisualStyleBackColor = true;
+            buttonUpdateMineral.Click += buttonUpdate_Click;
             // 
-            // checkedListBoxMineral
+            // checkedListBoxMinerals
             // 
-            checkedListBoxMineral.FormattingEnabled = true;
-            checkedListBoxMineral.HorizontalScrollbar = true;
-            checkedListBoxMineral.Location = new Point(3, 48);
-            checkedListBoxMineral.MultiColumn = true;
-            checkedListBoxMineral.Name = "checkedListBoxMineral";
-            checkedListBoxMineral.ScrollAlwaysVisible = true;
-            checkedListBoxMineral.Size = new Size(344, 220);
-            checkedListBoxMineral.TabIndex = 86;
-            checkedListBoxMineral.ItemCheck += checkedListBoxMineral_ItemCheck;
-            checkedListBoxMineral.SelectedIndexChanged += checkedListBoxMineral_SelectedIndexChanged;
+            checkedListBoxMinerals.FormattingEnabled = true;
+            checkedListBoxMinerals.HorizontalScrollbar = true;
+            checkedListBoxMinerals.Location = new Point(3, 48);
+            checkedListBoxMinerals.MultiColumn = true;
+            checkedListBoxMinerals.Name = "checkedListBoxMinerals";
+            checkedListBoxMinerals.ScrollAlwaysVisible = true;
+            checkedListBoxMinerals.Size = new Size(344, 220);
+            checkedListBoxMinerals.TabIndex = 86;
+            checkedListBoxMinerals.ItemCheck += checkedListBoxMineral_ItemCheck;
+            checkedListBoxMinerals.SelectedIndexChanged += checkedListBoxMineral_SelectedIndexChanged;
             // 
-            // groupBoxTrainModel
+            // groupBoxAdvancedSettings
             // 
-            groupBoxTrainModel.Controls.Add(groupBox4);
-            groupBoxTrainModel.Controls.Add(groupBox3);
-            groupBoxTrainModel.Location = new Point(0, 3);
-            groupBoxTrainModel.Name = "groupBoxTrainModel";
-            groupBoxTrainModel.Size = new Size(946, 113);
-            groupBoxTrainModel.TabIndex = 43;
-            groupBoxTrainModel.TabStop = false;
-            groupBoxTrainModel.Text = "詳細設定";
+            groupBoxAdvancedSettings.Controls.Add(groupBoxModelSettings);
+            groupBoxAdvancedSettings.Controls.Add(groupBoxSpectrumSettings);
+            groupBoxAdvancedSettings.Location = new Point(0, 3);
+            groupBoxAdvancedSettings.Name = "groupBoxAdvancedSettings";
+            groupBoxAdvancedSettings.Size = new Size(946, 113);
+            groupBoxAdvancedSettings.TabIndex = 43;
+            groupBoxAdvancedSettings.TabStop = false;
+            groupBoxAdvancedSettings.Text = "詳細設定";
             // 
-            // groupBox4
+            // groupBoxModelSettings
             // 
-            groupBox4.Controls.Add(numericBoxModel_Epochs);
-            groupBox4.Controls.Add(numericBoxValidationSplit);
-            groupBox4.Controls.Add(numericBoxModel_EarlyStopping);
-            groupBox4.Controls.Add(numericBoxModel_BatchSize);
-            groupBox4.Location = new Point(465, 22);
-            groupBox4.Name = "groupBox4";
-            groupBox4.Size = new Size(484, 76);
-            groupBox4.TabIndex = 109;
-            groupBox4.TabStop = false;
-            groupBox4.Text = "モデル訓練詳細";
+            groupBoxModelSettings.Controls.Add(flowLayoutPanelModelSettings);
+            groupBoxModelSettings.Location = new Point(465, 22);
+            groupBoxModelSettings.Name = "groupBoxModelSettings";
+            groupBoxModelSettings.Size = new Size(484, 76);
+            groupBoxModelSettings.TabIndex = 109;
+            groupBoxModelSettings.TabStop = false;
+            groupBoxModelSettings.Text = "モデル訓練詳細";
             // 
-            // numericBoxModel_Epochs
+            // flowLayoutPanelModelSettings
             // 
-            numericBoxModel_Epochs.BackColor = Color.Transparent;
-            numericBoxModel_Epochs.DecimalPlaces = 0;
-            numericBoxModel_Epochs.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.HeaderText = "エポック数";
-            numericBoxModel_Epochs.Location = new Point(9, 26);
-            numericBoxModel_Epochs.Margin = new Padding(0);
-            numericBoxModel_Epochs.Maximum = 100000D;
-            numericBoxModel_Epochs.MaximumSize = new Size(1000, 28);
-            numericBoxModel_Epochs.Minimum = 1D;
-            numericBoxModel_Epochs.MinimumSize = new Size(1, 18);
-            numericBoxModel_Epochs.Name = "numericBoxModel_Epochs";
-            numericBoxModel_Epochs.RadianValue = 8.7266462599716466D;
-            numericBoxModel_Epochs.ShowUpDown = true;
-            numericBoxModel_Epochs.Size = new Size(102, 26);
-            numericBoxModel_Epochs.SmartIncrement = true;
-            numericBoxModel_Epochs.TabIndex = 104;
-            numericBoxModel_Epochs.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_Epochs.Value = 500D;
+            flowLayoutPanelModelSettings.AutoSize = true;
+            flowLayoutPanelModelSettings.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            flowLayoutPanelModelSettings.Controls.Add(numericBoxEpochs);
+            flowLayoutPanelModelSettings.Controls.Add(numericBoxBatchSize);
+            flowLayoutPanelModelSettings.Controls.Add(numericBoxEarlyStopping);
+            flowLayoutPanelModelSettings.Controls.Add(numericBoxValidationSplit);
+            flowLayoutPanelModelSettings.Location = new Point(0, 26);
+            flowLayoutPanelModelSettings.Name = "flowLayoutPanelModelSettings";
+            flowLayoutPanelModelSettings.Size = new Size(469, 26);
+            flowLayoutPanelModelSettings.TabIndex = 108;
+            // 
+            // numericBoxEpochs
+            // 
+            numericBoxEpochs.BackColor = Color.Transparent;
+            numericBoxEpochs.DecimalPlaces = 0;
+            numericBoxEpochs.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxEpochs.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEpochs.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEpochs.HeaderText = "エポック数";
+            numericBoxEpochs.Location = new Point(0, 0);
+            numericBoxEpochs.Margin = new Padding(0);
+            numericBoxEpochs.Maximum = 100000D;
+            numericBoxEpochs.MaximumSize = new Size(1000, 28);
+            numericBoxEpochs.Minimum = 1D;
+            numericBoxEpochs.MinimumSize = new Size(1, 18);
+            numericBoxEpochs.Name = "numericBoxEpochs";
+            numericBoxEpochs.RadianValue = 8.7266462599716466D;
+            numericBoxEpochs.ShowUpDown = true;
+            numericBoxEpochs.Size = new Size(102, 26);
+            numericBoxEpochs.SmartIncrement = true;
+            numericBoxEpochs.TabIndex = 104;
+            numericBoxEpochs.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEpochs.Value = 500D;
+            // 
+            // numericBoxBatchSize
+            // 
+            numericBoxBatchSize.BackColor = Color.Transparent;
+            numericBoxBatchSize.DecimalPlaces = 0;
+            numericBoxBatchSize.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxBatchSize.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBatchSize.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBatchSize.HeaderText = "バッチサイズ";
+            numericBoxBatchSize.Location = new Point(102, 0);
+            numericBoxBatchSize.Margin = new Padding(0);
+            numericBoxBatchSize.MaximumSize = new Size(1000, 28);
+            numericBoxBatchSize.Minimum = 1D;
+            numericBoxBatchSize.MinimumSize = new Size(1, 18);
+            numericBoxBatchSize.Name = "numericBoxBatchSize";
+            numericBoxBatchSize.RadianValue = 0.27925268031909273D;
+            numericBoxBatchSize.ShowUpDown = true;
+            numericBoxBatchSize.Size = new Size(104, 26);
+            numericBoxBatchSize.SmartIncrement = true;
+            numericBoxBatchSize.TabIndex = 105;
+            numericBoxBatchSize.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBatchSize.Value = 16D;
+            // 
+            // numericBoxEarlyStopping
+            // 
+            numericBoxEarlyStopping.BackColor = Color.Transparent;
+            numericBoxEarlyStopping.DecimalPlaces = 0;
+            numericBoxEarlyStopping.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxEarlyStopping.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEarlyStopping.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEarlyStopping.HeaderText = "待機回数";
+            numericBoxEarlyStopping.Location = new Point(206, 0);
+            numericBoxEarlyStopping.Margin = new Padding(0);
+            numericBoxEarlyStopping.MaximumSize = new Size(1000, 28);
+            numericBoxEarlyStopping.Minimum = 0D;
+            numericBoxEarlyStopping.MinimumSize = new Size(1, 18);
+            numericBoxEarlyStopping.Name = "numericBoxEarlyStopping";
+            numericBoxEarlyStopping.RadianValue = 0.17453292519943295D;
+            numericBoxEarlyStopping.ShowUpDown = true;
+            numericBoxEarlyStopping.Size = new Size(102, 26);
+            numericBoxEarlyStopping.SmartIncrement = true;
+            numericBoxEarlyStopping.TabIndex = 106;
+            numericBoxEarlyStopping.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEarlyStopping.Value = 10D;
             // 
             // numericBoxValidationSplit
             // 
@@ -444,7 +500,7 @@
             numericBoxValidationSplit.FooterFont = new Font("Yu Gothic UI", 9F);
             numericBoxValidationSplit.HeaderFont = new Font("Yu Gothic UI", 9F);
             numericBoxValidationSplit.HeaderText = "テストデータの割合(%)";
-            numericBoxValidationSplit.Location = new Point(215, 26);
+            numericBoxValidationSplit.Location = new Point(308, 0);
             numericBoxValidationSplit.Margin = new Padding(0);
             numericBoxValidationSplit.Maximum = 100000D;
             numericBoxValidationSplit.MaximumSize = new Size(1000, 28);
@@ -459,61 +515,71 @@
             numericBoxValidationSplit.TextFont = new Font("Yu Gothic UI", 9F);
             numericBoxValidationSplit.Value = 20D;
             // 
-            // numericBoxModel_EarlyStopping
+            // groupBoxSpectrumSettings
             // 
-            numericBoxModel_EarlyStopping.BackColor = Color.Transparent;
-            numericBoxModel_EarlyStopping.DecimalPlaces = 0;
-            numericBoxModel_EarlyStopping.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_EarlyStopping.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_EarlyStopping.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_EarlyStopping.HeaderText = "待機回数";
-            numericBoxModel_EarlyStopping.Location = new Point(376, 26);
-            numericBoxModel_EarlyStopping.Margin = new Padding(0);
-            numericBoxModel_EarlyStopping.MaximumSize = new Size(1000, 28);
-            numericBoxModel_EarlyStopping.Minimum = 0D;
-            numericBoxModel_EarlyStopping.MinimumSize = new Size(1, 18);
-            numericBoxModel_EarlyStopping.Name = "numericBoxModel_EarlyStopping";
-            numericBoxModel_EarlyStopping.RadianValue = 0.17453292519943295D;
-            numericBoxModel_EarlyStopping.ShowUpDown = true;
-            numericBoxModel_EarlyStopping.Size = new Size(102, 26);
-            numericBoxModel_EarlyStopping.SmartIncrement = true;
-            numericBoxModel_EarlyStopping.TabIndex = 106;
-            numericBoxModel_EarlyStopping.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_EarlyStopping.Value = 10D;
+            groupBoxSpectrumSettings.Controls.Add(flowLayoutPanelSpectrumSettings);
+            groupBoxSpectrumSettings.Location = new Point(3, 22);
+            groupBoxSpectrumSettings.Name = "groupBoxSpectrumSettings";
+            groupBoxSpectrumSettings.Size = new Size(459, 76);
+            groupBoxSpectrumSettings.TabIndex = 108;
+            groupBoxSpectrumSettings.TabStop = false;
+            groupBoxSpectrumSettings.Text = "EDXスペクトル生成詳細";
             // 
-            // numericBoxModel_BatchSize
+            // flowLayoutPanelSpectrumSettings
             // 
-            numericBoxModel_BatchSize.BackColor = Color.Transparent;
-            numericBoxModel_BatchSize.DecimalPlaces = 0;
-            numericBoxModel_BatchSize.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_BatchSize.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_BatchSize.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_BatchSize.HeaderText = "バッチサイズ";
-            numericBoxModel_BatchSize.Location = new Point(111, 26);
-            numericBoxModel_BatchSize.Margin = new Padding(0);
-            numericBoxModel_BatchSize.MaximumSize = new Size(1000, 28);
-            numericBoxModel_BatchSize.Minimum = 1D;
-            numericBoxModel_BatchSize.MinimumSize = new Size(1, 18);
-            numericBoxModel_BatchSize.Name = "numericBoxModel_BatchSize";
-            numericBoxModel_BatchSize.RadianValue = 0.27925268031909273D;
-            numericBoxModel_BatchSize.ShowUpDown = true;
-            numericBoxModel_BatchSize.Size = new Size(104, 26);
-            numericBoxModel_BatchSize.SmartIncrement = true;
-            numericBoxModel_BatchSize.TabIndex = 105;
-            numericBoxModel_BatchSize.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxModel_BatchSize.Value = 16D;
+            flowLayoutPanelSpectrumSettings.AutoSize = true;
+            flowLayoutPanelSpectrumSettings.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            flowLayoutPanelSpectrumSettings.Controls.Add(numericBoxSpectraPerMineral);
+            flowLayoutPanelSpectrumSettings.Controls.Add(numericBoxResolution);
+            flowLayoutPanelSpectrumSettings.Controls.Add(numericBoxParallel);
+            flowLayoutPanelSpectrumSettings.Location = new Point(6, 26);
+            flowLayoutPanelSpectrumSettings.Name = "flowLayoutPanelSpectrumSettings";
+            flowLayoutPanelSpectrumSettings.Size = new Size(386, 28);
+            flowLayoutPanelSpectrumSettings.TabIndex = 115;
             // 
-            // groupBox3
+            // numericBoxSpectraPerMineral
             // 
-            groupBox3.Controls.Add(numericBoxParallel);
-            groupBox3.Controls.Add(numericBoxTrainingSpectrumCount);
-            groupBox3.Controls.Add(numericBoxResolution);
-            groupBox3.Location = new Point(3, 22);
-            groupBox3.Name = "groupBox3";
-            groupBox3.Size = new Size(459, 76);
-            groupBox3.TabIndex = 108;
-            groupBox3.TabStop = false;
-            groupBox3.Text = "EDXスペクトル生成詳細";
+            numericBoxSpectraPerMineral.BackColor = Color.Transparent;
+            numericBoxSpectraPerMineral.DecimalPlaces = 0;
+            numericBoxSpectraPerMineral.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxSpectraPerMineral.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxSpectraPerMineral.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxSpectraPerMineral.HeaderText = "学習スペクトル数/鉱物";
+            numericBoxSpectraPerMineral.Location = new Point(0, 0);
+            numericBoxSpectraPerMineral.Margin = new Padding(0);
+            numericBoxSpectraPerMineral.MaximumSize = new Size(1000, 28);
+            numericBoxSpectraPerMineral.Minimum = 0D;
+            numericBoxSpectraPerMineral.MinimumSize = new Size(1, 18);
+            numericBoxSpectraPerMineral.Name = "numericBoxSpectraPerMineral";
+            numericBoxSpectraPerMineral.RadianValue = 17.453292519943293D;
+            numericBoxSpectraPerMineral.ShowUpDown = true;
+            numericBoxSpectraPerMineral.Size = new Size(170, 26);
+            numericBoxSpectraPerMineral.SmartIncrement = true;
+            numericBoxSpectraPerMineral.TabIndex = 106;
+            numericBoxSpectraPerMineral.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxSpectraPerMineral.Value = 1000D;
+            // 
+            // numericBoxResolution
+            // 
+            numericBoxResolution.BackColor = Color.Transparent;
+            numericBoxResolution.DecimalPlaces = 0;
+            numericBoxResolution.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.HeaderText = "化学組成分解能";
+            numericBoxResolution.Location = new Point(170, 0);
+            numericBoxResolution.Margin = new Padding(0);
+            numericBoxResolution.MaximumSize = new Size(1000, 28);
+            numericBoxResolution.Minimum = 0D;
+            numericBoxResolution.MinimumSize = new Size(1, 18);
+            numericBoxResolution.Name = "numericBoxResolution";
+            numericBoxResolution.RadianValue = 0.17453292519943295D;
+            numericBoxResolution.ShowUpDown = true;
+            numericBoxResolution.Size = new Size(134, 26);
+            numericBoxResolution.SmartIncrement = true;
+            numericBoxResolution.TabIndex = 106;
+            numericBoxResolution.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.Value = 10D;
             // 
             // numericBoxParallel
             // 
@@ -523,7 +589,7 @@
             numericBoxParallel.FooterFont = new Font("Yu Gothic UI", 9F);
             numericBoxParallel.HeaderFont = new Font("Yu Gothic UI", 9F);
             numericBoxParallel.HeaderText = "並列数";
-            numericBoxParallel.Location = new Point(323, 26);
+            numericBoxParallel.Location = new Point(304, 0);
             numericBoxParallel.Margin = new Padding(0);
             numericBoxParallel.Maximum = 100000D;
             numericBoxParallel.MaximumSize = new Size(1000, 28);
@@ -538,55 +604,11 @@
             numericBoxParallel.TextFont = new Font("Yu Gothic UI", 9F);
             numericBoxParallel.Value = 1D;
             // 
-            // numericBoxTrainingSpectrumCount
-            // 
-            numericBoxTrainingSpectrumCount.BackColor = Color.Transparent;
-            numericBoxTrainingSpectrumCount.DecimalPlaces = 0;
-            numericBoxTrainingSpectrumCount.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxTrainingSpectrumCount.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxTrainingSpectrumCount.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxTrainingSpectrumCount.HeaderText = "学習スペクトル数/鉱物";
-            numericBoxTrainingSpectrumCount.Location = new Point(4, 26);
-            numericBoxTrainingSpectrumCount.Margin = new Padding(0);
-            numericBoxTrainingSpectrumCount.MaximumSize = new Size(1000, 28);
-            numericBoxTrainingSpectrumCount.Minimum = 0D;
-            numericBoxTrainingSpectrumCount.MinimumSize = new Size(1, 18);
-            numericBoxTrainingSpectrumCount.Name = "numericBoxTrainingSpectrumCount";
-            numericBoxTrainingSpectrumCount.RadianValue = 17.453292519943293D;
-            numericBoxTrainingSpectrumCount.ShowUpDown = true;
-            numericBoxTrainingSpectrumCount.Size = new Size(139, 26);
-            numericBoxTrainingSpectrumCount.SmartIncrement = true;
-            numericBoxTrainingSpectrumCount.TabIndex = 106;
-            numericBoxTrainingSpectrumCount.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxTrainingSpectrumCount.Value = 1000D;
-            // 
-            // numericBoxResolution
-            // 
-            numericBoxResolution.BackColor = Color.Transparent;
-            numericBoxResolution.DecimalPlaces = 0;
-            numericBoxResolution.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.HeaderText = "化学組成分解能";
-            numericBoxResolution.Location = new Point(163, 26);
-            numericBoxResolution.Margin = new Padding(0);
-            numericBoxResolution.MaximumSize = new Size(1000, 28);
-            numericBoxResolution.Minimum = 0D;
-            numericBoxResolution.MinimumSize = new Size(1, 18);
-            numericBoxResolution.Name = "numericBoxResolution";
-            numericBoxResolution.RadianValue = 0.17453292519943295D;
-            numericBoxResolution.ShowUpDown = true;
-            numericBoxResolution.Size = new Size(134, 26);
-            numericBoxResolution.SmartIncrement = true;
-            numericBoxResolution.TabIndex = 106;
-            numericBoxResolution.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxResolution.Value = 10D;
-            // 
             // buttonCalibration
             // 
             buttonCalibration.AutoSize = true;
             buttonCalibration.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonCalibration.Location = new Point(828, 21);
+            buttonCalibration.Location = new Point(742, 3);
             buttonCalibration.Name = "buttonCalibration";
             buttonCalibration.Size = new Size(115, 25);
             buttonCalibration.TabIndex = 104;
@@ -653,7 +675,7 @@
             numericBoxProbeCurrent.FooterFont = new Font("Yu Gothic UI", 9F);
             numericBoxProbeCurrent.HeaderFont = new Font("Yu Gothic UI", 9F);
             numericBoxProbeCurrent.HeaderText = "照射電流(nA)";
-            numericBoxProbeCurrent.Location = new Point(682, 20);
+            numericBoxProbeCurrent.Location = new Point(128, 0);
             numericBoxProbeCurrent.Margin = new Padding(0);
             numericBoxProbeCurrent.MaximumSize = new Size(1000, 28);
             numericBoxProbeCurrent.MinimumSize = new Size(1, 18);
@@ -674,7 +696,7 @@
             numericBoxLiveTime.FooterFont = new Font("Yu Gothic UI", 9F);
             numericBoxLiveTime.HeaderFont = new Font("Yu Gothic UI", 9F);
             numericBoxLiveTime.HeaderText = "測定時間(秒)";
-            numericBoxLiveTime.Location = new Point(308, 20);
+            numericBoxLiveTime.Location = new Point(404, 0);
             numericBoxLiveTime.Margin = new Padding(0);
             numericBoxLiveTime.MaximumSize = new Size(1000, 28);
             numericBoxLiveTime.Minimum = 0D;
@@ -701,23 +723,23 @@
             buttonDelete.UseVisualStyleBackColor = true;
             buttonDelete.Click += buttonMineral_Delete_Click;
             // 
-            // groupBoxModelGeneration
+            // groupBoxModelCreation
             // 
-            groupBoxModelGeneration.Controls.Add(panelModelLog);
-            groupBoxModelGeneration.Controls.Add(tableLayoutPanelMain);
-            groupBoxModelGeneration.Dock = DockStyle.Fill;
-            groupBoxModelGeneration.Location = new Point(3, 3);
-            groupBoxModelGeneration.Name = "groupBoxModelGeneration";
-            groupBoxModelGeneration.Size = new Size(990, 721);
-            groupBoxModelGeneration.TabIndex = 88;
-            groupBoxModelGeneration.TabStop = false;
-            groupBoxModelGeneration.Text = "モデル作成";
+            groupBoxModelCreation.Controls.Add(panelModelLog);
+            groupBoxModelCreation.Controls.Add(tableLayoutPanelMain);
+            groupBoxModelCreation.Dock = DockStyle.Fill;
+            groupBoxModelCreation.Location = new Point(3, 3);
+            groupBoxModelCreation.Name = "groupBoxModelCreation";
+            groupBoxModelCreation.Size = new Size(990, 721);
+            groupBoxModelCreation.TabIndex = 88;
+            groupBoxModelCreation.TabStop = false;
+            groupBoxModelCreation.Text = "モデル作成";
             // 
             // tableLayoutPanelMain
             // 
             tableLayoutPanelMain.ColumnCount = 1;
             tableLayoutPanelMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            tableLayoutPanelMain.Controls.Add(groupBoxEDXsetting, 0, 0);
+            tableLayoutPanelMain.Controls.Add(groupBoxEDXSettings, 0, 0);
             tableLayoutPanelMain.Controls.Add(panelCommandBar, 0, 2);
             tableLayoutPanelMain.Controls.Add(panelBottomDrawer, 0, 3);
             tableLayoutPanelMain.Controls.Add(groupBoxMineral, 0, 1);
@@ -731,36 +753,44 @@
             tableLayoutPanelMain.Size = new Size(955, 528);
             tableLayoutPanelMain.TabIndex = 104;
             // 
-            // groupBoxEDXsetting
+            // groupBoxEDXSettings
             // 
-            groupBoxEDXsetting.Controls.Add(panel1);
-            groupBoxEDXsetting.Controls.Add(numericBoxCarbonThickness);
-            groupBoxEDXsetting.Controls.Add(numericBoxLiveTime);
-            groupBoxEDXsetting.Controls.Add(buttonCalibration);
-            groupBoxEDXsetting.Controls.Add(numericBoxProbeCurrent);
-            groupBoxEDXsetting.Controls.Add(groupBox5);
-            groupBoxEDXsetting.Controls.Add(numericBoxBeamEnergy);
-            groupBoxEDXsetting.Location = new Point(3, 3);
-            groupBoxEDXsetting.Name = "groupBoxEDXsetting";
-            groupBoxEDXsetting.Size = new Size(949, 52);
-            groupBoxEDXsetting.TabIndex = 99;
-            groupBoxEDXsetting.TabStop = false;
-            groupBoxEDXsetting.Text = "SEM-EDX条件";
+            groupBoxEDXSettings.Controls.Add(flowLayoutPanelEDXSettings);
+            groupBoxEDXSettings.Location = new Point(3, 3);
+            groupBoxEDXSettings.Name = "groupBoxEDXSettings";
+            groupBoxEDXSettings.Size = new Size(949, 52);
+            groupBoxEDXSettings.TabIndex = 99;
+            groupBoxEDXSettings.TabStop = false;
+            groupBoxEDXSettings.Text = "SEM-EDX条件";
             // 
-            // panel1
+            // flowLayoutPanelEDXSettings
             // 
-            panel1.AutoSize = true;
-            panel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panel1.Controls.Add(labelDetectorName);
-            panel1.Controls.Add(textBoxDetectorName);
-            panel1.Location = new Point(7, 19);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(119, 27);
-            panel1.TabIndex = 104;
+            flowLayoutPanelEDXSettings.Controls.Add(panelDetectorName);
+            flowLayoutPanelEDXSettings.Controls.Add(numericBoxProbeCurrent);
+            flowLayoutPanelEDXSettings.Controls.Add(numericBoxBeamEnergy);
+            flowLayoutPanelEDXSettings.Controls.Add(numericBoxLiveTime);
+            flowLayoutPanelEDXSettings.Controls.Add(numericBoxCarbonThickness);
+            flowLayoutPanelEDXSettings.Controls.Add(buttonCalibration);
+            flowLayoutPanelEDXSettings.Dock = DockStyle.Fill;
+            flowLayoutPanelEDXSettings.Location = new Point(3, 19);
+            flowLayoutPanelEDXSettings.Name = "flowLayoutPanelEDXSettings";
+            flowLayoutPanelEDXSettings.Size = new Size(943, 30);
+            flowLayoutPanelEDXSettings.TabIndex = 108;
+            // 
+            // panelDetectorName
+            // 
+            panelDetectorName.AutoSize = true;
+            panelDetectorName.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panelDetectorName.Controls.Add(labelDetectorName);
+            panelDetectorName.Controls.Add(textBoxDetectorName);
+            panelDetectorName.Location = new Point(3, 3);
+            panelDetectorName.Name = "panelDetectorName";
+            panelDetectorName.Size = new Size(122, 22);
+            panelDetectorName.TabIndex = 104;
             // 
             // labelDetectorName
             // 
-            labelDetectorName.Location = new Point(0, 7);
+            labelDetectorName.Location = new Point(0, 0);
             labelDetectorName.Name = "labelDetectorName";
             labelDetectorName.Size = new Size(60, 15);
             labelDetectorName.TabIndex = 8;
@@ -768,53 +798,12 @@
             // 
             // textBoxDetectorName
             // 
-            textBoxDetectorName.Location = new Point(66, 2);
+            textBoxDetectorName.Location = new Point(69, -3);
             textBoxDetectorName.Margin = new Padding(3, 2, 3, 2);
             textBoxDetectorName.Name = "textBoxDetectorName";
             textBoxDetectorName.Size = new Size(50, 23);
             textBoxDetectorName.TabIndex = 3;
             textBoxDetectorName.Text = "test";
-            // 
-            // numericBoxCarbonThickness
-            // 
-            numericBoxCarbonThickness.BackColor = Color.Transparent;
-            numericBoxCarbonThickness.DecimalPlaces = 3;
-            numericBoxCarbonThickness.Font = new Font("Yu Gothic UI", 9F);
-            numericBoxCarbonThickness.FooterFont = new Font("Yu Gothic UI", 9F);
-            numericBoxCarbonThickness.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxCarbonThickness.HeaderText = "カーボン蒸着の厚さ(nm)";
-            numericBoxCarbonThickness.Location = new Point(472, 20);
-            numericBoxCarbonThickness.Margin = new Padding(0);
-            numericBoxCarbonThickness.MaximumSize = new Size(1000, 28);
-            numericBoxCarbonThickness.Minimum = 0D;
-            numericBoxCarbonThickness.MinimumSize = new Size(1, 18);
-            numericBoxCarbonThickness.Name = "numericBoxCarbonThickness";
-            numericBoxCarbonThickness.RadianValue = 0.00034906585039886593D;
-            numericBoxCarbonThickness.ShowUpDown = true;
-            numericBoxCarbonThickness.Size = new Size(199, 26);
-            numericBoxCarbonThickness.SmartIncrement = true;
-            numericBoxCarbonThickness.TabIndex = 104;
-            numericBoxCarbonThickness.TextFont = new Font("Yu Gothic UI", 9F);
-            numericBoxCarbonThickness.Value = 0.02D;
-            // 
-            // groupBox5
-            // 
-            groupBox5.Controls.Add(label2);
-            groupBox5.Location = new Point(7, 20);
-            groupBox5.Name = "groupBox5";
-            groupBox5.Size = new Size(0, 0);
-            groupBox5.TabIndex = 41;
-            groupBox5.TabStop = false;
-            groupBox5.Text = "化学組成条件設定";
-            // 
-            // label2
-            // 
-            label2.AutoSize = true;
-            label2.Location = new Point(27, 69);
-            label2.Name = "label2";
-            label2.Size = new Size(31, 15);
-            label2.TabIndex = 42;
-            label2.Text = "成分";
             // 
             // numericBoxBeamEnergy
             // 
@@ -826,7 +815,7 @@
             numericBoxBeamEnergy.FooterFont = new Font("Yu Gothic UI", 9F);
             numericBoxBeamEnergy.HeaderFont = new Font("Yu Gothic UI", 9F);
             numericBoxBeamEnergy.HeaderText = "加速電圧(kV)";
-            numericBoxBeamEnergy.Location = new Point(132, 20);
+            numericBoxBeamEnergy.Location = new Point(266, 0);
             numericBoxBeamEnergy.Margin = new Padding(0);
             numericBoxBeamEnergy.MaximumSize = new Size(1000, 28);
             numericBoxBeamEnergy.Minimum = 0D;
@@ -840,6 +829,28 @@
             numericBoxBeamEnergy.TextFont = new Font("Yu Gothic UI", 9F);
             numericBoxBeamEnergy.Value = 20D;
             // 
+            // numericBoxCarbonThickness
+            // 
+            numericBoxCarbonThickness.BackColor = Color.Transparent;
+            numericBoxCarbonThickness.DecimalPlaces = 3;
+            numericBoxCarbonThickness.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.HeaderText = "カーボン蒸着の厚さ(nm)";
+            numericBoxCarbonThickness.Location = new Point(540, 0);
+            numericBoxCarbonThickness.Margin = new Padding(0);
+            numericBoxCarbonThickness.MaximumSize = new Size(1000, 28);
+            numericBoxCarbonThickness.Minimum = 0D;
+            numericBoxCarbonThickness.MinimumSize = new Size(1, 18);
+            numericBoxCarbonThickness.Name = "numericBoxCarbonThickness";
+            numericBoxCarbonThickness.RadianValue = 0.00034906585039886593D;
+            numericBoxCarbonThickness.ShowUpDown = true;
+            numericBoxCarbonThickness.Size = new Size(199, 26);
+            numericBoxCarbonThickness.SmartIncrement = true;
+            numericBoxCarbonThickness.TabIndex = 104;
+            numericBoxCarbonThickness.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.Value = 0.02D;
+            // 
             // panelCommandBar
             // 
             panelCommandBar.AutoSize = true;
@@ -847,7 +858,7 @@
             panelCommandBar.Controls.Add(panelModelName);
             panelCommandBar.Controls.Add(checkBoxAdvanced);
             panelCommandBar.Controls.Add(buttonModelTrain);
-            panelCommandBar.Controls.Add(buttonSpectrumGenerationRun);
+            panelCommandBar.Controls.Add(buttonRunSpectrumGeneration);
             panelCommandBar.Location = new Point(3, 349);
             panelCommandBar.Name = "panelCommandBar";
             panelCommandBar.Size = new Size(924, 32);
@@ -857,21 +868,21 @@
             // 
             panelModelName.AutoSize = true;
             panelModelName.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            panelModelName.Controls.Add(label1);
+            panelModelName.Controls.Add(labelModelName);
             panelModelName.Controls.Add(textBoxModelName);
             panelModelName.Location = new Point(600, 2);
             panelModelName.Name = "panelModelName";
             panelModelName.Size = new Size(176, 27);
             panelModelName.TabIndex = 105;
             // 
-            // label1
+            // labelModelName
             // 
-            label1.AutoSize = true;
-            label1.Location = new Point(0, 5);
-            label1.Name = "label1";
-            label1.Size = new Size(47, 15);
-            label1.TabIndex = 93;
-            label1.Text = "モデル名";
+            labelModelName.AutoSize = true;
+            labelModelName.Location = new Point(0, 5);
+            labelModelName.Name = "labelModelName";
+            labelModelName.Size = new Size(47, 15);
+            labelModelName.TabIndex = 93;
+            labelModelName.Text = "モデル名";
             // 
             // textBoxModelName
             // 
@@ -892,7 +903,7 @@
             // 
             // panelBottomDrawer
             // 
-            panelBottomDrawer.Controls.Add(groupBoxTrainModel);
+            panelBottomDrawer.Controls.Add(groupBoxAdvancedSettings);
             panelBottomDrawer.Location = new Point(3, 387);
             panelBottomDrawer.Name = "panelBottomDrawer";
             panelBottomDrawer.Size = new Size(949, 129);
@@ -901,8 +912,8 @@
             // groupBoxMineral
             // 
             groupBoxMineral.Controls.Add(groupBoxMineralInfo);
-            groupBoxMineral.Controls.Add(checkedListBoxMineral);
-            groupBoxMineral.Controls.Add(flowLayoutPanel2);
+            groupBoxMineral.Controls.Add(checkedListBoxMinerals);
+            groupBoxMineral.Controls.Add(flowLayoutPanelMineralActions);
             groupBoxMineral.Location = new Point(3, 61);
             groupBoxMineral.Name = "groupBoxMineral";
             groupBoxMineral.Size = new Size(949, 282);
@@ -910,21 +921,21 @@
             groupBoxMineral.TabStop = false;
             groupBoxMineral.Text = "計算対象";
             // 
-            // flowLayoutPanel2
+            // flowLayoutPanelMineralActions
             // 
-            flowLayoutPanel2.AutoSize = true;
-            flowLayoutPanel2.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            flowLayoutPanel2.Controls.Add(buttonAddList);
-            flowLayoutPanel2.Controls.Add(buttonDelete);
-            flowLayoutPanel2.Controls.Add(buttonAllDelete);
-            flowLayoutPanel2.Controls.Add(buttonUpdateList);
-            flowLayoutPanel2.Controls.Add(buttonReset);
-            flowLayoutPanel2.Controls.Add(buttonAllSelect);
-            flowLayoutPanel2.Dock = DockStyle.Top;
-            flowLayoutPanel2.Location = new Point(3, 19);
-            flowLayoutPanel2.Name = "flowLayoutPanel2";
-            flowLayoutPanel2.Size = new Size(943, 31);
-            flowLayoutPanel2.TabIndex = 103;
+            flowLayoutPanelMineralActions.AutoSize = true;
+            flowLayoutPanelMineralActions.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            flowLayoutPanelMineralActions.Controls.Add(buttonAddMineral);
+            flowLayoutPanelMineralActions.Controls.Add(buttonDelete);
+            flowLayoutPanelMineralActions.Controls.Add(buttonAllDelete);
+            flowLayoutPanelMineralActions.Controls.Add(buttonUpdateMineral);
+            flowLayoutPanelMineralActions.Controls.Add(buttonReset);
+            flowLayoutPanelMineralActions.Controls.Add(buttonAllSelect);
+            flowLayoutPanelMineralActions.Dock = DockStyle.Top;
+            flowLayoutPanelMineralActions.Location = new Point(3, 19);
+            flowLayoutPanelMineralActions.Name = "flowLayoutPanelMineralActions";
+            flowLayoutPanelMineralActions.Size = new Size(943, 31);
+            flowLayoutPanelMineralActions.TabIndex = 103;
             // 
             // buttonAllDelete
             // 
@@ -977,7 +988,7 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(996, 749);
-            Controls.Add(groupBoxModelGeneration);
+            Controls.Add(groupBoxModelCreation);
             Controls.Add(statusStrip1);
             Margin = new Padding(3, 2, 3, 2);
             Name = "GeneratorForm";
@@ -989,27 +1000,30 @@
             panelMineralName.PerformLayout();
             panelMemo.ResumeLayout(false);
             panelMemo.PerformLayout();
-            groupBox2.ResumeLayout(false);
-            groupBox2.PerformLayout();
+            groupBoxSampling.ResumeLayout(false);
+            groupBoxSampling.PerformLayout();
             groupBoxEndmembers.ResumeLayout(false);
             groupBoxEndmembers.PerformLayout();
             panelEndmembers.ResumeLayout(false);
             panelEndmembers.PerformLayout();
             flowLayoutPanelEndmembers.ResumeLayout(false);
-            groupBoxTrainModel.ResumeLayout(false);
-            groupBox4.ResumeLayout(false);
-            groupBox3.ResumeLayout(false);
+            groupBoxAdvancedSettings.ResumeLayout(false);
+            groupBoxModelSettings.ResumeLayout(false);
+            groupBoxModelSettings.PerformLayout();
+            flowLayoutPanelModelSettings.ResumeLayout(false);
+            groupBoxSpectrumSettings.ResumeLayout(false);
+            groupBoxSpectrumSettings.PerformLayout();
+            flowLayoutPanelSpectrumSettings.ResumeLayout(false);
             panelModelLog.ResumeLayout(false);
             panelModelLog.PerformLayout();
-            groupBoxModelGeneration.ResumeLayout(false);
+            groupBoxModelCreation.ResumeLayout(false);
             tableLayoutPanelMain.ResumeLayout(false);
             tableLayoutPanelMain.PerformLayout();
-            groupBoxEDXsetting.ResumeLayout(false);
-            groupBoxEDXsetting.PerformLayout();
-            panel1.ResumeLayout(false);
-            panel1.PerformLayout();
-            groupBox5.ResumeLayout(false);
-            groupBox5.PerformLayout();
+            groupBoxEDXSettings.ResumeLayout(false);
+            flowLayoutPanelEDXSettings.ResumeLayout(false);
+            flowLayoutPanelEDXSettings.PerformLayout();
+            panelDetectorName.ResumeLayout(false);
+            panelDetectorName.PerformLayout();
             panelCommandBar.ResumeLayout(false);
             panelCommandBar.PerformLayout();
             panelModelName.ResumeLayout(false);
@@ -1017,8 +1031,8 @@
             panelBottomDrawer.ResumeLayout(false);
             groupBoxMineral.ResumeLayout(false);
             groupBoxMineral.PerformLayout();
-            flowLayoutPanel2.ResumeLayout(false);
-            flowLayoutPanel2.PerformLayout();
+            flowLayoutPanelMineralActions.ResumeLayout(false);
+            flowLayoutPanelMineralActions.PerformLayout();
             statusStrip1.ResumeLayout(false);
             statusStrip1.PerformLayout();
             ResumeLayout(false);
@@ -1026,52 +1040,46 @@
         }
 
         #endregion
-        private Button buttonSpectrumGenerationRun;
-        private TextBox textBoxDTSALog;
+        private Button buttonRunSpectrumGeneration;
         private GroupBox groupBoxMineralInfo;
-        private Label labelEndmember_Name;
-        private Label labelEndmember_Formula;
+        private Label labelEndmemberName;
+        private Label labelEndmemberFormula;
         private EndmemberControl EndmemberControl2;
         private EndmemberControl EndmemberControl1;
-        private Label labelProgress;
         private GroupBox groupBoxEndmembers;
-        private CheckedListBox checkedListBoxMineral;
-        private TextBox textBoxEndmembers_Constraints;
-        private Label labelEndmembers_Constraints;
-        private GroupBox groupBoxModelGeneration;
-        private GroupBox groupBox5;
-        private Label label2;
-        private Label labelEndmembers_CompositionLists;
-        private TextBox textBoxEndmembers_CompositionLists;
-        private Button buttonAddList;
+        private CheckedListBox checkedListBoxMinerals;
+        private TextBox textBoxConstraints;
+        private Label labelConstraints;
+        private GroupBox groupBoxModelCreation;
+        private Label labelCompositionList;
+        private TextBox textBoxCompositionList;
+        private Button buttonAddMineral;
         private Button buttonDelete;
         private GroupBox groupBoxMineral;
         private Label labelMineralName;
         private TextBox textBoxMineralName;
         private Label labelDetectorName;
         private TextBox textBoxDetectorName;
-        private GroupBox groupBoxTrainModel;
+        private GroupBox groupBoxAdvancedSettings;
         private TextBox textBoxModelLog;
-        private Button buttonModel_Save;
         private Label labelModelLog;
         private Button buttonModelTrain;
-        private Button buttonEndmember_Add;
-        private Button buttonEndmember_Delete;
-        private Button buttonUpdateList;
+        private Button buttonEndmemberAdd;
+        private Button buttonEndmemberDelete;
+        private Button buttonUpdateMineral;
         private Button buttonAllDelete;
         private TextBox textBoxMemo;
         private Label labelMemo;
         private Button buttonReset;
         private Button buttonAllSelect;
-        private ProgressBar progressBar1;
-        private FlowLayoutPanel flowLayoutPanel2;
+        private FlowLayoutPanel flowLayoutPanelMineralActions;
         private FlowLayoutPanel flowLayoutPanelEndmembers;
         private Panel panelEndmembers;
-        private GroupBox groupBoxEDXsetting;
-        private GroupBox groupBox2;
-        private Crystallography.Controls.NumericBox numericBoxModel_Epochs;
-        private Crystallography.Controls.NumericBox numericBoxModel_BatchSize;
-        private Crystallography.Controls.NumericBox numericBoxModel_EarlyStopping;
+        private GroupBox groupBoxEDXSettings;
+        private GroupBox groupBoxSampling;
+        private Crystallography.Controls.NumericBox numericBoxEpochs;
+        private Crystallography.Controls.NumericBox numericBoxBatchSize;
+        private Crystallography.Controls.NumericBox numericBoxEarlyStopping;
         private Crystallography.Controls.NumericBox numericBoxProbeCurrent;
         private Crystallography.Controls.NumericBox numericBoxLiveTime;
         private Crystallography.Controls.NumericBox numericBoxBeamEnergy;
@@ -1082,24 +1090,24 @@
         private Crystallography.Controls.NumericBox numericBoxValidationSplit;
         private Crystallography.Controls.NumericBox numericBoxParallel;
         private Crystallography.Controls.NumericBox numericBoxResolution;
-        private Crystallography.Controls.NumericBox numericBoxTrainingSpectrumCount;
+        private Crystallography.Controls.NumericBox numericBoxSpectraPerMineral;
         private Button buttonCalibration;
         private TableLayoutPanel tableLayoutPanelMain;
         private Panel panelCommandBar;
         private Panel panelBottomDrawer;
         private CheckBox checkBoxAdvanced;
         private Panel panelModelLog;
-        private GroupBox groupBox3;
-        private GroupBox groupBox4;
+        private GroupBox groupBoxSpectrumSettings;
+        private GroupBox groupBoxModelSettings;
         private Panel panelMemo;
         private Panel panelMineralName;
-        private Panel panel1;
+        private Panel panelDetectorName;
         private Panel panelModelName;
-        private Label label1;
+        private Label labelModelName;
         private TextBox textBoxModelName;
-        private System.ComponentModel.BackgroundWorker backgroundWorker1;
-
-        public FlowLayoutPanel FlowLayoutPanel3 { get => flowLayoutPanelEndmembers; set => flowLayoutPanelEndmembers = value; }
+        private FlowLayoutPanel flowLayoutPanelSpectrumSettings;
+        private FlowLayoutPanel flowLayoutPanelModelSettings;
+        private FlowLayoutPanel flowLayoutPanelEDXSettings;
     }
 }
 
