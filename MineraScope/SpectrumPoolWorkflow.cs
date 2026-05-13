@@ -14,6 +14,13 @@ namespace MineraScope
         public int MissingCount => Math.Max(0, RequiredCount - CompletedCount);
     }
 
+    // 260513Codex: シミュレーション後の manifest 状態をログへ出すため、学習対象外 status も集計します。
+    internal sealed record SpectrumPoolStatusCounts(
+        int Completed,
+        int Failed,
+        int Missing,
+        int Pending);
+
     // 260507Codex: pool manifest を正本として、不足確認・予約・学習入力作成を担当します。
     internal sealed class SpectrumPoolWorkflow
     {
@@ -46,6 +53,40 @@ namespace MineraScope
             }
 
             return shortages;
+        }
+
+        // 260513Codex: 選択中鉱物の pool manifest を読み直し、status ごとの件数を合算します。
+        public SpectrumPoolStatusCounts GetStatusCounts(ModelCreationRequest request)
+        {
+            int completed = 0;
+            int failed = 0;
+            int missing = 0;
+            int pending = 0;
+
+            foreach (var solution in request.SelectedMineralSolutions)
+            {
+                var state = LoadState(request, solution);
+                foreach (var entry in state.Manifest.Spectra)
+                {
+                    switch (entry.Status)
+                    {
+                        case SpectrumManifestStatus.Completed:
+                            completed++;
+                            break;
+                        case SpectrumManifestStatus.Failed:
+                            failed++;
+                            break;
+                        case SpectrumManifestStatus.Missing:
+                            missing++;
+                            break;
+                        case SpectrumManifestStatus.Pending:
+                            pending++;
+                            break;
+                    }
+                }
+            }
+
+            return new SpectrumPoolStatusCounts(completed, failed, missing, pending);
         }
 
         // 260507Codex: 全 pool が十分なときだけ、各鉱物から target 件をランダム抽出して学習入力にします。
@@ -166,21 +207,44 @@ namespace MineraScope
             return new PoolState(handle, manifest, completedEntries);
         }
 
-        // 260507Codex: 候補組成から一様ランダムに不足数分を選び、manifest に Pending として予約します。
-        private IEnumerable<SpectrumSimulationReservation> ReserveMissingSpectra(
+        // 260513Codex: Pending/Failed/Missing を先に再利用し、不足分だけ新しい simulationId を発行します。
+        private IReadOnlyList<SpectrumSimulationReservation> ReserveMissingSpectra(
             SolidSolution solution,
             PoolState state,
             double resolutionStep,
             int missingCount)
         {
+            var reservations = new List<SpectrumSimulationReservation>(missingCount);
+            foreach (var entry in state.Manifest.Spectra
+                .Where(entry => entry.Status is SpectrumManifestStatus.Pending or SpectrumManifestStatus.Failed or SpectrumManifestStatus.Missing)
+                .OrderBy(entry => entry.Status switch
+                {
+                    SpectrumManifestStatus.Pending => 0,
+                    SpectrumManifestStatus.Failed => 1,
+                    SpectrumManifestStatus.Missing => 2,
+                    _ => 3
+                })
+                .ThenBy(entry => entry.SimulationId)
+                .Take(missingCount))
+            {
+                entry.Status = SpectrumManifestStatus.Pending;
+                entry.FailureReason = null;
+                reservations.Add(CreateReservation(solution, state.Handle, entry));
+            }
+
+            int newReservationCount = missingCount - reservations.Count;
+            if (newReservationCount <= 0)
+            {
+                return reservations;
+            }
+
             var candidates = solution.EnumerateCandidateFractions(resolutionStep);
             if (candidates.Length == 0)
             {
-                return [];
+                return reservations;
             }
 
-            var reservations = new List<SpectrumSimulationReservation>(missingCount);
-            for (int i = 0; i < missingCount; i++)
+            for (int i = 0; i < newReservationCount; i++)
             {
                 double[] fractions = candidates[_random.Next(candidates.Length)];
                 int simulationId = state.Manifest.NextSimulationId++;
@@ -194,24 +258,49 @@ namespace MineraScope
                 };
 
                 state.Manifest.Spectra.Add(entry);
-                reservations.Add(new SpectrumSimulationReservation(
-                    solution.Name,
-                    state.Handle.PoolFolder,
-                    state.Handle.ManifestPath,
-                    simulationId,
-                    fileName,
-                    solution.CalculateCompositionWeights(fractions)));
+                reservations.Add(CreateReservation(solution, state.Handle, entry));
             }
 
             return reservations;
         }
 
-        // 260507Codex: process 結果と実ファイル確認の両方で最終 status を決めます。
+        // 260513Codex: manifest の endmemberFractions を鉱物定義順の配列へ戻して DTSA-II 入力を再構築します。
+        private static SpectrumSimulationReservation CreateReservation(
+            SolidSolution solution,
+            SpectrumPoolHandle handle,
+            SpectrumManifestEntry entry)
+        {
+            var fractions = solution.Members
+                .Select(member => entry.EndmemberFractions.TryGetValue(member.Name, out double fraction)
+                    ? fraction
+                    : entry.EndmemberFractions
+                        .Where(pair => string.Equals(pair.Key, member.Name, StringComparison.OrdinalIgnoreCase))
+                        .Select(pair => pair.Value)
+                        .FirstOrDefault())
+                .ToArray();
+
+            return new SpectrumSimulationReservation(
+                solution.Name,
+                handle.PoolFolder,
+                handle.ManifestPath,
+                entry.SimulationId,
+                entry.FileName,
+                solution.CalculateCompositionWeights(fractions));
+        }
+
+        // 260513Codex: キャンセルは失敗扱いにせず、同じ entry を次回再生成できる Pending に戻します。
         private static void ApplyResultToEntry(
             SimulationExecutionResult result,
             SpectrumSimulationReservation reservation,
             SpectrumManifestEntry entry)
         {
+            if (result.IsCanceled)
+            {
+                entry.Status = SpectrumManifestStatus.Pending;
+                entry.FailureReason = null;
+                return;
+            }
+
             if (result.ExitCode != 0 || result.ExceptionMessage is not null)
             {
                 entry.Status = SpectrumManifestStatus.Failed;

@@ -205,6 +205,7 @@
             buttonPathSaveMode.TabIndex = 1;
             buttonPathSaveMode.Text = "...";
             buttonPathSaveMode.UseVisualStyleBackColor = true;
+            buttonPathSaveMode.Click += buttonFilePathBrowse_Click;
             // 
             // textBoxPathEDX
             // 
@@ -243,6 +244,7 @@
             buttonPathDTSA.TabIndex = 1;
             buttonPathDTSA.Text = "...";
             buttonPathDTSA.UseVisualStyleBackColor = true;
+            buttonPathDTSA.Click += buttonFilePathBrowse_Click;
             // 
             // panelPathDTSA
             // 
@@ -282,6 +284,7 @@
             buttonPathEDX.TabIndex = 1;
             buttonPathEDX.Text = "...";
             buttonPathEDX.UseVisualStyleBackColor = true;
+            buttonPathEDX.Click += buttonFilePathBrowse_Click;
             // 
             // textBoxAnalysisResult
             // 

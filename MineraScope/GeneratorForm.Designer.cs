@@ -84,6 +84,7 @@
             numericBoxBeamEnergy = new Crystallography.Controls.NumericBox();
             numericBoxCarbonThickness = new Crystallography.Controls.NumericBox();
             panelCommandBar = new Panel();
+            buttonCancelSpectrumGeneration = new Button();
             panelModelName = new Panel();
             labelModelName = new Label();
             textBoxModelName = new TextBox();
@@ -126,7 +127,7 @@
             // 
             buttonRunSpectrumGeneration.AutoSize = true;
             buttonRunSpectrumGeneration.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonRunSpectrumGeneration.Location = new Point(800, 3);
+            buttonRunSpectrumGeneration.Location = new Point(781, 2);
             buttonRunSpectrumGeneration.Margin = new Padding(3, 2, 3, 2);
             buttonRunSpectrumGeneration.Name = "buttonRunSpectrumGeneration";
             buttonRunSpectrumGeneration.Size = new Size(41, 25);
@@ -659,7 +660,7 @@
             // 
             buttonModelTrain.AutoSize = true;
             buttonModelTrain.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonModelTrain.Location = new Point(852, 4);
+            buttonModelTrain.Location = new Point(828, 2);
             buttonModelTrain.Name = "buttonModelTrain";
             buttonModelTrain.Size = new Size(69, 25);
             buttonModelTrain.TabIndex = 0;
@@ -853,24 +854,36 @@
             // 
             // panelCommandBar
             // 
-            panelCommandBar.AutoSize = true;
             panelCommandBar.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panelCommandBar.Controls.Add(buttonCancelSpectrumGeneration);
             panelCommandBar.Controls.Add(panelModelName);
             panelCommandBar.Controls.Add(checkBoxAdvanced);
             panelCommandBar.Controls.Add(buttonModelTrain);
             panelCommandBar.Controls.Add(buttonRunSpectrumGeneration);
             panelCommandBar.Location = new Point(3, 349);
             panelCommandBar.Name = "panelCommandBar";
-            panelCommandBar.Size = new Size(924, 32);
+            panelCommandBar.Size = new Size(949, 32);
             panelCommandBar.TabIndex = 108;
-            // 
+            //
+            // buttonCancelSpectrumGeneration
+            //
+            buttonCancelSpectrumGeneration.AutoSize = true;
+            buttonCancelSpectrumGeneration.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonCancelSpectrumGeneration.Location = new Point(902, 3);
+            buttonCancelSpectrumGeneration.Name = "buttonCancelSpectrumGeneration";
+            buttonCancelSpectrumGeneration.Size = new Size(41, 25);
+            buttonCancelSpectrumGeneration.TabIndex = 106;
+            buttonCancelSpectrumGeneration.Text = "中止";
+            buttonCancelSpectrumGeneration.UseVisualStyleBackColor = true;
+            buttonCancelSpectrumGeneration.Click += buttonCancelSpectrumGeneration_Click;
+            //
             // panelModelName
             // 
             panelModelName.AutoSize = true;
             panelModelName.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             panelModelName.Controls.Add(labelModelName);
             panelModelName.Controls.Add(textBoxModelName);
-            panelModelName.Location = new Point(600, 2);
+            panelModelName.Location = new Point(566, 3);
             panelModelName.Name = "panelModelName";
             panelModelName.Size = new Size(176, 27);
             panelModelName.TabIndex = 105;
@@ -900,6 +913,7 @@
             checkBoxAdvanced.TabIndex = 101;
             checkBoxAdvanced.Text = "詳細設定を表示";
             checkBoxAdvanced.UseVisualStyleBackColor = true;
+            checkBoxAdvanced.CheckedChanged += checkBoxAdvanced_CheckedChanged;
             // 
             // panelBottomDrawer
             // 
@@ -1018,7 +1032,6 @@
             panelModelLog.PerformLayout();
             groupBoxModelCreation.ResumeLayout(false);
             tableLayoutPanelMain.ResumeLayout(false);
-            tableLayoutPanelMain.PerformLayout();
             groupBoxEDXSettings.ResumeLayout(false);
             flowLayoutPanelEDXSettings.ResumeLayout(false);
             flowLayoutPanelEDXSettings.PerformLayout();
@@ -1108,6 +1121,7 @@
         private FlowLayoutPanel flowLayoutPanelSpectrumSettings;
         private FlowLayoutPanel flowLayoutPanelModelSettings;
         private FlowLayoutPanel flowLayoutPanelEDXSettings;
+        private Button buttonCancelSpectrumGeneration;
     }
 }
 

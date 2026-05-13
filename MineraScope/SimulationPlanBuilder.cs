@@ -27,13 +27,14 @@ namespace MineraScope
         string SolutionName,
         IReadOnlyList<SimulationExecutionJob> Jobs);
 
-    // 260507Codex: シミュレーション実行後に manifest へ反映する結果です。
+    // 260513Codex: キャンセル結果も manifest 更新側へ返し、対象 entry を Pending に戻せるようにします。
     internal sealed record SimulationExecutionResult(
         IReadOnlyList<SpectrumSimulationReservation> Reservations,
         int ExitCode,
         string StandardOutput,
         string StandardError,
-        string? ExceptionMessage);
+        string? ExceptionMessage,
+        bool IsCanceled = false);
 
     // 260507Codex: 実行 plan は予約済み spectrum を並列数で分割した batch の集合です。
     internal sealed record SimulationExecutionPlan(

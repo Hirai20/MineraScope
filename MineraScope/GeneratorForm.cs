@@ -14,6 +14,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Forms;
 using System.Xml.Linq;
 using Tensorflow;
@@ -81,16 +82,8 @@ namespace MineraScope
         private readonly SimulationExecutionService _simulationExecutionService;
         // 260511Codex: キャリブレーション画面は閉じても破棄せず、入力値を保持するため 1 インスタンスだけ持ちます。
         private readonly EdxCalibrationForm _edxCalibrationForm;
-        // 260507Codex: 下部ドロワーの高さ制御対象を名前検索で保持します。
-        private TableLayoutPanel _tableLayoutPanelMain;
-        // 260507Codex: 詳細設定とログを差し替えて表示する下部領域です。
-        private Panel _panelBottomDrawer;
-        // 260507Codex: 詳細設定用の退避パネルは Designer 側の名前を優先して解決します。
-        private Control _advancedSettingsContent;
-        // 260507Codex: 詳細設定ドロワーも CheckBox で表示状態を表します。
-        private CheckBox _checkBoxToggleAdvancedSettings;
-        // 260507Codex: 現在ドロワーに表示している内容を記録し、再押下で閉じられるようにします。
-        private Control _currentBottomDrawerContent;
+        // 260513Codex: DTSA-II spectrum 生成だけを中止するため、学習処理とは別の CTS を持ちます。
+        private CancellationTokenSource _simulationCancellationTokenSource;
 
         // 260507Codex: 下部ドロワーの標準高さを UI 初期化と開閉処理で共有します。
         private const float BottomDrawerDefaultHeight = 180F;
@@ -155,8 +148,6 @@ namespace MineraScope
             endmemberControls.AddRange([EndmemberControl1, EndmemberControl2]);
             // 260511Codex: repository へ渡すだけの helper を挟まず、初期表示は直接読み込みます。
             BindMineralSolutions(_mineralDatabaseRepository.Load());
-
-            // 260430Codex: 旧 NumericUpDown の DEBUG 表示切替は対象コントロール廃止後の Designer と合わないため外します。
         }
 
         // 260507Codex: ログ、組成候補、選択中鉱物詳細を除外して設定値だけを復元します。
@@ -206,56 +197,26 @@ namespace MineraScope
                 });
         }
 
-        // 260507Codex: Designer を直接編集せず、手作業追加された名前付きコントロールだけを実行時に解決します。
+        // 260513Codex: 現在の Designer 名を直接使い、詳細設定ドロワーを初期化します。
         private void ConfigureGeneratorLayoutRuntimeState()
         {
-            _tableLayoutPanelMain = FindFirstExistingControl<TableLayoutPanel>("tableLayoutPanelMain");
-            _panelBottomDrawer = FindFirstExistingControl<Panel>("panelBottomDrawer");
-            _advancedSettingsContent = FindFirstExistingControl<Control>(
-                "panelAdvancedSettings",
-                "panelAdvancedSettingsContent",
-                "groupBoxTrainModel",
-                "groupBoxAdvancedSettings",
-                "groupBoxDetailSettings");
-            // 260507Codex: 詳細設定はコマンドバー側に置く CheckBox を短い名前でも拾います。
-            _checkBoxToggleAdvancedSettings = FindFirstExistingControl<CheckBox>(
-                "checkBoxAdvanced",
-                "checkBoxDetails",
-                "checkBoxToggleAdvancedSettings");
-
             ConfigureBottomDrawerInitialState();
 
             buttonRunSpectrumGeneration.Visible = false;
             buttonModelTrain.Text = "モデルを作成";
+            // 260513Codex: 中止ボタンの Click 接続は Designer 側で持ち、ここでは初期状態だけをそろえます。
+            buttonCancelSpectrumGeneration.Enabled = false;
 
-            HookGeneratorLayoutButtons();
             UpdateAdvancedSettingsButtonText();
         }
 
-        // 260507Codex: 下部ドロワーの初期状態を Designer 側の Row 3 に合わせて閉じた状態へ寄せます。
+        // 260513Codex: 詳細設定は最初から下部ドロワー内にあるため、初期状態は非表示と高さ 0 にそろえます。
         private void ConfigureBottomDrawerInitialState()
         {
-            if (_panelBottomDrawer is not null)
-            {
-                _panelBottomDrawer.Visible = false;
-                _panelBottomDrawer.AutoScroll = true;
-            }
-
+            groupBoxAdvancedSettings.Dock = DockStyle.Fill;
+            panelBottomDrawer.Visible = false;
+            panelBottomDrawer.AutoScroll = true;
             SetBottomDrawerRowHeight(0F);
-        }
-
-        // 260507Codex: Designer 側で追加された詳細設定 CheckBox または旧ボタンに Code Behind の動作だけを接続します。
-        private void HookGeneratorLayoutButtons()
-        {
-            if (_checkBoxToggleAdvancedSettings is not null)
-            {
-                _checkBoxToggleAdvancedSettings.CheckedChanged -= checkBoxToggleAdvancedSettings_CheckedChanged;
-                _checkBoxToggleAdvancedSettings.CheckedChanged += checkBoxToggleAdvancedSettings_CheckedChanged;
-            }
-
-            // 260511Codex: Designer 側の Click 接続が残っていても、code-behind 側で表示処理を確実に持ちます。
-            buttonCalibration.Click -= buttonCalibration_Click;
-            buttonCalibration.Click += buttonCalibration_Click;
         }
 
         // 260511Codex: キャリブレーション画面は再表示時に既存インスタンスを前面化して値を保持します。
@@ -270,131 +231,41 @@ namespace MineraScope
             _edxCalibrationForm.Visible = true;
         }
 
-        // 260507Codex: 新 UI の名前候補を再帰検索し、未配置時は null で安全に抜けられるようにします。
-        private T FindFirstExistingControl<T>(params string[] names)
-            where T : Control
+        // 260513Codex: 詳細設定 CheckBox の状態を下部ドロワーの表示状態へ直接同期します。
+        private void checkBoxAdvanced_CheckedChanged(object sender, EventArgs e)
         {
-            foreach (var name in names)
-            {
-                // 260507Codex: Controls.Find の戻り値を型で絞り、最初に見つかった対象だけを返します。
-                if (Controls.Find(name, searchAllChildren: true).OfType<T>().FirstOrDefault() is { } control)
-                {
-                    return control;
-                }
-            }
-
-            // 260507Codex: auto-generated 扱いの partial なので nullable 注釈ではなく null 許容の実運用に合わせます。
-            return null;
+            SetAdvancedSettingsVisible(checkBoxAdvanced.Checked);
         }
 
-        // 260507Codex: 詳細設定 CheckBox のチェック状態を下部ドロワー表示へ同期します。
-        private void checkBoxToggleAdvancedSettings_CheckedChanged(object sender, EventArgs e)
-        {
-            if (sender is not CheckBox checkBox)
-            {
-                return;
-            }
-
-            SetAdvancedSettingsVisible(checkBox.Checked);
-        }
-
-        // 260507Codex: 詳細設定ドロワーの表示状態を一か所で切り替えます。
+        // 260513Codex: 下部ドロワーは詳細設定専用なので、中身を差し替えず表示と高さだけを切り替えます。
         private void SetAdvancedSettingsVisible(bool visible)
         {
-            if (_advancedSettingsContent is null)
-            {
-                UpdateAdvancedSettingsButtonText();
-                return;
-            }
-
-            if (visible)
-            {
-                ShowBottomDrawer(_advancedSettingsContent);
-            }
-            else if (IsBottomDrawerShowing(_advancedSettingsContent))
-            {
-                HideBottomDrawer();
-            }
-            else
-            {
-                UpdateAdvancedSettingsButtonText();
-            }
-        }
-
-        // 260507Codex: 下部ドロワーに詳細設定またはログを差し替えて表示します。
-        private void ShowBottomDrawer(Control content, float height = BottomDrawerDefaultHeight)
-        {
-            if (_panelBottomDrawer is null)
-            {
-                return;
-            }
-
-            _panelBottomDrawer.SuspendLayout();
-            try
-            {
-                _panelBottomDrawer.Controls.Clear();
-                _panelBottomDrawer.Controls.Add(content);
-                content.Dock = DockStyle.Fill;
-                content.Visible = true;
-                _currentBottomDrawerContent = content;
-                _panelBottomDrawer.Visible = true;
-                SetBottomDrawerRowHeight(height);
-            }
-            finally
-            {
-                _panelBottomDrawer.ResumeLayout(performLayout: true);
-            }
-
-            _tableLayoutPanelMain?.PerformLayout();
+            panelBottomDrawer.Visible = visible;
+            SetBottomDrawerRowHeight(visible ? BottomDrawerDefaultHeight : 0F);
+            tableLayoutPanelMain.PerformLayout();
             UpdateAdvancedSettingsButtonText();
         }
 
-        // 260507Codex: 下部ドロワーを閉じ、TableLayoutPanel の Row 3 を 0px に戻します。
-        private void HideBottomDrawer()
-        {
-            if (_panelBottomDrawer is not null)
-            {
-                _panelBottomDrawer.Visible = false;
-            }
-
-            _currentBottomDrawerContent = null;
-            SetBottomDrawerRowHeight(0F);
-            _tableLayoutPanelMain?.PerformLayout();
-            UpdateAdvancedSettingsButtonText();
-        }
-
-        // 260507Codex: RowStyles が Designer 側で未作成の場合も落ちないように高さ変更を保護します。
+        // 260513Codex: 下部ドロワー用の Row だけを高さ変更し、詳細設定の開閉を表現します。
         private void SetBottomDrawerRowHeight(float height)
         {
-            if (_tableLayoutPanelMain is null || _tableLayoutPanelMain.RowStyles.Count <= 3)
+            if (tableLayoutPanelMain.RowStyles.Count <= 3)
             {
                 return;
             }
 
-            _tableLayoutPanelMain.RowStyles[3].SizeType = SizeType.Absolute;
-            _tableLayoutPanelMain.RowStyles[3].Height = height;
+            tableLayoutPanelMain.RowStyles[3].SizeType = SizeType.Absolute;
+            tableLayoutPanelMain.RowStyles[3].Height = height;
         }
 
-        // 260507Codex: 現在の下部ドロワー内容が指定コンテンツかを開閉ボタンから判定します。
-        private bool IsBottomDrawerShowing(Control content) =>
-            _panelBottomDrawer is { Visible: true }
-            && ReferenceEquals(_currentBottomDrawerContent, content);
-
-        // 260507Codex: 詳細設定ドロワーの表示状態に合わせてボタン文言を更新します。
+        // 260513Codex: 下部ドロワーの表示状態を CheckBox に反映します。
         private void UpdateAdvancedSettingsButtonText()
         {
-            bool advancedVisible = _advancedSettingsContent is not null
-                && IsBottomDrawerShowing(_advancedSettingsContent);
-
-            if (_checkBoxToggleAdvancedSettings is not null)
+            checkBoxAdvanced.Text = "詳細設定を表示";
+            if (checkBoxAdvanced.Checked != panelBottomDrawer.Visible)
             {
-                _checkBoxToggleAdvancedSettings.Text = "詳細設定を表示";
-                if (_checkBoxToggleAdvancedSettings.Checked != advancedVisible)
-                {
-                    _checkBoxToggleAdvancedSettings.Checked = advancedVisible;
-                }
+                checkBoxAdvanced.Checked = panelBottomDrawer.Visible;
             }
-
         }
 
         private void BindMineralSolutions(SolidSolution[] solutions, bool clearSelection = true)
@@ -492,7 +363,7 @@ namespace MineraScope
             return string.Empty;
         }
 
-        // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
+        // 260513Codex: DTSA-II spectrum 生成だけを CancellationTokenSource で中止できるようにします。
         private async void buttonRunSpectrumGeneration_Click(object sender, EventArgs e)
         {
             var request = CreateModelCreationRequest();
@@ -514,17 +385,47 @@ namespace MineraScope
                 return;
             }
 
+            using var cancellationTokenSource = new CancellationTokenSource();
+            _simulationCancellationTokenSource = cancellationTokenSource;
             buttonRunSpectrumGeneration.Enabled = false;
+            buttonCancelSpectrumGeneration.Enabled = true;
+
+            int jobCount = plan.Batches.Sum(batch => batch.Jobs.Count);
+            int reservedSpectrumCount = plan.Batches
+                .SelectMany(batch => batch.Jobs)
+                .Sum(job => job.Reservations.Count);
+            // 260513Codex: spectrum 生成ログは既存の訓練ログ欄へ流し、開始とジョブ数を最低限残します。
+            TrainLog($"spectrum 生成開始: ジョブ {jobCount} 件、spectrum {reservedSpectrumCount} 件");
+
             try
             {
-                // 260507Codex: 実行結果を受け取り、生成成功/失敗を manifest の status へ反映します。
-                var results = await _simulationExecutionService.RunAsync(plan);
+                // 260513Codex: 実行結果を受け取り、キャンセル結果は manifest 側で Pending に戻します。
+                var results = await _simulationExecutionService.RunAsync(plan, cancellationTokenSource.Token);
+                foreach (var result in results)
+                {
+                    LogSimulationExecutionResult(result);
+                }
+
                 _spectrumPoolWorkflow.ApplySimulationResults(results);
+                if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
+                {
+                    TrainLog("spectrum 生成をキャンセルしました。");
+                }
             }
             finally
             {
+                if (ReferenceEquals(_simulationCancellationTokenSource, cancellationTokenSource))
+                {
+                    _simulationCancellationTokenSource = null;
+                }
+
                 buttonRunSpectrumGeneration.Enabled = true;
+                buttonCancelSpectrumGeneration.Enabled = false;
             }
+
+            var statusCounts = _spectrumPoolWorkflow.GetStatusCounts(request);
+            TrainLog(
+                $"manifest status: Completed {statusCounts.Completed} 件 / Failed {statusCounts.Failed} 件 / Missing {statusCounts.Missing} 件 / Pending {statusCounts.Pending} 件");
 
             var remainingShortages = _spectrumPoolWorkflow.GetShortages(request);
             if (remainingShortages.Count > 0)
@@ -540,6 +441,23 @@ namespace MineraScope
                 buttonRunSpectrumGeneration.Visible = false;
                 MessageBox.Show("必要な spectrum pool がそろいました。", "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+        }
+
+        // 260513Codex: DTSA-II の終了コードをジョブ単位でログに残し、キャンセル結果は終了コードと分けて表示します。
+        private void LogSimulationExecutionResult(SimulationExecutionResult result)
+        {
+            string solutionName = result.Reservations.Count > 0
+                ? result.Reservations[0].SolutionName
+                : "unknown";
+            int spectrumCount = result.Reservations.Count;
+
+            if (result.IsCanceled)
+            {
+                TrainLog($"DTSA-II キャンセル: {solutionName} ({spectrumCount} spectra)");
+                return;
+            }
+
+            TrainLog($"DTSA-II 終了コード {result.ExitCode}: {solutionName} ({spectrumCount} spectra)");
         }
         #region EndmemberControl
         // EndmemberControlに端成分の情報を設定
@@ -901,6 +819,19 @@ namespace MineraScope
             // 260416Codex: 閉じる操作は破棄せず非表示にするだけなので未使用のローカルを削除します。
             e.Cancel = true;
             Visible = false;
+        }
+
+        private void buttonCancelSpectrumGeneration_Click(object sender, EventArgs e)
+        {
+            // 260513Codex: Designer 接続の Click イベントから、DTSA-II spectrum 生成だけを中止します。
+            if (_simulationCancellationTokenSource is null || _simulationCancellationTokenSource.IsCancellationRequested)
+            {
+                return;
+            }
+
+            TrainLog("spectrum 生成のキャンセルを要求しました。");
+            _simulationCancellationTokenSource.Cancel();
+            buttonCancelSpectrumGeneration.Enabled = false;
         }
     }
 }
