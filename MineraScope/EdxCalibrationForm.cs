@@ -13,8 +13,7 @@ namespace MineraScope
         public EdxCalibrationForm()
         {
             InitializeComponent();
-            // 260508Codex: 閉じる操作を非表示化へ変換し、未確定の設定値をフォーム内に残します。
-            FormClosing += EdxCalibrationForm_FormClosing;
+            // 260514Codex: FormClosing の接続は Designer 側に寄せ、ここでは初期化だけを行います。
         }
 
         // 260508Codex: EDXキャリブレーション画面は再表示時に入力値を保つため Dispose せず隠します。

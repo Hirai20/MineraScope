@@ -194,6 +194,7 @@
             textBoxlPathSaveModel.Name = "textBoxlPathSaveModel";
             textBoxlPathSaveModel.Size = new Size(155, 23);
             textBoxlPathSaveModel.TabIndex = 23;
+            textBoxlPathSaveModel.TextChanged += textBoxlPathSaveModel_TextChanged;
             // 
             // buttonPathSaveMode
             // 

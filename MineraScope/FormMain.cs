@@ -132,7 +132,7 @@ namespace MineraScope
             };
         }
 
-        // 260513Codex: 共通ファイルパス欄の既定値をまとめ、Click 接続は Designer 側へ寄せます。
+        // 260513Codex: 共通ファイルパス欄の既定値だけをまとめ、イベント接続は Designer 側へ寄せます。
         private void InitializeFilePathSettings()
         {
             // 260430Codex: 空欄のモデル保存先はユーザーごとの Documents 配下へ初期化します。
@@ -146,9 +146,12 @@ namespace MineraScope
             {
                 EdxOutputPath = DefaultStoragePaths.TrainingDataFolder;
             }
+        }
 
-            // 260507Codex: モデル保存先を手入力で変更した場合も、直下のモデル候補を選択欄へ反映します。
-            textBoxlPathSaveModel.TextChanged += (_, _) => RefreshModelPathList();
+        // 260513Codex: Designer から TextChanged に接続し、モデル保存先の手入力変更を一覧へ反映します。
+        private void textBoxlPathSaveModel_TextChanged(object sender, EventArgs e)
+        {
+            RefreshModelPathList();
         }
 
         // 260424Codex: FormMain 上の 3 つのパス欄からフォルダ選択を行います。
