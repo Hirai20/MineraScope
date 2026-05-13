@@ -133,7 +133,7 @@
             buttonRunSpectrumGeneration.TabIndex = 0;
             buttonRunSpectrumGeneration.Text = "実行";
             buttonRunSpectrumGeneration.UseVisualStyleBackColor = true;
-            buttonRunSpectrumGeneration.Click += buttonSpectrumGenerationRun_Click;
+            buttonRunSpectrumGeneration.Click += buttonRunSpectrumGeneration_Click;
             // 
             // groupBoxMineralInfo
             // 
@@ -319,7 +319,7 @@
             buttonEndmemberDelete.TabIndex = 98;
             buttonEndmemberDelete.Text = "削除";
             buttonEndmemberDelete.UseVisualStyleBackColor = true;
-            buttonEndmemberDelete.Click += buttonRemoveEndmemberControl_Click;
+            buttonEndmemberDelete.Click += buttonEndmemberDelete_Click;
             // 
             // buttonEndmemberAdd
             // 
@@ -332,7 +332,7 @@
             buttonEndmemberAdd.TabIndex = 100;
             buttonEndmemberAdd.Text = "追加";
             buttonEndmemberAdd.UseVisualStyleBackColor = true;
-            buttonEndmemberAdd.Click += buttonAddEndmemberControl_Click;
+            buttonEndmemberAdd.Click += buttonEndmemberAdd_Click;
             // 
             // labelEndmemberFormula
             // 
@@ -364,7 +364,7 @@
             buttonAddMineral.TabIndex = 96;
             buttonAddMineral.Text = "追加";
             buttonAddMineral.UseVisualStyleBackColor = true;
-            buttonAddMineral.Click += buttonAddList_Click;
+            buttonAddMineral.Click += buttonAddMineral_Click;
             // 
             // buttonUpdateMineral
             // 
@@ -376,7 +376,7 @@
             buttonUpdateMineral.TabIndex = 99;
             buttonUpdateMineral.Text = "更新";
             buttonUpdateMineral.UseVisualStyleBackColor = true;
-            buttonUpdateMineral.Click += buttonUpdate_Click;
+            buttonUpdateMineral.Click += buttonUpdateMineral_Click;
             // 
             // checkedListBoxMinerals
             // 
@@ -388,8 +388,8 @@
             checkedListBoxMinerals.ScrollAlwaysVisible = true;
             checkedListBoxMinerals.Size = new Size(344, 220);
             checkedListBoxMinerals.TabIndex = 86;
-            checkedListBoxMinerals.ItemCheck += checkedListBoxMineral_ItemCheck;
-            checkedListBoxMinerals.SelectedIndexChanged += checkedListBoxMineral_SelectedIndexChanged;
+            checkedListBoxMinerals.ItemCheck += checkedListBoxMinerals_ItemCheck;
+            checkedListBoxMinerals.SelectedIndexChanged += checkedListBoxMinerals_SelectedIndexChanged;
             // 
             // groupBoxAdvancedSettings
             // 
@@ -653,7 +653,7 @@
             buttonAllSelect.TabIndex = 103;
             buttonAllSelect.Text = "全選択/解除";
             buttonAllSelect.UseVisualStyleBackColor = true;
-            buttonAllSelect.Click += buttonAllSelect_Click;
+            buttonAllSelect.Click += buttonToggleAllMinerals_Click;
             // 
             // buttonModelTrain
             // 
@@ -665,7 +665,7 @@
             buttonModelTrain.TabIndex = 0;
             buttonModelTrain.Text = "モデル作成";
             buttonModelTrain.UseVisualStyleBackColor = true;
-            buttonModelTrain.Click += buttonModel_Train_Click;
+            buttonModelTrain.Click += buttonModelTrain_Click;
             // 
             // numericBoxProbeCurrent
             // 
@@ -721,7 +721,7 @@
             buttonDelete.TabIndex = 97;
             buttonDelete.Text = "削除";
             buttonDelete.UseVisualStyleBackColor = true;
-            buttonDelete.Click += buttonMineral_Delete_Click;
+            buttonDelete.Click += buttonDeleteMineral_Click;
             // 
             // groupBoxModelCreation
             // 
@@ -948,7 +948,7 @@
             buttonAllDelete.TabIndex = 98;
             buttonAllDelete.Text = "全削除";
             buttonAllDelete.UseVisualStyleBackColor = true;
-            buttonAllDelete.Click += buttonMineral_AllDelete_Click;
+            buttonAllDelete.Click += buttonDeleteAllMinerals_Click;
             // 
             // buttonReset
             // 
@@ -961,7 +961,7 @@
             buttonReset.TabIndex = 99;
             buttonReset.Text = "初期化";
             buttonReset.UseVisualStyleBackColor = true;
-            buttonReset.Click += buttonMineral_Reset_Click;
+            buttonReset.Click += buttonResetMinerals_Click;
             // 
             // statusStrip1
             // 

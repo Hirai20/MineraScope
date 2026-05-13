@@ -81,8 +81,6 @@ namespace MineraScope
         private readonly SimulationExecutionService _simulationExecutionService;
         // 260511Codex: キャリブレーション画面は閉じても破棄せず、入力値を保持するため 1 インスタンスだけ持ちます。
         private readonly EdxCalibrationForm _edxCalibrationForm;
-        // 260507Codex: Designer 手作業で追加される新 UI 部品を、Designer 直編集なしで実行時に捕まえます。
-        private SplitContainer _splitContainerMineral;
         // 260507Codex: 下部ドロワーの高さ制御対象を名前検索で保持します。
         private TableLayoutPanel _tableLayoutPanelMain;
         // 260507Codex: 詳細設定とログを差し替えて表示する下部領域です。
@@ -91,8 +89,6 @@ namespace MineraScope
         private Control _advancedSettingsContent;
         // 260507Codex: 詳細設定ドロワーも CheckBox で表示状態を表します。
         private CheckBox _checkBoxToggleAdvancedSettings;
-        // 260507Codex: 旧案の詳細設定ボタンが残っていても動くように後方互換で接続します。
-        private Button _buttonToggleAdvancedSettings;
         // 260507Codex: 現在ドロワーに表示している内容を記録し、再押下で閉じられるようにします。
         private Control _currentBottomDrawerContent;
 
@@ -213,7 +209,6 @@ namespace MineraScope
         // 260507Codex: Designer を直接編集せず、手作業追加された名前付きコントロールだけを実行時に解決します。
         private void ConfigureGeneratorLayoutRuntimeState()
         {
-            _splitContainerMineral = FindFirstExistingControl<SplitContainer>("splitContainerMineral");
             _tableLayoutPanelMain = FindFirstExistingControl<TableLayoutPanel>("tableLayoutPanelMain");
             _panelBottomDrawer = FindFirstExistingControl<Panel>("panelBottomDrawer");
             _advancedSettingsContent = FindFirstExistingControl<Control>(
@@ -227,13 +222,6 @@ namespace MineraScope
                 "checkBoxAdvanced",
                 "checkBoxDetails",
                 "checkBoxToggleAdvancedSettings");
-            _buttonToggleAdvancedSettings = FindFirstExistingControl<Button>("buttonToggleAdvancedSettings");
-
-            if (_splitContainerMineral is not null)
-            {
-                // 260507Codex: 鉱物詳細の CheckBox 廃止後は、右ペインを初期表示に寄せます。
-                _splitContainerMineral.Panel2Collapsed = false;
-            }
 
             ConfigureBottomDrawerInitialState();
 
@@ -263,11 +251,6 @@ namespace MineraScope
             {
                 _checkBoxToggleAdvancedSettings.CheckedChanged -= checkBoxToggleAdvancedSettings_CheckedChanged;
                 _checkBoxToggleAdvancedSettings.CheckedChanged += checkBoxToggleAdvancedSettings_CheckedChanged;
-            }
-            else if (_buttonToggleAdvancedSettings is not null)
-            {
-                _buttonToggleAdvancedSettings.Click -= buttonToggleAdvancedSettings_Click;
-                _buttonToggleAdvancedSettings.Click += buttonToggleAdvancedSettings_Click;
             }
 
             // 260511Codex: Designer 側の Click 接続が残っていても、code-behind 側で表示処理を確実に持ちます。
@@ -302,18 +285,6 @@ namespace MineraScope
 
             // 260507Codex: auto-generated 扱いの partial なので nullable 注釈ではなく null 許容の実運用に合わせます。
             return null;
-        }
-
-        // 260507Codex: 詳細設定ドロワーを同じボタンで表示と非表示に切り替えます。
-        private void buttonToggleAdvancedSettings_Click(object sender, EventArgs e)
-        {
-            if (_advancedSettingsContent is null)
-            {
-                UpdateAdvancedSettingsButtonText();
-                return;
-            }
-
-            SetAdvancedSettingsVisible(!IsBottomDrawerShowing(_advancedSettingsContent));
         }
 
         // 260507Codex: 詳細設定 CheckBox のチェック状態を下部ドロワー表示へ同期します。
@@ -424,12 +395,6 @@ namespace MineraScope
                 }
             }
 
-            if (_buttonToggleAdvancedSettings is not null)
-            {
-                _buttonToggleAdvancedSettings.Text = advancedVisible
-                    ? "詳細設定を非表示"
-                    : "詳細設定を表示";
-            }
         }
 
         private void BindMineralSolutions(SolidSolution[] solutions, bool clearSelection = true)
@@ -528,7 +493,7 @@ namespace MineraScope
         }
 
         // 260416Codex: シミュレーション実行の重複を helper 利用に寄せて簡素化
-        private async void buttonSpectrumGenerationRun_Click(object sender, EventArgs e)
+        private async void buttonRunSpectrumGeneration_Click(object sender, EventArgs e)
         {
             var request = CreateModelCreationRequest();
             string validationMessage = ValidateModelCreationRequest(request, requireDtsaPath: true);
@@ -725,12 +690,12 @@ namespace MineraScope
                     $"{member.Name}: {(index < fractions.Length ? fractions[index] : 0):F3}"));
 
         #region EndmemberControlの追加と削除
-        private void buttonAddEndmemberControl_Click(object sender, EventArgs e)
+        private void buttonEndmemberAdd_Click(object sender, EventArgs e)
         {
             AddNewEndmemberControl();
         }
 
-        private void buttonRemoveEndmemberControl_Click(object sender, EventArgs e)
+        private void buttonEndmemberDelete_Click(object sender, EventArgs e)
         {
             if (endmemberControls.Count <= 1)
             {
@@ -771,13 +736,13 @@ namespace MineraScope
         }
 
         // 260416Codex: ItemCheck 後の再計算をメソッドグループで簡潔にする
-        private void checkedListBoxMineral_ItemCheck(object sender, ItemCheckEventArgs e)
+        private void checkedListBoxMinerals_ItemCheck(object sender, ItemCheckEventArgs e)
         {
             // 260511Codex: ItemCheck 反映後に、選択中鉱物の候補表示だけを遅延更新します。
             BeginInvoke(new Action(UpdateSelectedSolution));
         }
 
-        private void checkedListBoxMineral_SelectedIndexChanged(object sender, EventArgs e)
+        private void checkedListBoxMinerals_SelectedIndexChanged(object sender, EventArgs e)
         {
             UpdateEndmemberUI();
             UpdateSelectedSolution();
@@ -786,7 +751,7 @@ namespace MineraScope
         #region リストに追加・更新・削除・初期化メソッド
         #region 追加メソッド
         // 260416Codex: 追加時の入力変換を helper ベースに統一
-        private void buttonAddList_Click(object sender, EventArgs e)
+        private void buttonAddMineral_Click(object sender, EventArgs e)
         {
             // 260416Codex: 入力からの固溶体生成を helper に統一
             if (!TryCreateSolutionFromInputs(out var newSolution))
@@ -802,7 +767,7 @@ namespace MineraScope
         #endregion
         #region 更新メソッド
         // 260416Codex: 更新時の入力変換も追加処理と揃える
-        private void buttonUpdate_Click(object sender, EventArgs e)
+        private void buttonUpdateMineral_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMinerals.SelectedIndex;
             // 260416Codex: 更新時も追加時と同じ入力変換を使う
@@ -819,7 +784,7 @@ namespace MineraScope
         #endregion
         #region 削除メソッド
         // 260416Codex: 削除後の保存と再バインドも共通 helper を使って読みやすくします。
-        private void buttonMineral_Delete_Click(object sender, EventArgs e)
+        private void buttonDeleteMineral_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMinerals.SelectedIndex;
             SaveAndBindSolutions(
@@ -828,14 +793,14 @@ namespace MineraScope
                 .ToArray());
         }
         //全削除メソッド
-        private void buttonMineral_AllDelete_Click(object sender, EventArgs e)
+        private void buttonDeleteAllMinerals_Click(object sender, EventArgs e)
         {
             // 260416Codex: 全削除時も共通 helper を通し、一覧クリアの手順を統一します。
             SaveAndBindSolutions([]);
         }
         #endregion
         #region 初期化メソッド
-        private void buttonMineral_Reset_Click(object sender, EventArgs e)
+        private void buttonResetMinerals_Click(object sender, EventArgs e)
         {
             // 260416Codex: DB 初期化のファイル操作は repository に閉じ込めます。
             _mineralDatabaseRepository.Reset();
@@ -847,7 +812,7 @@ namespace MineraScope
         private void TrainLog(string message)
             => TextBoxLogHelper.AppendLine(textBoxModelLog, message);
         //分類モデル
-        private async void buttonModel_Train_Click(object sender, EventArgs e)
+        private async void buttonModelTrain_Click(object sender, EventArgs e)
         {
             // 260416Codex: 学習開始も request -> plan -> workflow の流れに揃え、今後の統合実行へつなげます。
             var request = CreateModelCreationRequest();
@@ -902,7 +867,7 @@ namespace MineraScope
             }
         }
 
-        private void buttonAllSelect_Click(object sender, EventArgs e)
+        private void buttonToggleAllMinerals_Click(object sender, EventArgs e)
         {
             // 260511Codex: 同じ CheckedListBox への繰り返し参照をローカルにまとめます。
             var mineralsList = checkedListBoxMinerals;

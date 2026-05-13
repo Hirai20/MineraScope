@@ -107,7 +107,6 @@ namespace MineraScope
                 DetectorName = semEdxCondition.DetectorName,
                 CarbonCoatThickness = semEdxCondition.CarbonCoatThickness,
                 BeamEnergy = semEdxCondition.BeamEnergy,
-                Count = 1,
                 Division = (int)(simulation.ResolutionStep * 100),
                 LiveTime = semEdxCondition.LiveTime,
                 ProbeCurrent = semEdxCondition.ProbeCurrent,
