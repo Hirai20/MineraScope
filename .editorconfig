@@ -121,7 +121,7 @@ csharp_style_prefer_readonly_struct = true
 csharp_style_prefer_readonly_struct_member = true
 
 # コード ブロックの設定
-csharp_prefer_braces = true
+csharp_prefer_braces = false
 csharp_prefer_simple_using_statement = true
 csharp_prefer_system_threading_lock = true
 csharp_style_namespace_declarations = block_scoped

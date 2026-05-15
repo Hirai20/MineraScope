@@ -8,9 +8,7 @@ namespace MineraScope
         {
             using var dialog = new FolderBrowserDialog();
             if (dialog.ShowDialog() != DialogResult.OK)
-            {
                 return false;
-            }
 
             targetTextBox.Text = dialog.SelectedPath;
             return true;

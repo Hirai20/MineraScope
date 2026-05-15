@@ -21,31 +21,23 @@ namespace MineraScope
             foreach (var path in droppedPaths)
             {
                 if (string.IsNullOrWhiteSpace(path))
-                {
                     continue;
-                }
 
                 if (File.Exists(path))
                 {
                     if (IsSpectrumFile(path))
-                    {
                         files.Add(path);
-                    }
 
                     continue;
                 }
 
                 if (!Directory.Exists(path))
-                {
                     continue;
-                }
 
                 foreach (var file in Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories))
                 {
                     if (IsSpectrumFile(file))
-                    {
                         files.Add(file);
-                    }
                 }
             }
 
@@ -56,9 +48,7 @@ namespace MineraScope
         public Task RunAsync(string modelPath, IReadOnlyCollection<string> files)
         {
             if (string.IsNullOrWhiteSpace(modelPath) || files.Count == 0)
-            {
                 return Task.CompletedTask;
-            }
 
             return Task.Run(() =>
                 new DeepLearning(_log).RunPrediction(modelPath, files.ToList(), _assemblyPath));

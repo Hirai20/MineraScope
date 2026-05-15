@@ -49,9 +49,7 @@ namespace MineraScope
             IReadOnlyList<SpectrumSimulationReservation> reservations)
         {
             if (reservations.Count == 0)
-            {
                 return new SimulationExecutionPlan([]);
-            }
 
             int parallelCount = Math.Max(1, request.Simulation.ParallelCount);
             var batches = new List<SimulationExecutionBatch>();

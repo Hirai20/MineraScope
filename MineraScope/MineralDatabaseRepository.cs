@@ -19,9 +19,7 @@ namespace MineraScope
         public MineralDatabaseRepository(string assemblyPath)
         {
             if (string.IsNullOrWhiteSpace(assemblyPath))
-            {
                 throw new ArgumentException("Assembly path must not be empty.", nameof(assemblyPath));
-            }
 
             _databasePath = Path.Combine(assemblyPath, "MineralDatabase.xml");
             _originalDatabasePath = Path.Combine(assemblyPath, "MineralDatabaseOriginal.xml");
@@ -31,9 +29,7 @@ namespace MineraScope
         public void EnsureInitialized()
         {
             if (File.Exists(_databasePath))
-            {
                 return;
-            }
 
             File.Copy(_originalDatabasePath, _databasePath);
         }

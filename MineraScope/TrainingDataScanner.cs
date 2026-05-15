@@ -20,23 +20,17 @@ namespace MineraScope
         public string[] Scan(string trainingPath)
         {
             if (!Directory.Exists(trainingPath))
-            {
                 return [];
-            }
 
             if (Directory.EnumerateFiles(trainingPath, "*.*").Any(IsSpectrumFile))
-            {
                 return [GetFolderName(trainingPath)];
-            }
 
             var mineralNames = new List<string>();
             foreach (var mineralFolder in Directory.GetDirectories(trainingPath))
             {
                 var mineralInfo = _analyzeMineralFolder(mineralFolder);
                 if (mineralInfo is null)
-                {
                     continue;
-                }
 
                 mineralNames.Add(GetFolderName(mineralFolder));
             }

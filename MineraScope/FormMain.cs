@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -43,9 +43,7 @@ namespace MineraScope
             get
             {
                 if (comboBoxModelPath.SelectedItem is not string selectedModelName || string.IsNullOrWhiteSpace(ModelPath))
-                {
                     return string.Empty;
-                }
 
                 return Path.Combine(ModelPath, selectedModelName);
             }
@@ -82,21 +80,15 @@ namespace MineraScope
         {
             var settings = FormUserSettingsStore.Load<FormMainUserSettings>(UserSettingsFileName);
             if (!string.IsNullOrWhiteSpace(settings.ModelPath))
-            {
                 ModelPath = settings.ModelPath;
-            }
 
             _savedSelectedModelName = settings.SelectedModelName;
 
             if (!string.IsNullOrWhiteSpace(settings.EdxOutputPath))
-            {
                 EdxOutputPath = settings.EdxOutputPath;
-            }
 
             if (!string.IsNullOrWhiteSpace(settings.DtsaPath))
-            {
                 DtsaPath = settings.DtsaPath;
-            }
         }
 
         // 260507Codex: 次回起動時に共通パス欄だけを戻せるよう、終了時に保存します。
@@ -137,18 +129,13 @@ namespace MineraScope
         {
             // 260430Codex: 空欄のモデル保存先はユーザーごとの Documents 配下へ初期化します。
             if (string.IsNullOrWhiteSpace(ModelPath))
-            {
                 ModelPath = DefaultStoragePaths.ModelsFolder;
-            }
 
             // 260430Codex: 空欄の EDX/教師データ保存先はユーザーごとの Documents 配下へ初期化します。
             if (string.IsNullOrWhiteSpace(EdxOutputPath))
-            {
                 EdxOutputPath = DefaultStoragePaths.TrainingDataFolder;
-            }
         }
 
-        // 260513Codex: Designer から TextChanged に接続し、モデル保存先の手入力変更を一覧へ反映します。
         private void textBoxlPathSaveModel_TextChanged(object sender, EventArgs e)
         {
             RefreshModelPathList();
@@ -167,14 +154,10 @@ namespace MineraScope
             };
 
             if (targetTextBox is null)
-            {
                 return;
-            }
 
             if (!FolderSelectionHelper.TrySelectFolder(targetTextBox))
-            {
                 return;
-            }
 
             if (targetTextBox == textBoxlPathSaveModel)
             {
@@ -202,15 +185,11 @@ namespace MineraScope
             if (Directory.Exists(ModelPath))
             {
                 foreach (string directoryPath in Directory.GetDirectories(ModelPath).OrderBy(Path.GetFileName))
-                {
                     comboBoxModelPath.Items.Add(Path.GetFileName(directoryPath));
-                }
             }
 
             if (!string.IsNullOrWhiteSpace(preferredSelection) && comboBoxModelPath.Items.Contains(preferredSelection))
-            {
                 comboBoxModelPath.SelectedItem = preferredSelection;
-            }
             else if (comboBoxModelPath.Items.Count > 0)
             {
                 comboBoxModelPath.SelectedIndex = 0;
@@ -222,9 +201,7 @@ namespace MineraScope
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
         {
             if (GeneratorForm.Visible)
-            {
                 GeneratorForm.BringToFront();
-            }
             else
             {
                 GeneratorForm.Visible = true;
@@ -235,9 +212,7 @@ namespace MineraScope
         {
             // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに AnalyzerForm を残します。
             if (AnalyzerForm.Visible)
-            {
                 AnalyzerForm.BringToFront();
-            }
             else
             {
                 AnalyzerForm.Visible = true;
@@ -254,9 +229,7 @@ namespace MineraScope
         private async void FormMain_DragDrop(object? sender, DragEventArgs e)
         {
             if (!TryGetAcceptedSpectrumFile(e, out var filePath))
-            {
                 return;
-            }
 
             try
             {
@@ -295,9 +268,7 @@ namespace MineraScope
         private async Task RunMineralPredictionAsync(string filePath)
         {
             if (_isPredictionRunning)
-            {
                 return;
-            }
 
             _isPredictionRunning = true;
             textBoxAnalysisResult.Clear();
@@ -349,19 +320,13 @@ namespace MineraScope
             IDataObject? dataObject = e.Data;
 
             if (dataObject is null || !dataObject.GetDataPresent(DataFormats.FileDrop))
-            {
                 return false;
-            }
 
             if (dataObject.GetData(DataFormats.FileDrop) is not string[] files || files.Length != 1)
-            {
                 return false;
-            }
 
             if (!File.Exists(files[0]) || !IsSpectrumFile(files[0]))
-            {
                 return false;
-            }
 
             filePath = files[0];
             return true;
@@ -381,9 +346,7 @@ namespace MineraScope
             var profile = ReadSpectrumProfile(filePath);
 
             if (profile.Pt.Count == 0)
-            {
                 throw new InvalidDataException("スペクトルデータ点が見つかりませんでした。");
-            }
 
             _spectrumFilePath = filePath;
             textBoxSpectrumFile.Text = Path.GetFileName(filePath);
@@ -403,9 +366,7 @@ namespace MineraScope
                 string line = rawLine.Trim();
 
                 if (string.IsNullOrEmpty(line))
-                {
                     continue;
-                }
 
                 if (line.StartsWith("#", StringComparison.Ordinal))
                 {
@@ -414,9 +375,7 @@ namespace MineraScope
                 }
 
                 if (!TryReadSpectrumPoint(line, points.Count, xPerChannel, offset, out var point))
-                {
                     continue;
-                }
 
                 points.Add(point);
             }
@@ -439,14 +398,10 @@ namespace MineraScope
                 StringSplitOptions.RemoveEmptyEntries);
 
             if (values.Length == 0)
-            {
                 return false;
-            }
 
             if (!double.TryParse(values[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double firstValue))
-            {
                 return false;
-            }
 
             if (values.Length >= 2
                 && double.TryParse(values[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double secondValue))
@@ -470,9 +425,7 @@ namespace MineraScope
             }
 
             if (TryReadHeaderDouble(line, "#OFFSET", out double parsedOffset))
-            {
                 offset = parsedOffset;
-            }
         }
 
         // 260427Codex: "#KEY : value" 形式のヘッダー値を InvariantCulture で読み取ります。
@@ -481,16 +434,12 @@ namespace MineraScope
             value = 0.0;
 
             if (!line.StartsWith(key, StringComparison.OrdinalIgnoreCase))
-            {
                 return false;
-            }
 
             int separatorIndex = line.IndexOf(':');
 
             if (separatorIndex < 0 || separatorIndex + 1 >= line.Length)
-            {
                 return false;
-            }
 
             string text = line[(separatorIndex + 1)..].Trim().TrimEnd('.');
             return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value);

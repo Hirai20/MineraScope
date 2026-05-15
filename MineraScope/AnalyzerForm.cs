@@ -49,9 +49,7 @@ namespace MineraScope
             var spectrumFiles = MineralPredictionWorkflow.CollectSpectrumFiles(droppedPaths);
 
             if (spectrumFiles.Length == 0)
-            {
                 return;
-            }
 
             listBoxSpectrumFiles.Items.Clear();      
             listBoxSpectrumFiles.Items.AddRange(spectrumFiles);
@@ -68,9 +66,7 @@ namespace MineraScope
         {
             var selectedIndices = listBoxSpectrumFiles.SelectedIndices.Cast<int>().OrderDescending().ToArray();
             foreach (var index in selectedIndices)
-            {
                 listBoxSpectrumFiles.Items.RemoveAt(index);
-            }
         }
 
         // 260416Codex: 解析中だけボタンを無効化してワークフローの実行に集中させます。

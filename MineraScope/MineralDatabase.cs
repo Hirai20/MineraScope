@@ -44,9 +44,7 @@ namespace MineraScope
             }
 
             if (resolution == 0)
-            {
                 return null!;
-            }
 
             var validRatios = EnumerateCandidateFractions(resolution).Select(ratio => ratio.ToList()).ToList();
 
@@ -78,14 +76,10 @@ namespace MineraScope
         public double[][] EnumerateCandidateFractions(double resolution)
         {
             if (Members.Length == 1)
-            {
                 return [[1.0]];
-            }
 
             if (resolution <= 0)
-            {
                 return [];
-            }
 
             return GetRatios(Members.Length, resolution, 1)
                 .Select(ratio => ratio.ToArray())
@@ -98,9 +92,7 @@ namespace MineraScope
         {
             var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < Members.Length && i < fractions.Length; i++)
-            {
                 result[Members[i].Name] = fractions[i];
-            }
 
             return result;
         }
@@ -110,9 +102,7 @@ namespace MineraScope
         {
             var totalWeights = new Dictionary<string, double>();
             for (int i = 0; i < Members.Length && i < fractions.Length; i++)
-            {
                 AddWeights(totalWeights, Members[i].Elements, fractions[i]);
-            }
 
             return NormalizeWeights(totalWeights);
         }
@@ -133,9 +123,7 @@ namespace MineraScope
                 double weight = num * ratio * AtomStatic.AtomicWeight(element);
 
                 if (totalWeights.ContainsKey(element))
-                {
                     totalWeights[element] += weight;
-                }
                 else
                 {
                     totalWeights.Add(element, weight);
@@ -187,9 +175,7 @@ namespace MineraScope
         {
             var roundedRatios = new double[ratios.Length];
             for (int i = 0; i < ratios.Length; i++)
-            {
                 roundedRatios[i] = Math.Round(ratios[i], 10);
-            }
 
             return !Array.Exists(Constraints, constraint => !Judge(constraint, roundedRatios));
         }
@@ -204,16 +190,12 @@ namespace MineraScope
         private bool Judge(string constraint, double[] ratios)
         {
             if (ratios.Length != Members.Length)
-            {
                 return true;
-            }
 
             try
             {
                 for (int i = 0; i < Members.Length; i++)
-                {
                     constraint = constraint.Replace(Members[i].Name, ratios[i].ToString());
-                }
 
                 return new Processor().Solve(constraint).Bool;
             }

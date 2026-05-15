@@ -58,9 +58,7 @@ namespace MineraScope
                 int idx = trainIndices[i];
                 yTrainArray[i] = yArray[idx];
                 for (int j = 0; j < SpectrumDataLoader.SpectrumLength; j++)
-                {
                     xTrainArray[i, j] = xArray[idx * SpectrumDataLoader.SpectrumLength + j];
-                }
             }
 
             for (int i = 0; i < testCount; i++)
@@ -68,9 +66,7 @@ namespace MineraScope
                 int idx = testIndices[i];
                 yTestArray[i] = yArray[idx];
                 for (int j = 0; j < SpectrumDataLoader.SpectrumLength; j++)
-                {
                     xTestArray[i, j] = xArray[idx * SpectrumDataLoader.SpectrumLength + j];
-                }
             }
 
             return (np.array(xTrainArray), np.array(xTestArray),
@@ -108,28 +104,20 @@ namespace MineraScope
             {
                 int idx = indices[i];
                 for (int j = 0; j < nFeatures; j++)
-                {
                     xTrainArr[i, j] = xAll[idx * nFeatures + j];
-                }
 
                 for (int k = 0; k < nLabels; k++)
-                {
                     yTrainArr[i, k] = yAll[idx * nLabels + k];
-                }
             }
 
             for (int i = 0; i < nTest; i++)
             {
                 int idx = indices[nTrain + i];
                 for (int j = 0; j < nFeatures; j++)
-                {
                     xTestArr[i, j] = xAll[idx * nFeatures + j];
-                }
 
                 for (int k = 0; k < nLabels; k++)
-                {
                     yTestArr[i, k] = yAll[idx * nLabels + k];
-                }
             }
 
             return (

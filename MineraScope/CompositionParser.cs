@@ -1,4 +1,4 @@
-﻿using Crystallography;
+using Crystallography;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -64,9 +64,7 @@ namespace MineraScope
                     string elements = match.Groups[1].Value;         // 元素記号 
                     string molStr = match.Groups[2].Value;         // モル数 
                     if (Regex.IsMatch(elements, @"^[A-Z][a-z]{2,}$")) //// 小文字が2文字以上続く元素記号はエラー
-                    {
                         return Array.Empty<(string, double)>();
-                    }
                 double mol = string.IsNullOrWhiteSpace(molStr) ? 1.0 : double.Parse(molStr);
                 list.Add((elements, mol));
             }

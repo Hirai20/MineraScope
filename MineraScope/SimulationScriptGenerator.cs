@@ -35,9 +35,7 @@ namespace MineraScope
             builder.AppendLine("]");
             builder.AppendLine("FileNames = [");
             foreach (string fileName in outputFiles)
-            {
                 builder.AppendLine("  " + ToPythonString(fileName) + ",");
-            }
 
             builder.AppendLine("]");
             builder.Append("for idx, (");
@@ -61,9 +59,7 @@ namespace MineraScope
             builder.Remove(builder.Length - 2, 2);
             builder.Append("], [");
             foreach (string name in elementNames)
-            {
                 builder.Append(name.ToLowerInvariant() + ", ");
-            }
 
             builder.Remove(builder.Length - 2, 2);
             builder.AppendLine("]), epq.ToSI.gPerCC(" + ToInvariantString(DefaultDensity) + "))");

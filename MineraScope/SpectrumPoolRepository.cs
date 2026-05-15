@@ -51,9 +51,7 @@ namespace MineraScope
                 : null;
 
             if (manifest is not null)
-            {
                 return manifest;
-            }
 
             return new SpectrumPoolManifest
             {
@@ -81,9 +79,7 @@ namespace MineraScope
         {
             string? folder = Path.GetDirectoryName(manifestPath);
             if (!string.IsNullOrWhiteSpace(folder))
-            {
                 Directory.CreateDirectory(folder);
-            }
 
             File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, JsonOptions));
         }
@@ -96,9 +92,7 @@ namespace MineraScope
             {
                 string filePath = Path.Combine(handle.PoolFolder, entry.FileName);
                 if (SpectrumDataLoader.LoadNormalizedSpectrum(filePath) is not null)
-                {
                     continue;
-                }
 
                 entry.Status = SpectrumManifestStatus.Missing;
                 // 260513Codex: manifest に残る理由はユーザーが読める自然な日本語にします。

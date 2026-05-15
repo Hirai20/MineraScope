@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Text.RegularExpressions;
 using Tensorflow;
 using Tensorflow.Keras.Engine;
@@ -59,9 +60,7 @@ namespace MineraScope
             var files = GetSpectrumFiles(folderPath);
 
             if (files.Length == 0)
-            {
                 return null;
-            }
 
             var mineralFolder = new MineralFolder
             {
@@ -75,14 +74,10 @@ namespace MineraScope
             {
                 var components = GetRegressionLabels(file);
                 if (components is not { Count: > 0 })
-                {
                     continue;
-                }
 
                 foreach (var (component, _) in components)
-                {
                     allComponents.Add(component);
-                }
             }
 
             mineralFolder.IsSolidSolution = allComponents.Count >= 2;
@@ -97,19 +92,26 @@ namespace MineraScope
         public static float[]? LoadNormalizedSpectrum(string filePath)
         {
             if (!File.Exists(filePath))
-            {
                 return null;
-            }
 
             var data = LoadMsaFile(filePath);
             if (data.shape[0] != SpectrumLength)
-            {
                 return null;
-            }
 
             var values = data.ToArray<float>();
             NormalizeSpectrum(values);
             return values;
+        }
+
+        // 260514Codex: spectrum 1 ファイルの読み込み前後をキャンセル確認の最小単位としてそろえます。
+        private static float[]? LoadNormalizedSpectrumWithCancellation(
+            string filePath,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var data = LoadNormalizedSpectrum(filePath);
+            cancellationToken.ThrowIfCancellationRequested();
+            return data;
         }
 
         // 260430Codex: 最大値が 0 以下のスペクトルはそのまま返し、ゼロ除算を避けます。
@@ -117,14 +119,10 @@ namespace MineraScope
         {
             float max = values.Max();
             if (max <= 0)
-            {
                 return;
-            }
 
             for (int i = 0; i < values.Length; i++)
-            {
                 values[i] /= max;
-            }
         }
 
         // 260430Codex: MSA/EMSA の数値行だけを NDArray に変換します。
@@ -139,24 +137,22 @@ namespace MineraScope
                 line = line.Trim();
 
                 if (string.IsNullOrEmpty(line) || line.StartsWith("#"))
-                {
                     continue;
-                }
 
                 line = line.TrimEnd(',');
 
                 if (float.TryParse(line, NumberStyles.Float, CultureInfo.InvariantCulture, out float value))
-                {
                     yValues.Add(value);
-                }
             }
 
             return np.array(yValues.ToArray());
         }
 
         // 260507Codex: manifest の Completed から選ばれた spectrum だけを分類学習データへ変換します。
+        // 260514Codex: spectrum ファイル単位の境界で分類データ読み込みのキャンセルを確認します。
         public static (NDArray Spectra, List<string> Labels) LoadClassificationData(
-            IReadOnlyList<SpectrumTrainingPool> trainingPools)
+            IReadOnlyList<SpectrumTrainingPool> trainingPools,
+            CancellationToken cancellationToken = default)
         {
             var spectraList = new List<float[]>();
             var labels = new List<string>();
@@ -165,11 +161,9 @@ namespace MineraScope
             {
                 foreach (var sample in pool.Samples)
                 {
-                    var data = LoadNormalizedSpectrum(sample.FilePath);
+                    var data = LoadNormalizedSpectrumWithCancellation(sample.FilePath, cancellationToken);
                     if (data == null)
-                    {
                         continue;
-                    }
 
                     spectraList.Add(data);
                     labels.Add(pool.MineralName);
@@ -177,21 +171,19 @@ namespace MineraScope
             }
 
             if (spectraList.Count == 0)
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), labels);
-            }
 
             return (CreateSpectraArray(spectraList), labels);
         }
 
         // 260507Codex: manifest の endmemberFractions を回帰ラベルの正本として使います。
+        // 260514Codex: spectrum ファイル単位の境界で manifest 回帰データ読み込みのキャンセルを確認します。
         public static (NDArray Spectra, NDArray Labels, Dictionary<string, int>? ComponentIndex) LoadRegressionData(
-            SpectrumTrainingPool trainingPool)
+            SpectrumTrainingPool trainingPool,
+            CancellationToken cancellationToken = default)
         {
             if (trainingPool.EndmemberNames.Count == 0)
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 0)), null);
-            }
 
             var componentOrder = trainingPool.EndmemberNames
                 .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -200,9 +192,7 @@ namespace MineraScope
                 .ToList();
 
             if (componentOrder.Count == 0)
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 0)), null);
-            }
 
             var componentIndex = componentOrder
                 .Select((component, index) => new { component, index })
@@ -213,20 +203,16 @@ namespace MineraScope
 
             foreach (var sample in trainingPool.Samples)
             {
-                var data = LoadNormalizedSpectrum(sample.FilePath);
+                var data = LoadNormalizedSpectrumWithCancellation(sample.FilePath, cancellationToken);
                 if (data == null)
-                {
                     continue;
-                }
 
                 spectraList.Add(data);
                 labelsList.Add(sample.EndmemberFractions);
             }
 
             if (spectraList.Count == 0)
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, componentOrder.Count)), null);
-            }
 
             float[,] labelsArray = new float[spectraList.Count, componentOrder.Count];
             for (int i = 0; i < labelsList.Count; i++)
@@ -245,12 +231,13 @@ namespace MineraScope
         }
 
         // 260430Codex: 回帰モデル用のスペクトル行列、ラベル行列、端成分 index を作ります。
-        public static (NDArray Spectra, NDArray Labels, Dictionary<string, int>? ComponentIndex) LoadRegressionData(string directory)
+        // 260514Codex: フォルダ走査の回帰データ読み込みも spectrum ファイル境界でキャンセルを確認します。
+        public static (NDArray Spectra, NDArray Labels, Dictionary<string, int>? ComponentIndex) LoadRegressionData(
+            string directory,
+            CancellationToken cancellationToken = default)
         {
             if (!Directory.Exists(directory))
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 2)), null);
-            }
 
             var files = GetSpectrumFiles(directory);
             var spectraList = new List<float[]>();
@@ -259,22 +246,18 @@ namespace MineraScope
 
             foreach (var filePath in files)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var components = GetRegressionLabels(filePath);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (components is not { Count: > 0 })
-                {
                     continue;
-                }
 
                 foreach (var (component, _) in components)
-                {
                     allComponents.Add(component);
-                }
             }
 
             if (allComponents.Count == 0)
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 2)), null);
-            }
 
             var componentOrder = allComponents.OrderBy(x => x).ToList();
             var componentIndex = componentOrder.Select((component, index) => new { component, index })
@@ -282,22 +265,19 @@ namespace MineraScope
 
             foreach (var filePath in files)
             {
-                var data = LoadNormalizedSpectrum(filePath);
+                var data = LoadNormalizedSpectrumWithCancellation(filePath, cancellationToken);
                 var components = GetRegressionLabels(filePath);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 if (data == null || components is not { Count: > 0 })
-                {
                     continue;
-                }
 
                 spectraList.Add(data);
                 labelsList.Add(components.ToDictionary(component => component.Component, component => component.Ratio));
             }
 
             if (spectraList.Count == 0)
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, componentOrder.Count)), null);
-            }
 
             int numComponents = componentOrder.Count;
             float[,] labelsArray = new float[spectraList.Count, numComponents];
@@ -327,47 +307,42 @@ namespace MineraScope
             foreach (Match match in matches)
             {
                 if (match.Groups.Count < 3)
-                {
                     continue;
-                }
 
                 string componentName = match.Groups[1].Value;
                 string ratioText = match.Groups[2].Value;
 
                 if (float.TryParse(ratioText, NumberStyles.Float, CultureInfo.InvariantCulture, out float ratio))
-                {
                     components.Add((componentName, ratio));
-                }
             }
 
             return components.Count > 0 ? components : null;
         }
 
         // 260430Codex: 分類モデル用のスペクトル行列と鉱物ラベル一覧を作ります。
+        // 260514Codex: フォルダ走査の分類データ読み込みも spectrum ファイル境界でキャンセルを確認します。
         public static (NDArray Spectra, List<string> Labels) LoadClassificationData(
             string trainingFolder,
-            IReadOnlyCollection<string> targetMinerals)
+            IReadOnlyCollection<string> targetMinerals,
+            CancellationToken cancellationToken = default)
         {
             var spectraList = new List<float[]>();
             var labels = new List<string>();
 
             foreach (var mineralName in targetMinerals)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!TryResolveMineralFolderPath(trainingFolder, mineralName, out var mineralFolderPath))
-                {
                     continue;
-                }
 
                 string labelName = mineralName.Split('_')[0];
                 var files = GetSpectrumFiles(mineralFolderPath);
 
                 foreach (var filePath in files)
                 {
-                    var data = LoadNormalizedSpectrum(filePath);
+                    var data = LoadNormalizedSpectrumWithCancellation(filePath, cancellationToken);
                     if (data == null)
-                    {
                         continue;
-                    }
 
                     spectraList.Add(data);
                     labels.Add(labelName);
@@ -375,9 +350,7 @@ namespace MineraScope
             }
 
             if (spectraList.Count == 0)
-            {
                 return (np.zeros(new Shape(0, SpectrumLength)), labels);
-            }
 
             return (CreateSpectraArray(spectraList), labels);
         }
@@ -389,9 +362,7 @@ namespace MineraScope
             for (int i = 0; i < spectraList.Count; i++)
             {
                 for (int j = 0; j < SpectrumLength; j++)
-                {
                     spectraArray[i, j] = spectraList[i][j];
-                }
             }
 
             return np.array(spectraArray);

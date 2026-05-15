@@ -20,9 +20,7 @@ namespace MineraScope
         {
             string path = Path.Combine(SettingsFolder, fileName);
             if (!File.Exists(path))
-            {
                 return new T();
-            }
 
             return JsonSerializer.Deserialize<T>(File.ReadAllText(path)) ?? new T();
         }

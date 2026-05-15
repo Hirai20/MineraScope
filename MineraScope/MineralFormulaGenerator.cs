@@ -16,29 +16,21 @@ namespace MineraScope
             string assemblyPath)
         {
             if (predictedRatios == null || predictedRatios.Count == 0)
-            {
                 return "";
-            }
 
             string xmlPath = Path.Combine(assemblyPath, "MineralDatabase.xml");
             if (!File.Exists(xmlPath))
-            {
                 return "";
-            }
 
             XmlSerializer xml = new(typeof(SolidSolution[]));
             using var fs = new FileStream(xmlPath, FileMode.Open);
             var solidSolutions = xml.Deserialize(fs) as SolidSolution[];
             if (solidSolutions == null)
-            {
                 return "";
-            }
 
             var targetGroup = solidSolutions.FirstOrDefault(solution => solution.Name == targetMineralName);
             if (targetGroup == null)
-            {
                 return "";
-            }
 
             var targetElements = GetTargetElements(targetGroup);
             var mineralDefinitions = new Dictionary<string, (string Element, double Count)[]>();
@@ -56,9 +48,7 @@ namespace MineraScope
                 string endmemberName = kvp.Key.Trim();
                 double ratio = kvp.Value;
                 if (!mineralDefinitions.TryGetValue(endmemberName, out var atoms))
-                {
                     continue;
-                }
 
                 foreach (var atom in atoms)
                 {
@@ -88,15 +78,11 @@ namespace MineraScope
                 foreach (var member in targetGroup.Members)
                 {
                     if (i >= member.Elements.Length)
-                    {
                         continue;
-                    }
 
                     string symbol = member.Elements[i].Item1;
                     if (!targetElements.Contains(symbol))
-                    {
                         targetElements.Add(symbol);
-                    }
                 }
             }
 

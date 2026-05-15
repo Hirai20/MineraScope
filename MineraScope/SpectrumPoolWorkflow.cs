@@ -47,9 +47,7 @@ namespace MineraScope
                 var state = LoadState(request, solution);
                 int completedCount = state.CompletedEntries.Count;
                 if (completedCount < targetCount)
-                {
                     shortages.Add(new SpectrumPoolShortage(solution.Name, targetCount, completedCount));
-                }
             }
 
             return shortages;
@@ -96,9 +94,7 @@ namespace MineraScope
         {
             shortages = GetShortages(request);
             if (shortages.Count > 0)
-            {
                 return [];
-            }
 
             int targetCount = request.Simulation.TargetSpectrumCount;
             var pools = new List<SpectrumTrainingPool>(request.SelectedMineralSolutions.Count);
@@ -157,17 +153,13 @@ namespace MineraScope
             {
                 var manifest = _repository.Load(group.Key);
                 if (manifest is null)
-                {
                     continue;
-                }
 
                 foreach (var item in group)
                 {
                     var entry = manifest.Spectra.FirstOrDefault(spectrum => spectrum.SimulationId == item.Reservation.SimulationId);
                     if (entry is null)
-                    {
                         continue;
-                    }
 
                     ApplyResultToEntry(item.Result, item.Reservation, entry);
                 }
@@ -196,9 +188,7 @@ namespace MineraScope
             bool changed = _repository.RefreshCompletedStatuses(handle, manifest);
 
             if (changed)
-            {
                 _repository.Save(handle, manifest);
-            }
 
             var completedEntries = manifest.Spectra
                 .Where(entry => entry.Status == SpectrumManifestStatus.Completed)
@@ -234,15 +224,11 @@ namespace MineraScope
 
             int newReservationCount = missingCount - reservations.Count;
             if (newReservationCount <= 0)
-            {
                 return reservations;
-            }
 
             var candidates = solution.EnumerateCandidateFractions(resolutionStep);
             if (candidates.Length == 0)
-            {
                 return reservations;
-            }
 
             for (int i = 0; i < newReservationCount; i++)
             {
@@ -324,19 +310,13 @@ namespace MineraScope
         private static string BuildFailureReason(SimulationExecutionResult result)
         {
             if (!string.IsNullOrWhiteSpace(result.ExceptionMessage))
-            {
                 return result.ExceptionMessage;
-            }
 
             if (!string.IsNullOrWhiteSpace(result.StandardError))
-            {
                 return TrimFailureReason(result.StandardError);
-            }
 
             if (!string.IsNullOrWhiteSpace(result.StandardOutput))
-            {
                 return TrimFailureReason(result.StandardOutput);
-            }
 
             return $"DTSA-II が終了コード {result.ExitCode} で終了しました。";
         }

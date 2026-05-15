@@ -29,9 +29,7 @@ namespace MineraScope
             foreach (SimulationExecutionBatch batch in plan.Batches)
             {
                 if (cancellationToken.IsCancellationRequested)
-                {
                     break;
-                }
 
                 var batchResults = await Task.WhenAll(batch.Jobs.Select(job => ExecuteJobAsync(job, cancellationToken)));
                 results.AddRange(batchResults);
@@ -53,9 +51,7 @@ namespace MineraScope
 
                 string? scriptFolder = Path.GetDirectoryName(job.ScriptPath);
                 if (!string.IsNullOrWhiteSpace(scriptFolder))
-                {
                     Directory.CreateDirectory(scriptFolder);
-                }
 
                 File.WriteAllText(job.ScriptPath, _scriptGenerator.Generate(job.Property, job.ParallelIndex));
                 return await RunCommandAsync(job, cancellationToken);
@@ -82,9 +78,7 @@ namespace MineraScope
             {
                 string outputPath = Path.Combine(reservation.PoolFolder, reservation.FileName);
                 if (File.Exists(outputPath))
-                {
                     File.Delete(outputPath);
-                }
             }
         }
 
@@ -156,9 +150,7 @@ namespace MineraScope
             try
             {
                 if (!process.HasExited)
-                {
                     process.Kill(entireProcessTree: true);
-                }
             }
             catch (InvalidOperationException)
             {
