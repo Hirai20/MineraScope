@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
+using static Community.CsharpSqlite.Sqlite3;
 
 namespace MineraScope
 {
@@ -9,14 +10,12 @@ namespace MineraScope
     {
         public FormMain FormMain;
 
-
         // 260416Codex: AnalyzerForm の UI 配線をフォーム本体にまとめて保守しやすくします。
         public AnalyzerForm()
         {
             InitializeComponent();
             InitializeMineralJudgeEvents();
         }
-
         // 260416Codex: 解析対象のスペクトルファイル一覧を UI からそのまま取得します。
         private List<string> SpectrumFiles =>
             listBoxSpectrumFiles.Items
@@ -27,20 +26,12 @@ namespace MineraScope
         // 260416Codex: AnalyzerForm 内で使う解析 UI のイベントを一か所で登録します。
         private void InitializeMineralJudgeEvents()
         {
-            buttonAnalyze.Click += buttonAnalyze_Click;
-            buttonSelectModelFolder.Click += buttonSelectModelFolder_Click;
-            buttonRemoveSpectrumFiles.Click += buttonRemoveSpectrumFiles_Click;
-            listBoxSpectrumFiles.DragDrop += listBoxSpectrumFiles_DragDrop;
-            listBoxSpectrumFiles.DragEnter += listBoxSpectrumFiles_DragEnter;
         }
 
         // 260416Codex: 解析ログの表示先をフォーム内の結果テキストボックスに統一します。
         private void AnalysisLog(string message)
             => TextBoxLogHelper.AppendLine(textBoxAnalysisResult, message);
 
-        // 260416Codex: モデルフォルダの選択は共通 helper に委譲して UI 側を薄く保ちます。
-        private void buttonSelectModelFolder_Click(object? sender, EventArgs e)
-            => FolderSelectionHelper.TrySelectFolder(textBoxModelFolder);
 
         // 260416Codex: ドロップされたファイルやフォルダから解析対象スペクトルだけを取り込みます。
         private void listBoxSpectrumFiles_DragDrop(object? sender, DragEventArgs e)
@@ -51,7 +42,7 @@ namespace MineraScope
             if (spectrumFiles.Length == 0)
                 return;
 
-            listBoxSpectrumFiles.Items.Clear();      
+            listBoxSpectrumFiles.Items.Clear();
             listBoxSpectrumFiles.Items.AddRange(spectrumFiles);
         }
 
@@ -77,8 +68,6 @@ namespace MineraScope
 
             try
             {
-                await new MineralPredictionWorkflow(AppContext.BaseDirectory, AnalysisLog)
-                    .RunAsync(textBoxModelFolder.Text, SpectrumFiles);
             }
             finally
             {
@@ -99,6 +88,16 @@ namespace MineraScope
             var str = FormMain.ModelPath;
             e.Cancel = true;
             this.Visible = false;
+        }
+
+        private void AnalyzerForm_DragDrop(object sender, DragEventArgs e)
+        {
+
+        }
+
+        private void AnalyzerForm_DragEnter(object sender, DragEventArgs e)
+        {
+
         }
     }
 }

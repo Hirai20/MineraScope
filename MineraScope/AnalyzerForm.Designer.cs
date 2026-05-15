@@ -29,29 +29,16 @@
         private void InitializeComponent()
         {
             groupBoxMineralAnalysis = new GroupBox();
-            groupBoxSpectrumFiles = new GroupBox();
-            panel1 = new Panel();
-            listBoxSpectrumFiles = new ListBox();
-            flowLayoutPanel4 = new FlowLayoutPanel();
-            buttonAnalyze = new Button();
-            buttonRemoveSpectrumFiles = new Button();
-            groupBoxAnalysisResult = new GroupBox();
-            textBoxAnalysisResult = new TextBox();
-            groupBoxModelFolder = new GroupBox();
-            comboBox1 = new ComboBox();
-            flowLayoutPanel1 = new FlowLayoutPanel();
+            graphControl1 = new Crystallography.Controls.GraphControl();
+            pictureBox1 = new PictureBox();
+            flowLayoutPanelModellFolder = new FlowLayoutPanel();
             labelModelFolder = new Label();
-            textBoxModelFolder = new TextBox();
-            buttonSelectModelFolder = new Button();
+            comboBoxMappingModellFolder = new ComboBox();
             menuStrip1 = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
             groupBoxMineralAnalysis.SuspendLayout();
-            groupBoxSpectrumFiles.SuspendLayout();
-            panel1.SuspendLayout();
-            flowLayoutPanel4.SuspendLayout();
-            groupBoxAnalysisResult.SuspendLayout();
-            groupBoxModelFolder.SuspendLayout();
-            flowLayoutPanel1.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
+            flowLayoutPanelModellFolder.SuspendLayout();
             menuStrip1.SuspendLayout();
             SuspendLayout();
             // 
@@ -59,136 +46,83 @@
             // 
             groupBoxMineralAnalysis.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
             groupBoxMineralAnalysis.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            groupBoxMineralAnalysis.Controls.Add(groupBoxSpectrumFiles);
-            groupBoxMineralAnalysis.Controls.Add(groupBoxAnalysisResult);
-            groupBoxMineralAnalysis.Controls.Add(groupBoxModelFolder);
+            groupBoxMineralAnalysis.Controls.Add(graphControl1);
+            groupBoxMineralAnalysis.Controls.Add(pictureBox1);
+            groupBoxMineralAnalysis.Controls.Add(flowLayoutPanelModellFolder);
             groupBoxMineralAnalysis.Location = new Point(12, 29);
             groupBoxMineralAnalysis.Name = "groupBoxMineralAnalysis";
-            groupBoxMineralAnalysis.Size = new Size(539, 653);
+            groupBoxMineralAnalysis.Size = new Size(598, 653);
             groupBoxMineralAnalysis.TabIndex = 88;
             groupBoxMineralAnalysis.TabStop = false;
-            groupBoxMineralAnalysis.Text = "鉱物・成分判定";
+            groupBoxMineralAnalysis.Text = "マッピング分析";
             // 
-            // groupBoxSpectrumFiles
+            // graphControl1
             // 
-            groupBoxSpectrumFiles.Controls.Add(panel1);
-            groupBoxSpectrumFiles.Location = new Point(16, 165);
-            groupBoxSpectrumFiles.Name = "groupBoxSpectrumFiles";
-            groupBoxSpectrumFiles.Size = new Size(506, 192);
-            groupBoxSpectrumFiles.TabIndex = 43;
-            groupBoxSpectrumFiles.TabStop = false;
-            groupBoxSpectrumFiles.Text = "EDXスペクトルデータ(msaファイル）";
+            graphControl1.AllowMouseOperation = true;
+            graphControl1.AxisLineColor = Color.Gray;
+            graphControl1.AxisTextColor = Color.Black;
+            graphControl1.AxisTextFont = new Font("Segoe UI", 9F);
+            graphControl1.AxisXTextVisible = true;
+            graphControl1.AxisYTextVisible = true;
+            graphControl1.BackgroundColor = Color.White;
+            graphControl1.BottomMargin = 0D;
+            graphControl1.DivisionLineColor = Color.LightGray;
+            graphControl1.DivisionLineXVisible = true;
+            graphControl1.DivisionLineYVisible = true;
+            graphControl1.FixRangeHorizontal = false;
+            graphControl1.FixRangeVertical = false;
+            graphControl1.Font = new Font("Segoe UI Symbol", 9F);
+            graphControl1.GraphTitle = "";
+            graphControl1.IsIntegerX = false;
+            graphControl1.IsIntegerY = false;
+            graphControl1.LabelX = "X:";
+            graphControl1.LabelY = "Y:";
+            graphControl1.LeftMargin = 0F;
+            graphControl1.LineWidth = 1F;
+            graphControl1.Location = new Point(292, 93);
+            graphControl1.LowerX = 0D;
+            graphControl1.LowerY = 0D;
+            graphControl1.MaximalX = 1D;
+            graphControl1.MaximalY = 1D;
+            graphControl1.MinimalX = 0D;
+            graphControl1.MinimalY = 0D;
+            graphControl1.Mode = Crystallography.Controls.GraphControl.DrawingMode.Line;
+            graphControl1.MousePositionVisible = true;
+            graphControl1.MousePositionXDigit = -1;
+            graphControl1.MousePositionYDigit = -1;
+            graphControl1.Name = "graphControl1";
+            graphControl1.OriginPosition = new Point(40, 20);
+            graphControl1.Size = new Size(241, 168);
+            graphControl1.TabIndex = 26;
+            graphControl1.UnitX = "";
+            graphControl1.UnitY = "";
+            graphControl1.UpperPanelFont = new Font("Segoe UI Symbol", 9F);
+            graphControl1.UpperPanelVisible = true;
+            graphControl1.UpperX = 1D;
+            graphControl1.UpperY = 1D;
+            graphControl1.UseLineWidth = true;
+            graphControl1.VerticalLineColor = Color.Red;
+            graphControl1.XLog = false;
+            graphControl1.YLog = false;
             // 
-            // panel1
+            // pictureBox1
             // 
-            panel1.Controls.Add(listBoxSpectrumFiles);
-            panel1.Controls.Add(flowLayoutPanel4);
-            panel1.Location = new Point(9, 22);
-            panel1.Name = "panel1";
-            panel1.Size = new Size(483, 148);
-            panel1.TabIndex = 44;
+            pictureBox1.Location = new Point(16, 93);
+            pictureBox1.Name = "pictureBox1";
+            pictureBox1.Size = new Size(250, 165);
+            pictureBox1.TabIndex = 25;
+            pictureBox1.TabStop = false;
             // 
-            // listBoxSpectrumFiles
+            // flowLayoutPanelModellFolder
             // 
-            listBoxSpectrumFiles.AllowDrop = true;
-            listBoxSpectrumFiles.Dock = DockStyle.Top;
-            listBoxSpectrumFiles.FormattingEnabled = true;
-            listBoxSpectrumFiles.Location = new Point(0, 0);
-            listBoxSpectrumFiles.Name = "listBoxSpectrumFiles";
-            listBoxSpectrumFiles.Size = new Size(483, 124);
-            listBoxSpectrumFiles.TabIndex = 0;
-            listBoxSpectrumFiles.UseWaitCursor = true;
-            // 
-            // flowLayoutPanel4
-            // 
-            flowLayoutPanel4.AutoScroll = true;
-            flowLayoutPanel4.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            flowLayoutPanel4.Controls.Add(buttonAnalyze);
-            flowLayoutPanel4.Controls.Add(buttonRemoveSpectrumFiles);
-            flowLayoutPanel4.Dock = DockStyle.Bottom;
-            flowLayoutPanel4.FlowDirection = FlowDirection.RightToLeft;
-            flowLayoutPanel4.Location = new Point(0, 122);
-            flowLayoutPanel4.Name = "flowLayoutPanel4";
-            flowLayoutPanel4.Size = new Size(483, 26);
-            flowLayoutPanel4.TabIndex = 45;
-            // 
-            // buttonAnalyze
-            // 
-            buttonAnalyze.AutoSize = true;
-            buttonAnalyze.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonAnalyze.Location = new Point(398, 2);
-            buttonAnalyze.Margin = new Padding(3, 2, 3, 2);
-            buttonAnalyze.Name = "buttonAnalyze";
-            buttonAnalyze.Size = new Size(65, 25);
-            buttonAnalyze.TabIndex = 1;
-            buttonAnalyze.Text = "判定開始";
-            buttonAnalyze.UseVisualStyleBackColor = true;
-            // 
-            // buttonRemoveSpectrumFiles
-            // 
-            buttonRemoveSpectrumFiles.AutoSize = true;
-            buttonRemoveSpectrumFiles.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonRemoveSpectrumFiles.Font = new Font("Yu Gothic UI", 8F);
-            buttonRemoveSpectrumFiles.Location = new Point(353, 3);
-            buttonRemoveSpectrumFiles.Name = "buttonRemoveSpectrumFiles";
-            buttonRemoveSpectrumFiles.Size = new Size(39, 23);
-            buttonRemoveSpectrumFiles.TabIndex = 98;
-            buttonRemoveSpectrumFiles.Text = "削除";
-            buttonRemoveSpectrumFiles.UseVisualStyleBackColor = true;
-            // 
-            // groupBoxAnalysisResult
-            // 
-            groupBoxAnalysisResult.Controls.Add(textBoxAnalysisResult);
-            groupBoxAnalysisResult.Dock = DockStyle.Bottom;
-            groupBoxAnalysisResult.Location = new Point(3, 360);
-            groupBoxAnalysisResult.Name = "groupBoxAnalysisResult";
-            groupBoxAnalysisResult.Size = new Size(533, 290);
-            groupBoxAnalysisResult.TabIndex = 43;
-            groupBoxAnalysisResult.TabStop = false;
-            groupBoxAnalysisResult.Text = "判定結果";
-            // 
-            // textBoxAnalysisResult
-            // 
-            textBoxAnalysisResult.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            textBoxAnalysisResult.Location = new Point(6, 27);
-            textBoxAnalysisResult.Multiline = true;
-            textBoxAnalysisResult.Name = "textBoxAnalysisResult";
-            textBoxAnalysisResult.ScrollBars = ScrollBars.Both;
-            textBoxAnalysisResult.Size = new Size(513, 234);
-            textBoxAnalysisResult.TabIndex = 23;
-            // 
-            // groupBoxModelFolder
-            // 
-            groupBoxModelFolder.Controls.Add(comboBox1);
-            groupBoxModelFolder.Controls.Add(flowLayoutPanel1);
-            groupBoxModelFolder.Location = new Point(16, 22);
-            groupBoxModelFolder.Name = "groupBoxModelFolder";
-            groupBoxModelFolder.Size = new Size(506, 119);
-            groupBoxModelFolder.TabIndex = 42;
-            groupBoxModelFolder.TabStop = false;
-            groupBoxModelFolder.Text = "モデル選択";
-            groupBoxModelFolder.VisibleChanged += groupBoxModelFolder_VisibleChanged;
-            // 
-            // comboBox1
-            // 
-            comboBox1.DropDownStyle = ComboBoxStyle.DropDownList;
-            comboBox1.FormattingEnabled = true;
-            comboBox1.Location = new Point(249, 87);
-            comboBox1.Name = "comboBox1";
-            comboBox1.Size = new Size(121, 23);
-            comboBox1.TabIndex = 25;
-            // 
-            // flowLayoutPanel1
-            // 
-            flowLayoutPanel1.AutoScroll = true;
-            flowLayoutPanel1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            flowLayoutPanel1.Controls.Add(labelModelFolder);
-            flowLayoutPanel1.Controls.Add(textBoxModelFolder);
-            flowLayoutPanel1.Controls.Add(buttonSelectModelFolder);
-            flowLayoutPanel1.Location = new Point(9, 35);
-            flowLayoutPanel1.Name = "flowLayoutPanel1";
-            flowLayoutPanel1.Size = new Size(429, 34);
-            flowLayoutPanel1.TabIndex = 24;
+            flowLayoutPanelModellFolder.AutoScroll = true;
+            flowLayoutPanelModellFolder.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            flowLayoutPanelModellFolder.Controls.Add(labelModelFolder);
+            flowLayoutPanelModellFolder.Controls.Add(comboBoxMappingModellFolder);
+            flowLayoutPanelModellFolder.Location = new Point(16, 35);
+            flowLayoutPanelModellFolder.Name = "flowLayoutPanelModellFolder";
+            flowLayoutPanelModellFolder.Size = new Size(207, 35);
+            flowLayoutPanelModellFolder.TabIndex = 24;
             // 
             // labelModelFolder
             // 
@@ -199,30 +133,21 @@
             labelModelFolder.TabIndex = 24;
             labelModelFolder.Text = "モデルフォルダ";
             // 
-            // textBoxModelFolder
+            // comboBoxMappingModellFolder
             // 
-            textBoxModelFolder.Location = new Point(79, 3);
-            textBoxModelFolder.Name = "textBoxModelFolder";
-            textBoxModelFolder.Size = new Size(286, 23);
-            textBoxModelFolder.TabIndex = 23;
-            // 
-            // buttonSelectModelFolder
-            // 
-            buttonSelectModelFolder.AutoSize = true;
-            buttonSelectModelFolder.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonSelectModelFolder.Location = new Point(371, 3);
-            buttonSelectModelFolder.Name = "buttonSelectModelFolder";
-            buttonSelectModelFolder.Size = new Size(26, 25);
-            buttonSelectModelFolder.TabIndex = 1;
-            buttonSelectModelFolder.Text = "...";
-            buttonSelectModelFolder.UseVisualStyleBackColor = true;
+            comboBoxMappingModellFolder.DropDownStyle = ComboBoxStyle.DropDownList;
+            comboBoxMappingModellFolder.FormattingEnabled = true;
+            comboBoxMappingModellFolder.Location = new Point(79, 3);
+            comboBoxMappingModellFolder.Name = "comboBoxMappingModellFolder";
+            comboBoxMappingModellFolder.Size = new Size(121, 23);
+            comboBoxMappingModellFolder.TabIndex = 25;
             // 
             // menuStrip1
             // 
             menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
-            menuStrip1.Size = new Size(569, 24);
+            menuStrip1.Size = new Size(711, 24);
             menuStrip1.TabIndex = 89;
             menuStrip1.Text = "menuStrip1";
             // 
@@ -236,23 +161,19 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(569, 694);
+            ClientSize = new Size(711, 694);
             Controls.Add(groupBoxMineralAnalysis);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
             Name = "AnalyzerForm";
             Text = "AnalyzerForm";
             FormClosing += AnalyzerForm_FormClosing;
+            DragDrop += AnalyzerForm_DragDrop;
+            DragEnter += AnalyzerForm_DragEnter;
             groupBoxMineralAnalysis.ResumeLayout(false);
-            groupBoxSpectrumFiles.ResumeLayout(false);
-            panel1.ResumeLayout(false);
-            flowLayoutPanel4.ResumeLayout(false);
-            flowLayoutPanel4.PerformLayout();
-            groupBoxAnalysisResult.ResumeLayout(false);
-            groupBoxAnalysisResult.PerformLayout();
-            groupBoxModelFolder.ResumeLayout(false);
-            flowLayoutPanel1.ResumeLayout(false);
-            flowLayoutPanel1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
+            flowLayoutPanelModellFolder.ResumeLayout(false);
+            flowLayoutPanelModellFolder.PerformLayout();
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
             ResumeLayout(false);
@@ -266,18 +187,17 @@
         private GroupBox groupBoxSpectrumFiles;
         private GroupBox groupBoxAnalysisResult;
         private TextBox textBoxAnalysisResult;
-        private GroupBox groupBoxModelFolder;
-        private TextBox textBoxModelFolder;
-        private Button buttonSelectModelFolder;
-        private FlowLayoutPanel flowLayoutPanel1;
-        private Label labelModelFolder;
         private ListBox listBoxSpectrumFiles;
         private FlowLayoutPanel flowLayoutPanel4;
         private Button buttonAnalyze;
         private Button buttonRemoveSpectrumFiles;
         private Panel panel1;
-        private ComboBox comboBox1;
         private MenuStrip menuStrip1;
         private ToolStripMenuItem fileToolStripMenuItem;
+        private FlowLayoutPanel flowLayoutPanelModellFolder;
+        private Label labelModelFolder;
+        private ComboBox comboBoxMappingModellFolder;
+        private Crystallography.Controls.GraphControl graphControl1;
+        private PictureBox pictureBox1;
     }
 }
