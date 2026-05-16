@@ -984,6 +984,138 @@ namespace MineraScope
             return 0u;
         }
 
+        // 260516Codex: Reads SEM image samples from 0xA000 PTTD records using the same pixel tracking as the spectrum cube reader.
+        public byte[,]? TryReadSemImage()
+        {
+            if (!HasHeader || Width <= 0 || Height <= 0 || Width > 4096)
+                return null;
+
+            BeginRead();
+            int[,] rawImage = new int[Width, Height];
+            bool[,] hasPixel = new bool[Width, Height];
+            int x = 0;
+            int y = 0;
+            int previousX = 0;
+            int previousY = 0;
+            int coordinateUnit = 4096 / Width;
+            int filledPixels = 0;
+            int expectedPixels = Width * Height;
+
+            if (coordinateUnit <= 0)
+                return null;
+
+            try
+            {
+                while (true)
+                {
+                    ushort record = reader.ReadUInt16();
+                    int value = record & 0xFFF;
+                    switch (record & 0xF000)
+                    {
+                        case 0x8000:
+                            if (previousX != value)
+                            {
+                                x = (previousX == 0 || value != 0) ? value / coordinateUnit : 0;
+                                previousX = value;
+                            }
+                            break;
+                        case 0x9000:
+                            if (previousY == value)
+                                break;
+
+                            y = previousY != 0 && value == 0 ? 0 : value / coordinateUnit;
+                            x = 0;
+                            previousY = value;
+                            break;
+                        case 0xA000:
+                            if (x < 0 || x >= Width || y < 0 || y >= Height)
+                                break;
+
+                            rawImage[x, y] = value;
+                            if (!hasPixel[x, y])
+                            {
+                                hasPixel[x, y] = true;
+                                filledPixels++;
+                            }
+                            if (filledPixels == expectedPixels)
+                                return NormalizeSemImage(rawImage, hasPixel);
+                            break;
+                    }
+                }
+            }
+            catch (EndOfStreamException)
+            {
+            }
+
+            if (filledPixels == 0)
+                return null;
+
+            return NormalizeSemImage(rawImage, hasPixel);
+        }
+
+        // 260516Codex: Normalizes 0xA000 SEM signal values to the byte image consumed by Image1ToBitmap.
+        private byte[,] NormalizeSemImage(int[,] rawImage, bool[,] hasPixel)
+        {
+            int minValue = int.MaxValue;
+            int maxValue = int.MinValue;
+            for (int i = 0; i < Width; i++)
+            {
+                for (int j = 0; j < Height; j++)
+                {
+                    if (!hasPixel[i, j])
+                        continue;
+
+                    minValue = Math.Min(minValue, rawImage[i, j]);
+                    maxValue = Math.Max(maxValue, rawImage[i, j]);
+                }
+            }
+
+            byte[,] image = new byte[Width, Height];
+            if (maxValue <= byte.MaxValue)
+            {
+                for (int i = 0; i < Width; i++)
+                {
+                    for (int j = 0; j < Height; j++)
+                    {
+                        if (hasPixel[i, j])
+                            image[i, j] = (byte)rawImage[i, j];
+                    }
+                }
+                return image;
+            }
+
+            int range = maxValue - minValue;
+            if (range == 0)
+            {
+                for (int i = 0; i < Width; i++)
+                {
+                    for (int j = 0; j < Height; j++)
+                    {
+                        if (hasPixel[i, j])
+                            image[i, j] = byte.MaxValue;
+                    }
+                }
+                return image;
+            }
+
+            for (int i = 0; i < Width; i++)
+            {
+                for (int j = 0; j < Height; j++)
+                {
+                    if (hasPixel[i, j])
+                        image[i, j] = (byte)((rawImage[i, j] - minValue) * byte.MaxValue / range);
+                }
+            }
+            return image;
+        }
+
+        // 260516Codex: Converts the SEM image read from 0xA000 PTTD records through the existing image1 bitmap path.
+        public Bitmap? TryReadSemImageBitmap()
+        {
+            image1 = TryReadSemImage();
+            return Image1ToBitmap();
+        }
+
         public Bitmap Image1ToBitmap()
         {
             if (image1 == null)
