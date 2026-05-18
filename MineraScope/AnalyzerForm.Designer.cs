@@ -112,6 +112,7 @@
             pictureBox1.Size = new Size(250, 165);
             pictureBox1.TabIndex = 25;
             pictureBox1.TabStop = false;
+            pictureBox1.MouseClick += pictureBox1_MouseClick;
             // 
             // flowLayoutPanelModellFolder
             // 

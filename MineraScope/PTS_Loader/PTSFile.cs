@@ -38,6 +38,9 @@ namespace MineraScope
 
         public delegate void ProgressCallBackD(double val);
 
+        // 260518Codex: クリック表示用の全スペクトルキューブは約2GBを超えない範囲だけ読み込みます。
+        private const long MaxSpectrumCubeBytes = 2L * 1024 * 1024 * 1024;
+
         public int ChannelCount = 2048;
 
         private BufferedStream stream;
@@ -648,6 +651,109 @@ namespace MineraScope
         {
             SpectrumCube = GetSpectrumCubeT(startFrame, frame_cnt);
             return SpectrumCube.GetIntPtr();
+        }
+
+        // 260518Codex: PTTD stream の全フレーム X 線イベントを1ピクセル単位のスペクトルキューブへ合算します。
+        internal PtsSpectrumCube? TryReadSpectrumCube()
+        {
+            if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096)
+                return null;
+
+            int coordinateUnit = 4096 / Width;
+            if (coordinateUnit <= 0)
+                return null;
+
+            long valueCount = (long)Width * Height * ChannelCount;
+            long requiredBytes = valueCount * sizeof(int);
+            if (valueCount > int.MaxValue || requiredBytes >= MaxSpectrumCubeBytes)
+                throw new InvalidDataException(
+                    $"PTSスペクトルキューブが大きすぎます。必要メモリ: {requiredBytes / 1024 / 1024:N0} MB");
+
+            var counts = new int[(int)valueCount];
+            BeginRead();
+
+            int x = 0;
+            int y = 0;
+            int previousX = 0;
+            int previousY = 0;
+            int realTimeRecords = 0;
+            int liveTimeRecords = 0;
+            int completedFrames = 0;
+            long totalXrayCounts = 0;
+            long endOffset = stream.Length;
+            if (header.Id != null && header.PttdSize > 0)
+                endOffset = Math.Min((long)header.PttdOffset + header.PttdSize, stream.Length);
+
+            try
+            {
+                while (stream.Position + sizeof(ushort) <= endOffset)
+                {
+                    ushort record = reader.ReadUInt16();
+                    int value = record & 0xFFF;
+                    switch (record & 0xF000)
+                    {
+                        case 0x6000:
+                            realTimeRecords++;
+                            break;
+                        case 0x7000:
+                            liveTimeRecords++;
+                            break;
+                        case 0x8000:
+                            if (previousX != value)
+                            {
+                                x = previousX == 0 || value != 0 ? value / coordinateUnit : 0;
+                                previousX = value;
+                            }
+                            break;
+                        case 0x9000:
+                            if (previousY == value)
+                                break;
+
+                            if (previousY != 0 && value == 0)
+                            {
+                                y = 0;
+                                completedFrames++;
+                            }
+                            else
+                                y = value / coordinateUnit;
+
+                            x = 0;
+                            previousY = value;
+                            break;
+                        case 0xB000:
+                            int channel = value - parameter.ChannelOffset;
+                            if (channel <= parameter.DigitalLLD || channel >= ChannelCount)
+                                break;
+
+                            if (x < 0 || x >= Width || y < 0 || y >= Height)
+                                break;
+
+                            long index = ((long)y * Width + x) * ChannelCount + channel;
+                            counts[(int)index]++;
+                            totalXrayCounts++;
+                            break;
+                    }
+                }
+            }
+            catch (EndOfStreamException)
+            {
+            }
+
+            realTime = realTimeRecords;
+            liveTime = liveTimeRecords;
+            frameNumbers = completedFrames;
+            xcounts = totalXrayCounts;
+
+            if (totalXrayCounts == 0)
+                return null;
+
+            return new PtsSpectrumCube(
+                Width,
+                Height,
+                ChannelCount,
+                parameter.CoefB,
+                parameter.CoefA,
+                counts);
         }
 
         //private bool CreateStringsAttribute(long objectId, string title, IEnumerable<string> strs)
