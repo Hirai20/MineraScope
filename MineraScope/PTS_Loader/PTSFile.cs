@@ -38,9 +38,6 @@ namespace MineraScope
 
         public delegate void ProgressCallBackD(double val);
 
-        // 260518Codex: クリック表示用の全スペクトルキューブは約2GBを超えない範囲だけ読み込みます。
-        private const long MaxSpectrumCubeBytes = 2L * 1024 * 1024 * 1024;
-
         public int ChannelCount = 2048;
 
         private BufferedStream stream;
@@ -653,23 +650,25 @@ namespace MineraScope
             return SpectrumCube.GetIntPtr();
         }
 
-        // 260518Codex: PTTD stream の全フレーム X 線イベントを1ピクセル単位のスペクトルキューブへ合算します。
-        internal PtsSpectrumCube? TryReadSpectrumCube()
+        // 260520Codex: PTTD stream を走査し、指定された1ピクセルのX線イベントだけを全フレーム合算します。
+        internal PtsPixelSpectrum? TryReadPixelSpectrum(int targetX, int targetY)
         {
             if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096)
+                return null;
+
+            if (targetX < 0 || targetX >= Width || targetY < 0 || targetY >= Height)
                 return null;
 
             int coordinateUnit = 4096 / Width;
             if (coordinateUnit <= 0)
                 return null;
 
-            long valueCount = (long)Width * Height * ChannelCount;
-            long requiredBytes = valueCount * sizeof(int);
-            if (valueCount > int.MaxValue || requiredBytes >= MaxSpectrumCubeBytes)
-                throw new InvalidDataException(
-                    $"PTSスペクトルキューブが大きすぎます。必要メモリ: {requiredBytes / 1024 / 1024:N0} MB");
+            // 260520Codex: PTS 属性とファイル側の小さい方を読み取り対象チャンネル数にします。
+            int usableChannelCount = Math.Min(ChannelCount, parameter.ChannelCount);
+            if (usableChannelCount <= 0)
+                return null;
 
-            var counts = new int[(int)valueCount];
+            int[] counts = new int[usableChannelCount];
             BeginRead();
 
             int x = 0;
@@ -721,15 +720,14 @@ namespace MineraScope
                             previousY = value;
                             break;
                         case 0xB000:
+                            if (x != targetX || y != targetY)
+                                break;
+
                             int channel = value - parameter.ChannelOffset;
-                            if (channel <= parameter.DigitalLLD || channel >= ChannelCount)
+                            if (channel <= parameter.DigitalLLD || channel >= usableChannelCount)
                                 break;
 
-                            if (x < 0 || x >= Width || y < 0 || y >= Height)
-                                break;
-
-                            long index = ((long)y * Width + x) * ChannelCount + channel;
-                            counts[(int)index]++;
+                            counts[channel]++;
                             totalXrayCounts++;
                             break;
                     }
@@ -744,13 +742,10 @@ namespace MineraScope
             frameNumbers = completedFrames;
             xcounts = totalXrayCounts;
 
-            if (totalXrayCounts == 0)
-                return null;
-
-            return new PtsSpectrumCube(
-                Width,
-                Height,
-                ChannelCount,
+            return new PtsPixelSpectrum(
+                targetX,
+                targetY,
+                usableChannelCount,
                 parameter.CoefB,
                 parameter.CoefA,
                 counts);

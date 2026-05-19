@@ -51,7 +51,7 @@
             groupBoxMineralAnalysis.Controls.Add(flowLayoutPanelModellFolder);
             groupBoxMineralAnalysis.Location = new Point(12, 29);
             groupBoxMineralAnalysis.Name = "groupBoxMineralAnalysis";
-            groupBoxMineralAnalysis.Size = new Size(598, 653);
+            groupBoxMineralAnalysis.Size = new Size(669, 653);
             groupBoxMineralAnalysis.TabIndex = 88;
             groupBoxMineralAnalysis.TabStop = false;
             groupBoxMineralAnalysis.Text = "マッピング分析";
@@ -79,7 +79,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(292, 93);
+            graphControl1.Location = new Point(372, 93);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -92,7 +92,7 @@
             graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
             graphControl1.OriginPosition = new Point(40, 20);
-            graphControl1.Size = new Size(241, 168);
+            graphControl1.Size = new Size(273, 217);
             graphControl1.TabIndex = 26;
             graphControl1.UnitX = "";
             graphControl1.UnitY = "";
@@ -109,7 +109,7 @@
             // 
             pictureBox1.Location = new Point(16, 93);
             pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(250, 165);
+            pictureBox1.Size = new Size(288, 217);
             pictureBox1.TabIndex = 25;
             pictureBox1.TabStop = false;
             pictureBox1.MouseClick += pictureBox1_MouseClick;

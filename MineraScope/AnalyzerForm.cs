@@ -15,8 +15,11 @@ namespace MineraScope
         // 260517Codex: 現在表示中の PTS ファイルをクリック後のグラフタイトルへ反映します。
         private string? _currentPtsFilePath;
 
-        // 260517Codex: PTS ドロップ時に読み込んだ全フレーム合算スペクトルキューブを保持します。
-        private PtsSpectrumCube? _currentSpectrumCube;
+        // 260519Codex: 読み取り済みピクセルスペクトルを座標ごとに保持し、同じ点の再クリックを速くします。
+        private readonly Dictionary<Point, PtsPixelSpectrum> _pixelSpectrumCache = [];
+
+        // 260519Codex: 後から完了した古いクリック読み取りが最新表示を上書きしないようにします。
+        private int _spectrumReadVersion;
 
         // 260416Codex: AnalyzerForm の UI 配線をフォーム本体にまとめて保守しやすくします。
         public AnalyzerForm()
@@ -100,7 +103,7 @@ namespace MineraScope
             this.Visible = false;
         }
 
-        // 260518Codex: .pts ドロップ時に SEM画像と全フレーム合算スペクトルキューブを同時に読み込みます。
+        // 260519Codex: .pts ドロップ時は SEM画像だけを読み込み、EDXスペクトルはクリック時に1ピクセルだけ読みます。
         private async void AnalyzerForm_DragDrop(object? sender, DragEventArgs e)
         {
             if (!TryGetSingleDroppedPtsFile(e, out var filePath))
@@ -110,7 +113,7 @@ namespace MineraScope
             UseWaitCursor = true;
             try
             {
-                var (semImage, spectrumCube) = await Task.Run(() => LoadPtsSemImageAndSpectrumCube(filePath));
+                Bitmap? semImage = await Task.Run(() => LoadPtsSemImage(filePath));
 
                 if (semImage is null)
                 {
@@ -122,27 +125,15 @@ namespace MineraScope
                     return;
                 }
 
-                if (spectrumCube is null)
-                {
-                    semImage.Dispose();
-                    MessageBox.Show(
-                        "このPTSファイルからEDXスペクトルキューブを読み取れませんでした。",
-                        "PTS EDXスペクトル",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
-                    return;
-                }
-
                 _currentPtsFilePath = filePath;
-                _currentSpectrumCube = spectrumCube;
                 pictureBox1.Image = semImage;
                 graphControl1.GraphTitle = Path.GetFileName(filePath);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(
-                    $"PTSファイルからSEM画像またはEDXスペクトルを読み取れませんでした。\r\n{ex.Message}",
-                    "PTS SEM/EDX",
+                    $"PTSファイルからSEM画像を読み取れませんでした。\r\n{ex.Message}",
+                    "PTS SEM画像",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
             }
@@ -152,30 +143,19 @@ namespace MineraScope
             }
         }
 
-        // 260517Codex: PTS 読み取り処理をバックグラウンド側でまとめ、UI スレッドには結果だけ返します。
-        private static (Bitmap? SemImage, PtsSpectrumCube? SpectrumCube) LoadPtsSemImageAndSpectrumCube(string filePath)
+        // 260519Codex: PTS の SEM画像だけをバックグラウンド側で読み込みます。
+        private static Bitmap? LoadPtsSemImage(string filePath)
         {
             using var pts = new PTSFile(filePath);
-            Bitmap? semImage = pts.TryReadSemImageBitmap();
-            if (semImage is null)
-                return (null, null);
-
-            try
-            {
-                return (semImage, pts.TryReadSpectrumCube());
-            }
-            catch
-            {
-                semImage.Dispose();
-                throw;
-            }
+            return pts.TryReadSemImageBitmap();
         }
 
-        // 260517Codex: 新しい PTS を読み込む前に古い画像・キューブ・グラフ表示を破棄します。
+        // 260519Codex: 新しい PTS を読み込む前に古い画像・キャッシュ・グラフ表示を破棄します。
         private void ClearLoadedPtsData()
         {
             _currentPtsFilePath = null;
-            _currentSpectrumCube = null;
+            _pixelSpectrumCache.Clear();
+            _spectrumReadVersion++;
             pictureBox1.Image?.Dispose();
             pictureBox1.Image = null;
             graphControl1.GraphTitle = "";
@@ -228,28 +208,72 @@ namespace MineraScope
             return true;
         }
 
-        // 260518Codex: Designer で接続済みのクリックイベントから PTS ピクセルのEDXスペクトルを表示します。
-        private void pictureBox1_MouseClick(object sender, MouseEventArgs e)
+        // 260520Codex: Designer で接続済みのクリックイベントから、現在のPTSファイル上の1ピクセルスペクトルを表示します。
+        private async void pictureBox1_MouseClick(object sender, MouseEventArgs e)
         {
-            if (e.Button != MouseButtons.Left || _currentSpectrumCube is not { } spectrumCube)
+            if (e.Button != MouseButtons.Left || string.IsNullOrWhiteSpace(_currentPtsFilePath))
                 return;
 
             if (!TryGetImagePixelFromZoomedPictureBox(e.Location, out int x, out int y))
                 return;
 
-            if (x >= spectrumCube.Width || y >= spectrumCube.Height)
+            string filePath = _currentPtsFilePath;
+            Point pixel = new(x, y);
+            int readVersion = ++_spectrumReadVersion;
+            PtsPixelSpectrum? pixelSpectrum = await GetPixelSpectrumAsync(filePath, pixel);
+            if (readVersion != _spectrumReadVersion || pixelSpectrum is null)
                 return;
 
-            string fileName = string.IsNullOrWhiteSpace(_currentPtsFilePath)
-                ? "PTS"
-                : Path.GetFileName(_currentPtsFilePath);
+            string fileName = Path.GetFileName(filePath);
             graphControl1.LabelX = "Energy";
             graphControl1.UnitX = "keV";
             graphControl1.LabelY = "Counts";
             graphControl1.UnitY = "";
             graphControl1.GraphTitle = $"{fileName} ({x}, {y})";
-            graphControl1.Profile = CreateSpectrumProfile(spectrumCube, x, y);
+            graphControl1.Profile = CreateSpectrumProfile(pixelSpectrum);
             graphControl1.Refresh();
+        }
+
+        // 260520Codex: 未読のピクセルだけ PTS stream を走査し、読み取り済みならキャッシュから返します。
+        private async Task<PtsPixelSpectrum?> GetPixelSpectrumAsync(string filePath, Point pixel)
+        {
+            if (_pixelSpectrumCache.TryGetValue(pixel, out var cachedSpectrum))
+                return cachedSpectrum;
+
+            UseWaitCursor = true;
+            try
+            {
+                PtsPixelSpectrum? spectrum = await Task.Run(() =>
+                {
+                    using var pts = new PTSFile(filePath);
+                    return pts.TryReadPixelSpectrum(pixel.X, pixel.Y);
+                });
+                if (spectrum is null)
+                {
+                    MessageBox.Show(
+                        "このピクセルのEDXスペクトルを読み取れませんでした。",
+                        "PTS EDXスペクトル",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return null;
+                }
+
+                _pixelSpectrumCache[pixel] = spectrum;
+                return spectrum;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"PTSファイルからEDXスペクトルを読み取れませんでした。\r\n{ex.Message}",
+                    "PTS EDXスペクトル",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return null;
+            }
+            finally
+            {
+                UseWaitCursor = false;
+            }
         }
 
         // 260518Codex: PictureBox の Zoom 表示余白を除外し、クリック位置を実画像ピクセルへ戻します。
@@ -298,12 +322,12 @@ namespace MineraScope
             return new Rectangle(client.Left, top, zoomedWidth, zoomedHeight);
         }
 
-        // 260518Codex: クリックされた1ピクセルの全チャンネルカウントを GraphControl 用 Profile に変換します。
-        private static Profile CreateSpectrumProfile(PtsSpectrumCube spectrumCube, int x, int y)
+        // 260519Codex: クリックされた1ピクセルの全チャンネルカウントを GraphControl 用 Profile に変換します。
+        private static Profile CreateSpectrumProfile(PtsPixelSpectrum spectrum)
         {
-            var points = new List<PointD>(spectrumCube.ChannelCount);
-            for (int channel = 0; channel < spectrumCube.ChannelCount; channel++)
-                points.Add(new PointD(spectrumCube.GetEnergy(channel), spectrumCube.GetCount(x, y, channel)));
+            var points = new List<PointD>(spectrum.ChannelCount);
+            for (int channel = 0; channel < spectrum.ChannelCount; channel++)
+                points.Add(new PointD(spectrum.GetEnergy(channel), spectrum.GetCount(channel)));
 
             return new Profile(points);
         }
