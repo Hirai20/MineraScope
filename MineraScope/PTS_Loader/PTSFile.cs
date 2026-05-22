@@ -650,14 +650,21 @@ namespace MineraScope
             return SpectrumCube.GetIntPtr();
         }
 
-        // 260520Codex: PTTD stream を走査し、指定された1ピクセルのX線イベントだけを全フレーム合算します。
-        internal PtsPixelSpectrum? TryReadPixelSpectrum(int targetX, int targetY)
+        // 260522Codex: Sum all PTTD X-ray events inside the selected clamped bin window in one stream pass.
+        internal PtsPixelSpectrum? TryReadBinnedPixelSpectrum(int targetX, int targetY, int binSize)
         {
-            if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096)
+            if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096 || binSize <= 0)
                 return null;
 
             if (targetX < 0 || targetX >= Width || targetY < 0 || targetY >= Height)
                 return null;
+
+            int beforeCenter = binSize / 2;
+            int afterCenter = binSize - beforeCenter - 1;
+            int binLeft = Math.Max(0, targetX - beforeCenter);
+            int binTop = Math.Max(0, targetY - beforeCenter);
+            int binRight = Math.Min(Width - 1, targetX + afterCenter);
+            int binBottom = Math.Min(Height - 1, targetY + afterCenter);
 
             int coordinateUnit = 4096 / Width;
             if (coordinateUnit <= 0)
@@ -720,7 +727,7 @@ namespace MineraScope
                             previousY = value;
                             break;
                         case 0xB000:
-                            if (x != targetX || y != targetY)
+                            if (x < binLeft || x > binRight || y < binTop || y > binBottom)
                                 break;
 
                             int channel = value - parameter.ChannelOffset;
@@ -748,7 +755,12 @@ namespace MineraScope
                 usableChannelCount,
                 parameter.CoefB,
                 parameter.CoefA,
-                counts);
+                counts,
+                binLeft,
+                binTop,
+                binRight,
+                binBottom,
+                binSize);
         }
 
         //private bool CreateStringsAttribute(long objectId, string title, IEnumerable<string> strs)

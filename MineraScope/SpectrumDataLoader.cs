@@ -103,6 +103,20 @@ namespace MineraScope
             return values;
         }
 
+        // 260521Codex: Converts one PTS pixel spectrum into the same normalized 2048 point input used by trained models.
+        public static float[]? CreateNormalizedSpectrum(PtsPixelSpectrum spectrum)
+        {
+            if (spectrum.ChannelCount != SpectrumLength)
+                return null;
+
+            float[] values = new float[SpectrumLength];
+            for (int channel = 0; channel < SpectrumLength; channel++)
+                values[channel] = spectrum.GetCount(channel);
+
+            NormalizeSpectrum(values);
+            return values;
+        }
+
         // 260514Codex: spectrum 1 ファイルの読み込み前後をキャンセル確認の最小単位としてそろえます。
         private static float[]? LoadNormalizedSpectrumWithCancellation(
             string filePath,

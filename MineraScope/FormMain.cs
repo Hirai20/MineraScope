@@ -29,6 +29,9 @@ namespace MineraScope
 
         // 260507Codex: モデル一覧の再構築後に前回選択していたモデル名を復元します。
         private string _savedSelectedModelName = string.Empty;
+
+        // 260522Codex: 利用可能モデル一覧の単一の真実源。FormMain と AnalyzerForm が同じインスタンスから描画します。
+        private readonly ModelCatalog _modelCatalog = new();
         // 260508Codex: FormMain の設定ファイル名を保存・復元で共有します。
         private const string UserSettingsFileName = "FormMainSettings.json";
 
@@ -63,6 +66,8 @@ namespace MineraScope
         public FormMain()
         {
             InitializeComponent();
+            // 260522Codex: モデル一覧の更新通知でコンボを再描画するよう、設定復元より前に購読します。
+            _modelCatalog.Changed += OnModelCatalogChanged;
             // 260507Codex: 共通パス欄は前回終了時の入力値を先に復元します。
             LoadUserSettings();
             // 260424Codex: 共通ファイルパス設定は FormMain 側で初期化して子フォームから参照します。
@@ -116,11 +121,11 @@ namespace MineraScope
                 FormMain = this
             };
 
-            // 260416Codex: 解析フォーム側の親参照も同じ名前へ統一します。
+            // 260522Codex: 解析フォームは共有カタログから描画するので、親参照ではなくカタログを渡します。
             AnalyzerForm = new AnalyzerForm
             {
                 Visible = false,
-                FormMain = this
+                ModelCatalog = _modelCatalog
             };
         }
 
@@ -169,33 +174,17 @@ namespace MineraScope
         // 260507Codex: モデル保存先フォルダの直下にある各フォルダを、使用モデルとして選べるようにします。
         // 260508Codex: GeneratorForm の学習完了後にも、作成されたモデル名を選択状態で一覧更新できるようにします。
         public void RefreshModelPathList(string preferredModelName = "")
+            => _modelCatalog.Update(ModelPath, preferredModelName);
+
+        // 260522Codex: カタログ更新時に自フォームのモデル選択コンボを再描画します（前回選択 → 保存済み名でフォールバック）。
+        private void OnModelCatalogChanged(object? sender, ModelCatalogChangedEventArgs e)
         {
             string previousSelection = comboBoxModelPath.SelectedItem as string ?? string.Empty;
-            string preferredSelection = preferredModelName;
-            if (string.IsNullOrWhiteSpace(preferredSelection))
-            {
-                preferredSelection = !string.IsNullOrWhiteSpace(previousSelection)
-                    ? previousSelection
-                    : _savedSelectedModelName;
-            }
+            string target = !string.IsNullOrWhiteSpace(e.PreferredModelName) ? e.PreferredModelName
+                : !string.IsNullOrWhiteSpace(previousSelection) ? previousSelection
+                : _savedSelectedModelName;
 
-            comboBoxModelPath.BeginUpdate();
-            comboBoxModelPath.Items.Clear();
-
-            if (Directory.Exists(ModelPath))
-            {
-                foreach (string directoryPath in Directory.GetDirectories(ModelPath).OrderBy(Path.GetFileName))
-                    comboBoxModelPath.Items.Add(Path.GetFileName(directoryPath));
-            }
-
-            if (!string.IsNullOrWhiteSpace(preferredSelection) && comboBoxModelPath.Items.Contains(preferredSelection))
-                comboBoxModelPath.SelectedItem = preferredSelection;
-            else if (comboBoxModelPath.Items.Count > 0)
-            {
-                comboBoxModelPath.SelectedIndex = 0;
-            }
-
-            comboBoxModelPath.EndUpdate();
+            ModelComboBinder.Populate(comboBoxModelPath, _modelCatalog.ModelNames, target);
         }
 
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
@@ -210,13 +199,14 @@ namespace MineraScope
 
         private void buttonOpenAnalyzer_Click(object sender, EventArgs e)
         {
+            // 260522Codex: 開く直前にカタログを再走査し、ディスク上で増えたモデルフォルダを両コンボへ反映します。
+            _modelCatalog.Update(ModelPath);
+
             // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに AnalyzerForm を残します。
             if (AnalyzerForm.Visible)
                 AnalyzerForm.BringToFront();
             else
-            {
                 AnalyzerForm.Visible = true;
-            }
         }
 
         // 260430Codex: 判定中は追加ドロップを受け付けず、単一スペクトルだけをコピー可能にします。

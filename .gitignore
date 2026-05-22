@@ -19,3 +19,5 @@ Thumbs.db
 
 # 260416Codex: Codex local instructions file should stay untracked.
 agents.md
+# 260522Claude: Claude Code local instructions file should stay untracked.
+CLAUDE.md

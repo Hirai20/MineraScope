@@ -579,7 +579,7 @@ namespace MineraScope
 
         #endregion
         #region 学習済みモデルを利用して予測
-        // 260430Codex: 予測処理は共通の正規化 helper と null guard を使い、無効データを早期にスキップします。
+        // 260522Codex: 予測はファイル走査とログ整形だけを担い、推論は分類/回帰サービスへ委譲します。
         public void RunPrediction(string modelPath, List<string> files, string assemblyPath)
         {
             try
@@ -596,19 +596,10 @@ namespace MineraScope
                     Log("分類モデルが見つかりません。");
                     return;
                 }
-                keras.backend.clear_session();
-                var classificationModel = keras.models.load_model(classificationPath);
-                string encoderPath = Path.Combine(classificationPath, "labelEncoder.json");
-                if (!File.Exists(encoderPath))
+
+                if (!File.Exists(Path.Combine(classificationPath, "labelEncoder.json")))
                 {
                     Log("labelEncoder.json が見つかりません。");
-                    return;
-                }
-                var encoder = System.Text.Json.JsonSerializer
-                    .Deserialize<Dictionary<string, int>>(File.ReadAllText(encoderPath));
-                if (encoder == null || encoder.Count == 0)
-                {
-                    Log("labelEncoder.json の内容を読み取れませんでした。");
                     return;
                 }
 
@@ -617,76 +608,32 @@ namespace MineraScope
                     Log("予測対象のファイルがありません。");
                     return;
                 }
+
+                var classificationService = new MineralClassificationPredictionService();
+                var regressionService = new MineralRegressionPredictionService();
+
                 foreach (var filePath in files)
                 {
                     var spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath);
                     if (spectrum == null)
                         continue;
 
-                    var spectrumReshaped = np.array(spectrum).reshape(new Shape(1, SpectrumLength));
+                    var classification = classificationService.Predict(modelPath, spectrum);
 
-                    // 分類予測
-                    var classificationPrediction = classificationModel.predict(spectrumReshaped);
-                    var classPredArray = classificationPrediction.numpy().ToArray<float>();
-
-                    // 最も確率が高いクラスを取得
-                    int predictedClassIndex = Array.IndexOf(classPredArray, classPredArray.Max());
-                    string predictedMineral = encoder.FirstOrDefault(x => x.Value == predictedClassIndex).Key;
-                    float confidence = classPredArray[predictedClassIndex] * 100;
                     Log($"\r\nファイル: {Path.GetFileName(filePath)}");
-                    Log($"【分類結果】");
-                    Log($"  予測鉱物: {predictedMineral} ({confidence:F2}%)");
-                    var sortedResults = encoder.OrderByDescending(x => classPredArray[x.Value]);
-                    foreach (var kvp in sortedResults)
-                    {
-                        Log($"    {kvp.Key}: {classPredArray[kvp.Value] * 100:F2}%");
-                    }
+                    Log("【分類結果】");
+                    Log($"  予測鉱物: {classification.PredictedMineral} ({classification.Confidence * 100:F2}%)");
+                    foreach (var probability in classification.Probabilities)
+                        Log($"    {probability.MineralName}: {probability.Confidence * 100:F2}%");
 
-                    // 260430Codex: 処理時間表示を外し、成分比率予測結果だけをログに残します。
-                    string[] candidates = Directory.GetDirectories(modelPath, $"{predictedMineral}*_Regression");
+                    // 260522Codex: 予測鉱物名に対応する回帰モデルだけを成分比率予測の候補にします。
+                    string[] candidates = Directory.GetDirectories(modelPath, $"{classification.PredictedMineral}*_Regression");
                     if (candidates.Length == 0)
                         continue;
 
-                    Log($"【成分比率予測】");
-
-                    keras.backend.clear_session();
+                    Log("【成分比率予測】");
                     foreach (var regressionPath in candidates)
-                    {
-                        var regressionModel = keras.models.load_model(regressionPath);
-                        string modelName = Path.GetFileName(regressionPath); // 例: Olivine_10mol%_Regression
-
-                        Log($"\n  モデル: {modelName}"); // どのモデルかを表示
-
-                        string componentPath = Path.Combine(regressionPath, "componentIndex.json");
-                        var componentIndex = System.Text.Json.JsonSerializer
-                            .Deserialize<Dictionary<string, int>>(File.ReadAllText(componentPath));
-                        if (componentIndex == null || componentIndex.Count == 0)
-                            continue;
-
-                        var componentNames = componentIndex.OrderBy(x => x.Value).Select(x => x.Key).ToArray();
-
-                        var regressionPrediction = regressionModel.predict(spectrumReshaped);
-                        var regPredArray = regressionPrediction.numpy().ToArray<float>();
-
-                        var predValues = new float[componentNames.Length];
-                        float sum = 0;
-
-                        for (int j = 0; j < componentNames.Length; j++)
-                        {
-                            predValues[j] = Math.Max(regPredArray[j], 0.0f);
-                            sum += predValues[j];
-                        }
-
-                        var resultRatios = new Dictionary<string, float>();
-                        Log($"  予測端成分比率:");
-                        for (int j = 0; j < componentNames.Length; j++)
-                        {
-                            float ratio = sum > 0 ? predValues[j] / sum : 0;
-                            resultRatios.Add(componentNames[j], ratio);
-                            Log($"    {componentNames[j]}: {ratio * 100:F0}");
-                        }
-                        Log($" 化学組成式: {GenerateFormula(resultRatios, predictedMineral, assemblyPath)}");
-                    }
+                        LogRegressionResult(regressionService, regressionPath, spectrum, classification.PredictedMineral, assemblyPath);
                 }
             }
             catch (Exception ex)
@@ -694,6 +641,38 @@ namespace MineraScope
                 Log($"\nエラー: {ex.Message}");
                 Log($"スタックトレース: {ex.StackTrace}");
             }
+        }
+
+        // 260522Codex: 1 つの回帰候補を推論し、端成分比率と化学組成式をログへ出力します。
+        private void LogRegressionResult(
+            MineralRegressionPredictionService regressionService,
+            string regressionPath,
+            float[] normalizedSpectrum,
+            string predictedMineral,
+            string assemblyPath)
+        {
+            Log($"\n  モデル: {Path.GetFileName(regressionPath)}");
+
+            MineralRegressionResult regression;
+            try
+            {
+                regression = regressionService.Predict(regressionPath, normalizedSpectrum);
+            }
+            catch (Exception ex)
+            {
+                Log($"  回帰予測をスキップしました: {ex.Message}");
+                return;
+            }
+
+            var resultRatios = new Dictionary<string, float>();
+            Log("  予測端成分比率:");
+            foreach (var component in regression.Components)
+            {
+                resultRatios[component.ComponentName] = component.Ratio;
+                Log($"    {component.ComponentName}: {component.Ratio * 100:F0}");
+            }
+
+            Log($" 化学組成式: {GenerateFormula(resultRatios, predictedMineral, assemblyPath)}");
         }
         #endregion
         //分類モデルで予測された固溶体の化学組成を生成

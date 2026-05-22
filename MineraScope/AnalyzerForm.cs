@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -10,24 +11,93 @@ namespace MineraScope
 {
     public partial class AnalyzerForm : Form
     {
-        public FormMain FormMain;
+        // 260522Codex: 共有モデルカタログ。代入時に購読し、以後はカタログの更新通知だけで一覧を同期します。
+        private ModelCatalog? _modelCatalog;
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        internal ModelCatalog ModelCatalog
+        {
+            set
+            {
+                _modelCatalog = value;
+                _modelCatalog.Changed += OnModelCatalogChanged;
+                PopulateMappingModelFolders(string.Empty);
+            }
+        }
 
         // 260517Codex: 現在表示中の PTS ファイルをクリック後のグラフタイトルへ反映します。
         private string? _currentPtsFilePath;
 
-        // 260519Codex: 読み取り済みピクセルスペクトルを座標ごとに保持し、同じ点の再クリックを速くします。
-        private readonly Dictionary<Point, PtsPixelSpectrum> _pixelSpectrumCache = [];
+        // 260522Codex: Cache clicked spectra by pixel and binning size so experiments do not reuse another bin.
+        private readonly Dictionary<(Point Pixel, int BinSize), PtsPixelSpectrum> _pixelSpectrumCache = [];
+
+        // 260522Codex: Keep the first binning candidates small enough for experiments while covering low-count spectra.
+        private static readonly int[] BinningSizes = [3, 5, 7, 10, 20];
+
+        // 260522Codex: Default to 10x10 as the first low-count classification baseline.
+        private const int DefaultBinningSize = 10;
 
         // 260519Codex: 後から完了した古いクリック読み取りが最新表示を上書きしないようにします。
         private int _spectrumReadVersion;
+
+        // 260522Codex: One service instance keeps the loaded classification model warm across clicks.
+        private readonly MineralClassificationPredictionService _classificationService = new();
 
         // 260416Codex: AnalyzerForm の UI 配線をフォーム本体にまとめて保守しやすくします。
         public AnalyzerForm()
         {
             InitializeComponent();
+            InitializeBinningOptions();
             InitializeMineralJudgeEvents();
             // 260516Codex: AnalyzerForm と子コントロール上の .pts ドロップでSEM画像を受け取れるようにします。
             InitializeSemImageDrop();
+        }
+
+        // 260522Codex: Store binning choices as typed combo items instead of parsing display text later.
+        private sealed record BinningOption(int Size)
+        {
+            public override string ToString() => $"{Size}×{Size}";
+        }
+
+        // 260522Codex: Populate the binning selector once, defaulting to the low-count experimental baseline.
+        private void InitializeBinningOptions()
+        {
+            comboBoxBinning.BeginUpdate();
+            try
+            {
+                comboBoxBinning.Items.Clear();
+                foreach (int binningSize in BinningSizes)
+                {
+                    int itemIndex = comboBoxBinning.Items.Add(new BinningOption(binningSize));
+                    if (binningSize == DefaultBinningSize)
+                        comboBoxBinning.SelectedIndex = itemIndex;
+                }
+
+                if (comboBoxBinning.SelectedIndex < 0 && comboBoxBinning.Items.Count > 0)
+                    comboBoxBinning.SelectedIndex = 0;
+            }
+            finally
+            {
+                comboBoxBinning.EndUpdate();
+            }
+        }
+
+        // 260522Codex: Fall back to the planned default if the designer state is ever empty.
+        private int GetSelectedBinningSize() =>
+            comboBoxBinning.SelectedItem is BinningOption option
+                ? option.Size
+                : DefaultBinningSize;
+
+        // 260522Codex: カタログ更新時にマッピングモデル選択コンボを再描画します。
+        private void OnModelCatalogChanged(object? sender, ModelCatalogChangedEventArgs e)
+            => PopulateMappingModelFolders(e.PreferredModelName);
+
+        private void PopulateMappingModelFolders(string preferredModelName)
+        {
+            if (_modelCatalog is null)
+                return;
+
+            ModelComboBinder.Populate(comboBoxMappingModellFolder, _modelCatalog.ModelNames, preferredModelName);
         }
         // 260416Codex: 解析対象のスペクトルファイル一覧を UI からそのまま取得します。
         private List<string> SpectrumFiles =>
@@ -98,7 +168,6 @@ namespace MineraScope
 
         private void AnalyzerForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            var str = FormMain.ModelPath;
             e.Cancel = true;
             this.Visible = false;
         }
@@ -126,7 +195,7 @@ namespace MineraScope
                 }
 
                 _currentPtsFilePath = filePath;
-                pictureBox1.Image = semImage;
+                pictureBoxSEM.Image = semImage;
                 graphControl1.GraphTitle = Path.GetFileName(filePath);
             }
             catch (Exception ex)
@@ -156,8 +225,8 @@ namespace MineraScope
             _currentPtsFilePath = null;
             _pixelSpectrumCache.Clear();
             _spectrumReadVersion++;
-            pictureBox1.Image?.Dispose();
-            pictureBox1.Image = null;
+            pictureBoxSEM.Image?.Dispose();
+            pictureBoxSEM.Image = null;
             graphControl1.GraphTitle = "";
             graphControl1.ClearProfile();
         }
@@ -172,7 +241,7 @@ namespace MineraScope
         private void InitializeSemImageDrop()
         {
             AllowDrop = true;
-            pictureBox1.SizeMode = PictureBoxSizeMode.Zoom;
+            pictureBoxSEM.SizeMode = PictureBoxSizeMode.Zoom;
             EnableSemImageDropOnChildControls(this);
         }
 
@@ -208,7 +277,7 @@ namespace MineraScope
             return true;
         }
 
-        // 260520Codex: Designer で接続済みのクリックイベントから、現在のPTSファイル上の1ピクセルスペクトルを表示します。
+        // 260522Codex: Designer click handling now reads and displays the selected binned PTS spectrum.
         private async void pictureBox1_MouseClick(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left || string.IsNullOrWhiteSpace(_currentPtsFilePath))
@@ -219,8 +288,9 @@ namespace MineraScope
 
             string filePath = _currentPtsFilePath;
             Point pixel = new(x, y);
+            int binSize = GetSelectedBinningSize();
             int readVersion = ++_spectrumReadVersion;
-            PtsPixelSpectrum? pixelSpectrum = await GetPixelSpectrumAsync(filePath, pixel);
+            PtsPixelSpectrum? pixelSpectrum = await GetPixelSpectrumAsync(filePath, pixel, binSize);
             if (readVersion != _spectrumReadVersion || pixelSpectrum is null)
                 return;
 
@@ -229,15 +299,80 @@ namespace MineraScope
             graphControl1.UnitX = "keV";
             graphControl1.LabelY = "Counts";
             graphControl1.UnitY = "";
-            graphControl1.GraphTitle = $"{fileName} ({x}, {y})";
+            graphControl1.GraphTitle = $"{fileName} ({x}, {y}) {pixelSpectrum.RequestedBinSize}×{pixelSpectrum.RequestedBinSize}";
             graphControl1.Profile = CreateSpectrumProfile(pixelSpectrum);
             graphControl1.Refresh();
+
+            await ClassifySelectedPixelAsync(pixelSpectrum, readVersion);
         }
 
-        // 260520Codex: 未読のピクセルだけ PTS stream を走査し、読み取り済みならキャッシュから返します。
-        private async Task<PtsPixelSpectrum?> GetPixelSpectrumAsync(string filePath, Point pixel)
+        // 260522Codex: Runs the selected mapping model against the normalized binned PTS spectrum.
+        private async Task ClassifySelectedPixelAsync(PtsPixelSpectrum pixelSpectrum, int readVersion)
         {
-            if (_pixelSpectrumCache.TryGetValue(pixel, out var cachedSpectrum))
+            string selectedModelName = comboBoxMappingModellFolder.SelectedItem as string ?? string.Empty;
+            string modelParentPath = _modelCatalog?.ParentPath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(selectedModelName) || string.IsNullOrWhiteSpace(modelParentPath))
+            {
+                textBox1.Text = "モデルフォルダが選択されていません。";
+                return;
+            }
+
+            float[]? normalizedSpectrum = SpectrumDataLoader.CreateNormalizedSpectrum(pixelSpectrum);
+            if (normalizedSpectrum is null)
+            {
+                textBox1.Text =
+                    $"選択ピクセルのスペクトル長は {pixelSpectrum.ChannelCount} 点です。\r\n" +
+                    $"分類モデルは {SpectrumDataLoader.SpectrumLength} 点の入力に対応しています。";
+                return;
+            }
+
+            string selectedModelPath = Path.Combine(modelParentPath, selectedModelName);
+            string binningLabel = $"{pixelSpectrum.RequestedBinSize}×{pixelSpectrum.RequestedBinSize}";
+            textBox1.Text = $"分類中... ピクセル ({pixelSpectrum.X}, {pixelSpectrum.Y}) / ビニング {binningLabel}";
+            UseWaitCursor = true;
+
+            try
+            {
+                var result = await Task.Run(() =>
+                    _classificationService.Predict(selectedModelPath, normalizedSpectrum));
+
+                if (readVersion != _spectrumReadVersion)
+                    return;
+
+                var lines = new List<string>
+                {
+                    $"モデル: {selectedModelName}",
+                    $"ピクセル: ({pixelSpectrum.X}, {pixelSpectrum.Y})",
+                    $"ビニング: {binningLabel}",
+                    $"加算範囲: X {pixelSpectrum.BinLeft}-{pixelSpectrum.BinRight}, Y {pixelSpectrum.BinTop}-{pixelSpectrum.BinBottom}",
+                    $"加算ピクセル数: {pixelSpectrum.BinnedPixelCount}",
+                    $"予測鉱物: {result.PredictedMineral} ({result.Confidence * 100:F2}%)",
+                    "",
+                    "分類確率:"
+                };
+
+                foreach (var probability in result.Probabilities)
+                    lines.Add($"  {probability.MineralName}: {probability.Confidence * 100:F2}%");
+
+                textBox1.Lines = lines.ToArray();
+            }
+            catch (Exception ex)
+            {
+                if (readVersion == _spectrumReadVersion)
+                    textBox1.Text = $"分類に失敗しました。\r\n{ex.Message}";
+            }
+            finally
+            {
+                if (readVersion == _spectrumReadVersion)
+                    UseWaitCursor = false;
+            }
+        }
+
+        // 260522Codex: Read or reuse the clicked spectrum for the selected binning size.
+        private async Task<PtsPixelSpectrum?> GetPixelSpectrumAsync(string filePath, Point pixel, int binSize)
+        {
+            var cacheKey = (Pixel: pixel, BinSize: binSize);
+            if (_pixelSpectrumCache.TryGetValue(cacheKey, out var cachedSpectrum))
                 return cachedSpectrum;
 
             UseWaitCursor = true;
@@ -246,7 +381,7 @@ namespace MineraScope
                 PtsPixelSpectrum? spectrum = await Task.Run(() =>
                 {
                     using var pts = new PTSFile(filePath);
-                    return pts.TryReadPixelSpectrum(pixel.X, pixel.Y);
+                    return pts.TryReadBinnedPixelSpectrum(pixel.X, pixel.Y, binSize);
                 });
                 if (spectrum is null)
                 {
@@ -258,7 +393,7 @@ namespace MineraScope
                     return null;
                 }
 
-                _pixelSpectrumCache[pixel] = spectrum;
+                _pixelSpectrumCache[cacheKey] = spectrum;
                 return spectrum;
             }
             catch (Exception ex)
@@ -282,10 +417,10 @@ namespace MineraScope
             imageX = 0;
             imageY = 0;
 
-            if (pictureBox1.Image is not { } image)
+            if (pictureBoxSEM.Image is not { } image)
                 return false;
 
-            Rectangle imageBounds = GetZoomedImageBounds(pictureBox1);
+            Rectangle imageBounds = GetZoomedImageBounds(pictureBoxSEM);
             if (imageBounds.Width <= 0 || imageBounds.Height <= 0 || !imageBounds.Contains(point))
                 return false;
 
