@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
-using System.Linq;
 using System.Windows.Forms;
 // 260517Codex: graphControl1 に渡すスペクトル点列を Profile/PointD として組み立てます。
 using Crystallography;
@@ -37,6 +36,15 @@ namespace MineraScope
         // 260522Codex: Default to 10x10 as the first low-count classification baseline.
         private const int DefaultBinningSize = 10;
 
+        // 260523Codex: Treat tiny mouse movement as a click so ScalablePictureBox drag panning stays separate.
+        private const int ScalableSemClickMoveTolerance = 4;
+
+        // 260523Codex: Keep ownership of the image assigned to scalablePictureBoxSEM so replaced SEM images can be disposed.
+        private PseudoBitmap? _semPseudoBitmap;
+
+        // 260523Codex: Remember the ScalablePictureBox left-button start point until MouseUp2 decides click vs pan.
+        private Point? _scalableSemMouseDownPoint;
+
         // 260519Codex: 後から完了した古いクリック読み取りが最新表示を上書きしないようにします。
         private int _spectrumReadVersion;
 
@@ -48,9 +56,10 @@ namespace MineraScope
         {
             InitializeComponent();
             InitializeBinningOptions();
-            InitializeMineralJudgeEvents();
-            // 260516Codex: AnalyzerForm と子コントロール上の .pts ドロップでSEM画像を受け取れるようにします。
-            InitializeSemImageDrop();
+            // 260523Claude: .pts ドロップを復活。フォーム本体は Designer で DragEnter/DragDrop 済みなので AllowDrop だけ立て、
+            // 子孫側は再帰で有効化する（ScalablePictureBox は内部 pictureBox がドロップ先になり、Designer では再帰配線できないため）。
+            AllowDrop = true;
+            ControlDropHelper.EnableRecursive(this, AnalyzerForm_DragEnter, AnalyzerForm_DragDrop);
         }
 
         // 260522Codex: Store binning choices as typed combo items instead of parsing display text later.
@@ -99,73 +108,6 @@ namespace MineraScope
 
             ModelComboBinder.Populate(comboBoxMappingModellFolder, _modelCatalog.ModelNames, preferredModelName);
         }
-        // 260416Codex: 解析対象のスペクトルファイル一覧を UI からそのまま取得します。
-        private List<string> SpectrumFiles =>
-            listBoxSpectrumFiles.Items
-                .OfType<string>()
-                .Where(item => !string.IsNullOrWhiteSpace(item))
-                .ToList();
-
-        // 260416Codex: AnalyzerForm 内で使う解析 UI のイベントを一か所で登録します。
-        private void InitializeMineralJudgeEvents()
-        {
-        }
-
-        // 260416Codex: 解析ログの表示先をフォーム内の結果テキストボックスに統一します。
-        private void AnalysisLog(string message)
-            => TextBoxLogHelper.AppendLine(textBoxAnalysisResult, message);
-
-
-        // 260416Codex: ドロップされたファイルやフォルダから解析対象スペクトルだけを取り込みます。
-        private void listBoxSpectrumFiles_DragDrop(object? sender, DragEventArgs e)
-        {
-            var droppedPaths = e.Data?.GetData(DataFormats.FileDrop) as string[] ?? [];
-            var spectrumFiles = MineralPredictionWorkflow.CollectSpectrumFiles(droppedPaths);
-
-            if (spectrumFiles.Length == 0)
-                return;
-
-            listBoxSpectrumFiles.Items.Clear();
-            listBoxSpectrumFiles.Items.AddRange(spectrumFiles);
-        }
-
-        // 260416Codex: スペクトルファイルのドラッグ中だけコピー可能カーソルを表示します。
-        private void listBoxSpectrumFiles_DragEnter(object? sender, DragEventArgs e)
-            => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true
-                ? DragDropEffects.Copy
-                : DragDropEffects.None;
-
-        // 260416Codex: 選択中のスペクトルファイルだけを逆順で安全に削除します。
-        private void buttonRemoveSpectrumFiles_Click(object? sender, EventArgs e)
-        {
-            var selectedIndices = listBoxSpectrumFiles.SelectedIndices.Cast<int>().OrderDescending().ToArray();
-            foreach (var index in selectedIndices)
-                listBoxSpectrumFiles.Items.RemoveAt(index);
-        }
-
-        // 260416Codex: 解析中だけボタンを無効化してワークフローの実行に集中させます。
-        private async void buttonAnalyze_Click(object? sender, EventArgs e)
-        {
-            buttonAnalyze.Enabled = false;
-            textBoxAnalysisResult.Clear();
-
-            try
-            {
-            }
-            finally
-            {
-                buttonAnalyze.Enabled = true;
-            }
-        }
-
-        private void groupBoxModelFolder_VisibleChanged(object sender, EventArgs e)
-        {
-            if (this.Visible)
-            {
-
-            }
-        }
-
         private void AnalyzerForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             e.Cancel = true;
@@ -182,7 +124,8 @@ namespace MineraScope
             UseWaitCursor = true;
             try
             {
-                Bitmap? semImage = await Task.Run(() => LoadPtsSemImage(filePath));
+                // 260523Codex: Load the real SEM image into the scalable viewer's native PseudoBitmap format.
+                PseudoBitmap? semImage = await Task.Run(() => LoadPtsSemImage(filePath));
 
                 if (semImage is null)
                 {
@@ -195,7 +138,7 @@ namespace MineraScope
                 }
 
                 _currentPtsFilePath = filePath;
-                pictureBoxSEM.Image = semImage;
+                SetSemPseudoBitmap(semImage);
                 graphControl1.GraphTitle = Path.GetFileName(filePath);
             }
             catch (Exception ex)
@@ -213,10 +156,23 @@ namespace MineraScope
         }
 
         // 260519Codex: PTS の SEM画像だけをバックグラウンド側で読み込みます。
-        private static Bitmap? LoadPtsSemImage(string filePath)
+        // 260523Codex: Read the PTS SEM byte image and flatten it into ScalablePictureBox's row-major source data.
+        private static PseudoBitmap? LoadPtsSemImage(string filePath)
         {
             using var pts = new PTSFile(filePath);
-            return pts.TryReadSemImageBitmap();
+            byte[,]? image = pts.TryReadSemImage();
+            if (image is null)
+                return null;
+
+            int width = image.GetLength(0);
+            int height = image.GetLength(1);
+            var values = new double[width * height];
+
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    values[x + y * width] = image[x, y];
+
+            return new PseudoBitmap(values, width);
         }
 
         // 260519Codex: 新しい PTS を読み込む前に古い画像・キャッシュ・グラフ表示を破棄します。
@@ -225,8 +181,7 @@ namespace MineraScope
             _currentPtsFilePath = null;
             _pixelSpectrumCache.Clear();
             _spectrumReadVersion++;
-            pictureBoxSEM.Image?.Dispose();
-            pictureBoxSEM.Image = null;
+            SetSemPseudoBitmap(null);
             graphControl1.GraphTitle = "";
             graphControl1.ClearProfile();
         }
@@ -237,24 +192,14 @@ namespace MineraScope
                 ? DragDropEffects.Copy
                 : DragDropEffects.None;
 
-        // 260516Codex: Designerを触らず、既存フォーム領域全体で .pts ドロップを受けられるようにします。
-        private void InitializeSemImageDrop()
+        // 260523Claude: scalablePictureBoxSEM に表示する SEM 画像を差し替え、置き換え前の PseudoBitmap を破棄する。
+        private void SetSemPseudoBitmap(PseudoBitmap? semImage)
         {
-            AllowDrop = true;
-            pictureBoxSEM.SizeMode = PictureBoxSizeMode.Zoom;
-            EnableSemImageDropOnChildControls(this);
-        }
-
-        // 260516Codex: 子コントロール上でのドロップも AnalyzerForm のSEM画像表示処理へ集約します。
-        private void EnableSemImageDropOnChildControls(Control parent)
-        {
-            foreach (Control control in parent.Controls)
-            {
-                control.AllowDrop = true;
-                control.DragEnter += AnalyzerForm_DragEnter;
-                control.DragDrop += AnalyzerForm_DragDrop;
-                EnableSemImageDropOnChildControls(control);
-            }
+            PseudoBitmap? previousImage = _semPseudoBitmap;
+            _semPseudoBitmap = semImage ?? new PseudoBitmap([0d], 1);
+            scalablePictureBoxSEM.ShowAreaRectangle = false;
+            scalablePictureBoxSEM.PseudoBitmap = _semPseudoBitmap;
+            previousImage?.Dispose();
         }
 
         // 260516Codex: ドロップされたファイル一覧から単一の .pts ファイルだけを安全に取り出します。
@@ -277,17 +222,60 @@ namespace MineraScope
             return true;
         }
 
-        // 260522Codex: Designer click handling now reads and displays the selected binned PTS spectrum.
-        private async void pictureBox1_MouseClick(object sender, MouseEventArgs e)
+        // 260523Codex: Designer-connected ScalablePictureBox MouseDown2 starts click-vs-pan tracking.
+        private bool scalablePictureBoxSEM_MouseDown2(object sender, MouseEventArgs e, PointD pt)
         {
-            if (e.Button != MouseButtons.Left || string.IsNullOrWhiteSpace(_currentPtsFilePath))
-                return;
+            _scalableSemMouseDownPoint = e.Button == MouseButtons.Left && e.Clicks == 1
+                ? e.Location
+                : null;
+            return false;
+        }
 
-            if (!TryGetImagePixelFromZoomedPictureBox(e.Location, out int x, out int y))
+        // 260523Codex: Designer-connected ScalablePictureBox MouseUp2 reads the clicked image pixel without blocking pan/zoom behavior.
+        private bool scalablePictureBoxSEM_MouseUp2(object sender, MouseEventArgs e, PointD pt)
+        {
+            if (e.Button == MouseButtons.Left &&
+                IsScalableSemClick(e.Location) &&
+                TryGetImagePixelFromScalablePictureBox(pt, out int x, out int y))
+            {
+                _ = ReadAndDisplayBinnedPixelAsync(new Point(x, y));
+            }
+
+            _scalableSemMouseDownPoint = null;
+            return false;
+        }
+
+        // 260523Codex: Keep ScalablePictureBox click handling tolerant of tiny hand movement but not drag panning.
+        private bool IsScalableSemClick(Point mouseUpPoint)
+        {
+            if (_scalableSemMouseDownPoint is not { } mouseDownPoint)
+                return false;
+
+            return Math.Abs(mouseUpPoint.X - mouseDownPoint.X) <= ScalableSemClickMoveTolerance &&
+                Math.Abs(mouseUpPoint.Y - mouseDownPoint.Y) <= ScalableSemClickMoveTolerance;
+        }
+
+        // 260523Codex: Convert ScalablePictureBox source coordinates into a clamped SEM pixel index.
+        private bool TryGetImagePixelFromScalablePictureBox(PointD sourcePoint, out int imageX, out int imageY)
+        {
+            imageX = 0;
+            imageY = 0;
+
+            if (_semPseudoBitmap is null || _semPseudoBitmap.Width <= 1 || _semPseudoBitmap.Height <= 1)
+                return false;
+
+            imageX = Math.Clamp((int)Math.Floor(sourcePoint.X), 0, _semPseudoBitmap.Width - 1);
+            imageY = Math.Clamp((int)Math.Floor(sourcePoint.Y), 0, _semPseudoBitmap.Height - 1);
+            return true;
+        }
+
+        // 260523Claude: SEM クリック位置のビニング済みスペクトルを読み込み、グラフ表示と分類まで行う。
+        private async Task ReadAndDisplayBinnedPixelAsync(Point pixel)
+        {
+            if (string.IsNullOrWhiteSpace(_currentPtsFilePath))
                 return;
 
             string filePath = _currentPtsFilePath;
-            Point pixel = new(x, y);
             int binSize = GetSelectedBinningSize();
             int readVersion = ++_spectrumReadVersion;
             PtsPixelSpectrum? pixelSpectrum = await GetPixelSpectrumAsync(filePath, pixel, binSize);
@@ -299,11 +287,23 @@ namespace MineraScope
             graphControl1.UnitX = "keV";
             graphControl1.LabelY = "Counts";
             graphControl1.UnitY = "";
-            graphControl1.GraphTitle = $"{fileName} ({x}, {y}) {pixelSpectrum.RequestedBinSize}×{pixelSpectrum.RequestedBinSize}";
+            graphControl1.GraphTitle = $"{fileName} ({pixel.X}, {pixel.Y}) {pixelSpectrum.RequestedBinSize}×{pixelSpectrum.RequestedBinSize}";
             graphControl1.Profile = CreateSpectrumProfile(pixelSpectrum);
             graphControl1.Refresh();
+            ShowBinningArea(pixelSpectrum);
 
             await ClassifySelectedPixelAsync(pixelSpectrum, readVersion);
+        }
+
+        // 260523Codex: Draw the actual clamped binning rectangle on the SEM image after a pixel is selected.
+        private void ShowBinningArea(PtsPixelSpectrum pixelSpectrum)
+        {
+            scalablePictureBoxSEM.AreaRectangle = new RectangleD(
+                pixelSpectrum.BinLeft,
+                pixelSpectrum.BinTop,
+                pixelSpectrum.BinRight - pixelSpectrum.BinLeft + 1,
+                pixelSpectrum.BinBottom - pixelSpectrum.BinTop + 1);
+            scalablePictureBoxSEM.ShowAreaRectangle = true;
         }
 
         // 260522Codex: Runs the selected mapping model against the normalized binned PTS spectrum.
@@ -409,52 +409,6 @@ namespace MineraScope
             {
                 UseWaitCursor = false;
             }
-        }
-
-        // 260518Codex: PictureBox の Zoom 表示余白を除外し、クリック位置を実画像ピクセルへ戻します。
-        private bool TryGetImagePixelFromZoomedPictureBox(Point point, out int imageX, out int imageY)
-        {
-            imageX = 0;
-            imageY = 0;
-
-            if (pictureBoxSEM.Image is not { } image)
-                return false;
-
-            Rectangle imageBounds = GetZoomedImageBounds(pictureBoxSEM);
-            if (imageBounds.Width <= 0 || imageBounds.Height <= 0 || !imageBounds.Contains(point))
-                return false;
-
-            double scaleX = image.Width / (double)imageBounds.Width;
-            double scaleY = image.Height / (double)imageBounds.Height;
-            imageX = Math.Clamp((int)((point.X - imageBounds.Left) * scaleX), 0, image.Width - 1);
-            imageY = Math.Clamp((int)((point.Y - imageBounds.Top) * scaleY), 0, image.Height - 1);
-            return true;
-        }
-
-        // 260518Codex: SizeMode.Zoom で実際に画像が描かれる矩形を PictureBox 内に再現します。
-        private static Rectangle GetZoomedImageBounds(PictureBox pictureBox)
-        {
-            if (pictureBox.Image is not { } image)
-                return Rectangle.Empty;
-
-            Rectangle client = pictureBox.ClientRectangle;
-            if (client.Width <= 0 || client.Height <= 0)
-                return Rectangle.Empty;
-
-            double imageRatio = image.Width / (double)image.Height;
-            double boxRatio = client.Width / (double)client.Height;
-            if (boxRatio > imageRatio)
-            {
-                int height = client.Height;
-                int width = Math.Max(1, (int)Math.Round(height * imageRatio));
-                int left = client.Left + (client.Width - width) / 2;
-                return new Rectangle(left, client.Top, width, height);
-            }
-
-            int zoomedWidth = client.Width;
-            int zoomedHeight = Math.Max(1, (int)Math.Round(zoomedWidth / imageRatio));
-            int top = client.Top + (client.Height - zoomedHeight) / 2;
-            return new Rectangle(client.Left, top, zoomedWidth, zoomedHeight);
         }
 
         // 260519Codex: クリックされた1ピクセルの全チャンネルカウントを GraphControl 用 Profile に変換します。

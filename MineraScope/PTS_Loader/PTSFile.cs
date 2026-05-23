@@ -70,11 +70,7 @@ namespace MineraScope
 
         private long xcounts;
 
-        private string filename;
-
         private string[] xlines;
-
-        private double resolution;
 
         private bool disposedValue;
 
@@ -215,7 +211,6 @@ namespace MineraScope
             {
                 Close();
             }
-            filename = fname;
             BufferedStream bufferedStream = new BufferedStream(new FileStream(fname, FileMode.Open, FileAccess.ReadWrite), buffer_size);
             init(bufferedStream);
         }
@@ -339,11 +334,6 @@ namespace MineraScope
                 {
                     xlines = null;
                 }
-            }
-            childItem = AttributeItemize.GetChildItem("PTTD Param\\Params\\PARAMPAGE0\\MnKaRES");
-            if (childItem != null)
-            {
-                resolution = childItem.GetSingle();
             }
         }
 

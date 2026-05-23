@@ -2,7 +2,6 @@ using System.Text.Json;
 using Tensorflow;
 using Tensorflow.Keras.Engine;
 using Tensorflow.NumPy;
-using static Tensorflow.Binding;
 using static Tensorflow.KerasApi;
 
 namespace MineraScope

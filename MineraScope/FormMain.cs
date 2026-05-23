@@ -21,9 +21,6 @@ namespace MineraScope
         public GeneratorForm GeneratorForm = null!;
         public AnalyzerForm AnalyzerForm = null!;
 
-        // 260427Codex: ドロップされたスペクトルの実ファイルパスは表示名とは分けて保持します。
-        private string? _spectrumFilePath;
-
         // 260430Codex: FormMain での自動鉱物判定が重ならないようにします。
         private bool _isPredictionRunning;
 
@@ -75,7 +72,7 @@ namespace MineraScope
             // 260507Codex: 起動時に既定モデル保存先の直下フォルダをモデル選択欄へ反映します。
             RefreshModelPathList();
             // 260427Codex: フォーム上のどの UI 部品に落としても同じスペクトル入力として扱います。
-            EnableSpectrumDropOnChildControls(this);
+            ControlDropHelper.EnableRecursive(this, FormMain_DragEnter, FormMain_DragDrop);
             // 260507Codex: Designer を触らず、終了時に明示リストの設定だけ保存します。
             FormClosing += FormMain_FormClosing;
         }
@@ -289,18 +286,6 @@ namespace MineraScope
             }
         }
 
-        // 260427Codex: 子コントロール上でも FormMain と同じドラッグ＆ドロップ処理を通します。
-        private void EnableSpectrumDropOnChildControls(Control parent)
-        {
-            foreach (Control control in parent.Controls)
-            {
-                control.AllowDrop = true;
-                control.DragEnter += FormMain_DragEnter;
-                control.DragDrop += FormMain_DragDrop;
-                EnableSpectrumDropOnChildControls(control);
-            }
-        }
-
         // 260427Codex: ドロップ入力は「存在する単一ファイル」かつ「msa/emsa」のみに絞ります。
         private static bool TryGetSingleDroppedSpectrumFile(DragEventArgs e, out string filePath)
         {
@@ -338,7 +323,6 @@ namespace MineraScope
             if (profile.Pt.Count == 0)
                 throw new InvalidDataException("スペクトルデータ点が見つかりませんでした。");
 
-            _spectrumFilePath = filePath;
             textBoxSpectrumFile.Text = Path.GetFileName(filePath);
             graphControl1.Profile = profile;
             graphControl1.Refresh();

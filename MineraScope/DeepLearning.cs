@@ -186,9 +186,6 @@ namespace MineraScope
             cancellationToken.ThrowIfCancellationRequested();
         }
 
-        public MineralFolder? AnalyzeMineralFolder(string folderPath) =>
-            SpectrumDataLoader.AnalyzeMineralFolder(folderPath);
-
         #region モデル訓練
         // 260507Codex: 新方式では manifest の Completed から選ばれた spectrum だけを学習に使います。
         // 260514Codex: workflow から渡された token を分類と各回帰モデルの学習へ伝播します。
@@ -225,51 +222,6 @@ namespace MineraScope
                 TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, cancellationToken);
             }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            Log(" 指定された全鉱物の処理が完了しました");
-        }
-
-        // 260514Codex: 旧フォルダ入力の学習経路にも同じ協調キャンセルを通します。
-        public void RunTraining(
-            List<string> mineralNames,
-            string trainingDataFolder,
-            int epochs,
-            int batchSize,
-            int patience,
-            float testSplit,
-            string outputPath,
-            CancellationToken cancellationToken = default)
-        {
-            if (!Directory.Exists(outputPath))
-            {
-                Log("モデルの保存先を指定してください。");
-                return;
-            }
-            cancellationToken.ThrowIfCancellationRequested();
-            string classificationOutputPath = Path.Combine(outputPath, "AllMinerals_Classification");
-
-            Log("分類モデル学習開始");
-            TrainClassificationModel(mineralNames, trainingDataFolder, epochs, batchSize, patience, testSplit, classificationOutputPath, cancellationToken);
-            foreach (var mineralName in mineralNames)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                // 260430Codex: 回帰モデル対象フォルダの解決は共通 helper へ戻し、スペクトル判定を統一します。
-                if (!SpectrumDataLoader.TryResolveMineralFolderPath(trainingDataFolder, mineralName, out var mineralFolderPath))
-                {
-                    Log($"警告: {mineralName} のフォルダが見つかりません。スキップします。\n");
-                    continue;
-                }
-
-                //  固溶体の場合は回帰モデルも訓練
-                // 260430Codex: 解析できないフォルダは固溶体ではないものとして安全にスキップします。
-                if (AnalyzeMineralFolder(mineralFolderPath)?.IsSolidSolution == true)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    string regressionOutputPath = Path.Combine(outputPath, $"{mineralName}_Regression");
-                    Log($"回帰モデル学習開始: {mineralName}");
-                    TrainRegressionModel(mineralName, mineralFolderPath, epochs, batchSize, patience, testSplit, regressionOutputPath, cancellationToken);
-                }
-            }
             cancellationToken.ThrowIfCancellationRequested();
             Log(" 指定された全鉱物の処理が完了しました");
         }
@@ -361,97 +313,6 @@ namespace MineraScope
             Log($" モデル保存完了: {outputPath}\n");
         }
 
-        // 260430Codex: 回帰学習は余分な入れ子を外し、スペクトル長と評価値取得を共通 helper でそろえます。
-        // 260514Codex: フォルダ由来の回帰学習でも読み込み、fit、評価、保存の境目でキャンセルを確認します。
-        private void TrainRegressionModel(
-            string mineralName,
-            string trainingDataFolder,
-            int epochs,
-            int batchSize,
-            int patience,
-            float testSplit,
-            string outputPath,
-            CancellationToken cancellationToken)
-        {
-            keras.backend.clear_session();
-            tf.set_random_seed(42);
-            Log("端成分割合予測モデル \n");
-            Log($"訓練データフォルダ: {trainingDataFolder}");
-
-            // データ読み込み
-            Log("フォルダからスペクトルデータを読み込み中...");
-            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(trainingDataFolder, cancellationToken);
-            ComponentIndex = componentIdx;
-
-            if (allSpectra.shape[0] == 0 || ComponentIndex == null)
-            {
-                Log("エラー: 端成分情報が見つかりません。");
-                return;
-            }
-
-            Log($"  ファイル数: {allSpectra.shape[0]}");
-            Log($"  端成分数: {ComponentIndex.Count}");
-            Log($"  端成分一覧:");
-            foreach (var kvp in ComponentIndex.OrderBy(x => x.Value))
-            {
-                Log($"    [{kvp.Value}] {kvp.Key}");
-            }
-            Log("");
-
-            // データ分割
-            // 260507Codex: UI のテスト分割率を回帰学習にも反映します。
-            var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitRegression(
-                allSpectra, allLabels, testSize: testSplit, randomState: 42);
-            Log($"  訓練データ: {xTrain.shape[0]}件");
-            Log($"  テストデータ: {xTest.shape[0]}件\n");
-
-            var model = CreateRegressionModel(ComponentIndex.Count);
-
-            Log($"  入力: {SpectrumLength}次元スペクトル");
-            Log($"  隠れ層: Dense(64, relu) → Dense(64, relu)");
-
-            model.compile(
-                optimizer: keras.optimizers.Adam(),
-                loss: keras.losses.MeanSquaredError(),
-                metrics: new[] { "mae" }
-            );
-
-            FitModelWithCancellation(model, xTrain, yTrain, batchSize, epochs, 0.1f, patience, cancellationToken);
-            // 評価
-            Log("モデル評価中");
-            cancellationToken.ThrowIfCancellationRequested();
-            var score = model.evaluate(xTest, yTest);
-
-            double testLoss = GetMetricValue(score, 0, "loss");
-            double testMae = GetMetricValue(score, 1, "mae", "mean_absolute_error");
-
-            Log($" 評価完了");
-            Log($"  Test Loss (MSE): {testLoss:F6}");
-
-            if (testMae > 0)
-            {
-                Log($"  Test MAE: {testMae:F6}\n");
-            }
-
-            // モデル保存
-            cancellationToken.ThrowIfCancellationRequested();
-            Directory.CreateDirectory(outputPath);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            model.save(outputPath);
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string componentPath = Path.Combine(outputPath, "componentIndex.json");
-            File.WriteAllText(componentPath, System.Text.Json.JsonSerializer.Serialize(componentIdx));
-
-            string modelTypePath = Path.Combine(outputPath, "modelType.txt");
-            File.WriteAllText(modelTypePath, "regression");
-
-            string mineralNamePath = Path.Combine(outputPath, "mineralName.txt");
-            File.WriteAllText(mineralNamePath, mineralName);
-
-            Log($" モデル保存完了: {outputPath}\n");
-        }
         // 260430Codex: 分類学習側も tuple 展開と共通評価 helper で回帰学習と読み方をそろえます。
         // 260507Codex: 新方式の分類学習は manifest 由来の pool だけを読み込みます。
         // 260514Codex: 分類学習でもデータ読み込み、fit、評価、保存の境目でキャンセルを確認します。
@@ -493,68 +354,6 @@ namespace MineraScope
 
             Log("訓練中...");
             FitModelWithCancellation(model, xTrain, yTrain, batchSize, epochs, testSplit, patience, cancellationToken);
-            Log("モデル評価中");
-
-            cancellationToken.ThrowIfCancellationRequested();
-            var score = model.evaluate(xTest, yTest);
-
-            double testLoss = GetMetricValue(score, 0, "loss");
-            double testAccuracy = GetMetricValue(score, 1, "accuracy");
-
-            Log($"Test loss: {testLoss:F4}");
-            Log($"Test accuracy: {testAccuracy * 100:F2}%");
-            cancellationToken.ThrowIfCancellationRequested();
-            Directory.CreateDirectory(outputPath);
-            string encoderPath = Path.Combine(outputPath, "labelEncoder.json");
-            File.WriteAllText(encoderPath, System.Text.Json.JsonSerializer.Serialize(encoder));
-
-            string modelTypePath = Path.Combine(outputPath, "modelType.txt");
-            File.WriteAllText(modelTypePath, "classification");
-            cancellationToken.ThrowIfCancellationRequested();
-            model.save(outputPath);
-            cancellationToken.ThrowIfCancellationRequested();
-        }
-
-        // 260514Codex: 旧フォルダ入力の分類学習でもデータ読み込み、fit、評価、保存の境目でキャンセルを確認します。
-        private void TrainClassificationModel(
-            List<string> mineralNames,
-            string trainingDataFolder,
-            int epochs,
-            int batchSize,
-            int patience,
-            float testSplit,
-            string outputPath,
-            CancellationToken cancellationToken)
-        {
-            keras.backend.clear_session();
-            tf.set_random_seed(42);
-            Log($"\n 訓練データ読み込み中");
-            var (allSpectra, allLabelsList) = SpectrumDataLoader.LoadClassificationData(trainingDataFolder, mineralNames, cancellationToken);
-            Log($"\n 読み込み完了 (合計 {allSpectra.shape[0]} 件)\n");
-            var (labelsEncoded, encoder) = DeepLearningDataSplitter.EncodeLabels(allLabelsList);
-            if (encoder.Count > 0)
-            {
-                foreach (var kvp in encoder.OrderBy(x => x.Value))
-                {
-                    int count = allLabelsList.Count(l => l == kvp.Key);
-                    Log($"  [{kvp.Value}] {kvp.Key} ({count}件)");
-                }
-            }
-            var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitClassification(allSpectra, labelsEncoded, testSize: testSplit, randomState: 42);
-            Log($"訓練データ: {xTrain.shape[0]}");
-            Log($"テストデータ: {xTest.shape[0]}\n");
-
-            var model = CreateClassificationModel(encoder.Count);
-
-            //Compile
-            model.compile(
-                optimizer: keras.optimizers.Adam(),
-                loss: keras.losses.SparseCategoricalCrossentropy(),
-                metrics: new[] { "accuracy" }
-            );
-
-            Log("訓練中...");
-            FitModelWithCancellation(model, xTrain, yTrain, batchSize, epochs, 0.2f, patience, cancellationToken);
             Log("モデル評価中");
 
             cancellationToken.ThrowIfCancellationRequested();

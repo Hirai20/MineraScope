@@ -29,8 +29,7 @@
         private void InitializeComponent()
         {
             groupBoxMineralAnalysis = new GroupBox();
-            panelSEM = new Panel();
-            pictureBoxSEM = new PictureBox();
+            scalablePictureBoxSEM = new Crystallography.Controls.ScalablePictureBox();
             flowLayoutPanelBinning = new FlowLayoutPanel();
             labelBinning = new Label();
             comboBoxBinning = new ComboBox();
@@ -42,10 +41,7 @@
             comboBoxMappingModellFolder = new ComboBox();
             menuStrip1 = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
-            scalablePictureBoxSEM = new Crystallography.Controls.ScalablePictureBox();
             groupBoxMineralAnalysis.SuspendLayout();
-            panelSEM.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)pictureBoxSEM).BeginInit();
             flowLayoutPanelBinning.SuspendLayout();
             flowLayoutPanelModellFolder.SuspendLayout();
             menuStrip1.SuspendLayout();
@@ -56,7 +52,6 @@
             groupBoxMineralAnalysis.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
             groupBoxMineralAnalysis.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             groupBoxMineralAnalysis.Controls.Add(scalablePictureBoxSEM);
-            groupBoxMineralAnalysis.Controls.Add(panelSEM);
             groupBoxMineralAnalysis.Controls.Add(flowLayoutPanelBinning);
             groupBoxMineralAnalysis.Controls.Add(textBox1);
             groupBoxMineralAnalysis.Controls.Add(button1);
@@ -69,22 +64,30 @@
             groupBoxMineralAnalysis.TabStop = false;
             groupBoxMineralAnalysis.Text = "マッピング分析";
             // 
-            // panelSEM
+            // scalablePictureBoxSEM
             // 
-            panelSEM.Controls.Add(pictureBoxSEM);
-            panelSEM.Location = new Point(19, 93);
-            panelSEM.Name = "panelSEM";
-            panelSEM.Size = new Size(316, 229);
-            panelSEM.TabIndex = 30;
-            // 
-            // pictureBoxSEM
-            // 
-            pictureBoxSEM.Location = new Point(13, 2);
-            pictureBoxSEM.Name = "pictureBoxSEM";
-            pictureBoxSEM.Size = new Size(288, 217);
-            pictureBoxSEM.TabIndex = 25;
-            pictureBoxSEM.TabStop = false;
-            pictureBoxSEM.MouseClick += pictureBox1_MouseClick;
+            scalablePictureBoxSEM.AllowDrop = true;
+            scalablePictureBoxSEM.BackColor = SystemColors.ActiveCaption;
+            scalablePictureBoxSEM.FixZoomAndCenter = false;
+            scalablePictureBoxSEM.FocusEventEnabled = false;
+            scalablePictureBoxSEM.HorizontalFlip = false;
+            scalablePictureBoxSEM.Location = new Point(16, 93);
+            scalablePictureBoxSEM.ManualSpotMode = false;
+            scalablePictureBoxSEM.Margin = new Padding(0);
+            scalablePictureBoxSEM.MouseScaling = true;
+            scalablePictureBoxSEM.MouseTranslation = true;
+            scalablePictureBoxSEM.Name = "scalablePictureBoxSEM";
+            scalablePictureBoxSEM.ShowAreaRectangle = false;
+            scalablePictureBoxSEM.ShowRimRentangle = false;
+            scalablePictureBoxSEM.Size = new Size(332, 217);
+            scalablePictureBoxSEM.TabIndex = 31;
+            scalablePictureBoxSEM.TitleVisible = false;
+            scalablePictureBoxSEM.VerticalFlip = false;
+            scalablePictureBoxSEM.Zoom = 128D;
+            scalablePictureBoxSEM.MouseUp2 += scalablePictureBoxSEM_MouseUp2;
+            scalablePictureBoxSEM.MouseDown2 += scalablePictureBoxSEM_MouseDown2;
+            scalablePictureBoxSEM.DragDrop += AnalyzerForm_DragDrop;
+            scalablePictureBoxSEM.DragEnter += AnalyzerForm_DragEnter;
             // 
             // flowLayoutPanelBinning
             // 
@@ -226,26 +229,6 @@
             fileToolStripMenuItem.Size = new Size(37, 20);
             fileToolStripMenuItem.Text = "File";
             // 
-            // scalablePictureBoxSEM
-            // 
-            scalablePictureBoxSEM.BackColor = SystemColors.ActiveCaption;
-            scalablePictureBoxSEM.FixZoomAndCenter = false;
-            scalablePictureBoxSEM.FocusEventEnabled = false;
-            scalablePictureBoxSEM.HorizontalFlip = false;
-            scalablePictureBoxSEM.Location = new Point(296, 315);
-            scalablePictureBoxSEM.ManualSpotMode = false;
-            scalablePictureBoxSEM.Margin = new Padding(0);
-            scalablePictureBoxSEM.MouseScaling = false;
-            scalablePictureBoxSEM.MouseTranslation = false;
-            scalablePictureBoxSEM.Name = "scalablePictureBoxSEM";
-            scalablePictureBoxSEM.ShowAreaRectangle = false;
-            scalablePictureBoxSEM.ShowRimRentangle = false;
-            scalablePictureBoxSEM.Size = new Size(334, 347);
-            scalablePictureBoxSEM.TabIndex = 31;
-            scalablePictureBoxSEM.TitleVisible = false;
-            scalablePictureBoxSEM.VerticalFlip = false;
-            scalablePictureBoxSEM.Zoom = 1D;
-            // 
             // AnalyzerForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -262,8 +245,6 @@
             DragEnter += AnalyzerForm_DragEnter;
             groupBoxMineralAnalysis.ResumeLayout(false);
             groupBoxMineralAnalysis.PerformLayout();
-            panelSEM.ResumeLayout(false);
-            ((System.ComponentModel.ISupportInitialize)pictureBoxSEM).EndInit();
             flowLayoutPanelBinning.ResumeLayout(false);
             flowLayoutPanelBinning.PerformLayout();
             flowLayoutPanelModellFolder.ResumeLayout(false);
@@ -277,22 +258,12 @@
         #endregion
 
         private GroupBox groupBoxMineralAnalysis;
-        // 260416Codex: フィールド宣言を現在のデザイナー名に合わせます。
-        private GroupBox groupBoxSpectrumFiles;
-        private GroupBox groupBoxAnalysisResult;
-        private TextBox textBoxAnalysisResult;
-        private ListBox listBoxSpectrumFiles;
-        private FlowLayoutPanel flowLayoutPanel4;
-        private Button buttonAnalyze;
-        private Button buttonRemoveSpectrumFiles;
-        private Panel panelSEM;
         private MenuStrip menuStrip1;
         private ToolStripMenuItem fileToolStripMenuItem;
         private FlowLayoutPanel flowLayoutPanelModellFolder;
         private Label labelModelFolder;
         private ComboBox comboBoxMappingModellFolder;
         private Crystallography.Controls.GraphControl graphControl1;
-        private PictureBox pictureBoxSEM;
         private Button button1;
         private TextBox textBox1;
         private FlowLayoutPanel flowLayoutPanelBinning;
