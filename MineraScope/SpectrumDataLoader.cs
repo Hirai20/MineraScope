@@ -46,6 +46,30 @@ namespace MineraScope
             return values;
         }
 
+        // 260526Claude: ブロックカウントを batch 行列の指定行へ max 正規化して書き込む。全ゼロなら false（未判定扱い）。
+        // 除算の仕方を CreateNormalizedSpectrum と揃え、同一カウントならクリック側とビット一致する正規化にする。
+        public static bool NormalizeInto(ReadOnlySpan<int> counts, float[,] destination, int row)
+        {
+            ArgumentNullException.ThrowIfNull(destination);
+
+            if (counts.Length != SpectrumLength)
+                throw new ArgumentException($"{SpectrumLength} 点のスペクトルだけを正規化できます。", nameof(counts));
+
+            int max = 0;
+            for (int i = 0; i < counts.Length; i++)
+                if (counts[i] > max)
+                    max = counts[i];
+
+            if (max <= 0)
+                return false;
+
+            float maxValue = max;
+            for (int i = 0; i < counts.Length; i++)
+                destination[row, i] = counts[i] / maxValue;
+
+            return true;
+        }
+
         // 260514Codex: spectrum 1 ファイルの読み込み前後をキャンセル確認の最小単位としてそろえます。
         private static float[]? LoadNormalizedSpectrumWithCancellation(
             string filePath,

@@ -13,47 +13,119 @@ namespace MineraScope
         private readonly object _gate = new();
         private string? _loadedClassificationPath;
         private IModel? _classificationModel;
-        private Dictionary<string, int>? _encoder;
+
+        // 260526Claude: labelEncoder の value を出力 index として並べた鉱物名。クリックとマップで唯一の名前解決にする。
+        private string[]? _labelNames;
 
         public MineralClassificationPredictionResult Predict(string modelPath, float[] normalizedSpectrum)
+        {
+            if (normalizedSpectrum.Length != SpectrumDataLoader.SpectrumLength)
+                throw new InvalidOperationException($"{SpectrumDataLoader.SpectrumLength} 点のスペクトルだけを分類できます。");
+
+            string classificationPath = GetClassificationPath(modelPath);
+
+            // 260522Codex: Serialize predictions so overlapping clicks never race the shared model/graph.
+            return RunLockedWithCacheReset(() =>
+            {
+                EnsureModelLoaded(classificationPath);
+
+                var spectrumReshaped = np.array(normalizedSpectrum).reshape(new Shape(1, SpectrumDataLoader.SpectrumLength));
+                var prediction = _classificationModel!.predict(spectrumReshaped);
+                float[] probabilities = prediction.numpy().ToArray<float>();
+
+                // 260526Claude: 名前解決を _labelNames に統一し、全ラベルを信頼度降順で返す（クリック詳細用）。
+                if (probabilities.Length != _labelNames!.Length)
+                    throw new InvalidDataException("分類モデルの出力数と labelEncoder.json が一致しません。");
+
+                var orderedResults = new List<MineralClassificationProbability>(probabilities.Length);
+                for (int i = 0; i < probabilities.Length; i++)
+                    orderedResults.Add(new MineralClassificationProbability(_labelNames[i], probabilities[i]));
+                orderedResults.Sort((a, b) => b.Confidence.CompareTo(a.Confidence));
+
+                var best = orderedResults[0];
+                return new MineralClassificationPredictionResult(best.MineralName, best.Confidence, orderedResults);
+            });
+        }
+
+        // 260526Claude: 全ブロックをチャンク batch で分類し、各行の Top-1 を返す。全確率行列は保持しない。
+        // 260526Codex: 現在のマップ表示で使う Top-1 labelId だけを返し、未使用の信頼度保持をやめます。
+        public int[] PredictTop1Batch(string modelPath, float[,] batch, CancellationToken cancellationToken)
+        {
+            int rows = batch.GetLength(0);
+            if (batch.GetLength(1) != SpectrumDataLoader.SpectrumLength)
+                throw new InvalidOperationException($"{SpectrumDataLoader.SpectrumLength} 点のスペクトルだけを分類できます。");
+
+            if (rows == 0)
+                return [];
+
+            string classificationPath = GetClassificationPath(modelPath);
+
+            // 260526Claude: predict はスレッドセーフでないため、クリックと同じ _gate で直列化する。
+            return RunLockedWithCacheReset(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                EnsureModelLoaded(classificationPath);
+
+                var prediction = _classificationModel!.predict(np.array(batch));
+                float[] probabilities = prediction.numpy().ToArray<float>();
+                int labelCount = _labelNames!.Length;
+                if (probabilities.Length != (long)rows * labelCount)
+                    throw new InvalidDataException("分類モデルの出力数と labelEncoder.json が一致しません。");
+
+                var results = new int[rows];
+                for (int r = 0; r < rows; r++)
+                {
+                    int offset = r * labelCount;
+                    int best = 0;
+                    float bestValue = probabilities[offset];
+                    for (int j = 1; j < labelCount; j++)
+                    {
+                        float value = probabilities[offset + j];
+                        if (value > bestValue)
+                        {
+                            bestValue = value;
+                            best = j;
+                        }
+                    }
+                    results[r] = best;
+                }
+                return results;
+            });
+        }
+
+        // 260526Claude: 出力 index → 鉱物名の配列を返す（result のラベル表・凡例用）。
+        public string[] GetLabelNames(string modelPath)
+        {
+            string classificationPath = GetClassificationPath(modelPath);
+
+            return RunLockedWithCacheReset(() =>
+            {
+                EnsureModelLoaded(classificationPath);
+                return (string[])_labelNames!.Clone();
+            });
+        }
+
+        // 260526Codex: モデルフォルダ検証と分類モデルパス作成の重複を 1 か所へ寄せます。
+        private static string GetClassificationPath(string modelPath)
         {
             if (string.IsNullOrWhiteSpace(modelPath) || !Directory.Exists(modelPath))
                 throw new DirectoryNotFoundException("モデルフォルダが見つかりません。");
 
-            if (normalizedSpectrum.Length != SpectrumDataLoader.SpectrumLength)
-                throw new InvalidOperationException($"{SpectrumDataLoader.SpectrumLength} 点のスペクトルだけを分類できます。");
+            return Path.Combine(modelPath, "AllMinerals_Classification");
+        }
 
-            string classificationPath = Path.Combine(modelPath, "AllMinerals_Classification");
-
-            // 260522Codex: Serialize predictions so overlapping clicks never race the shared model/graph.
+        // 260526Codex: TensorFlow モデルへのアクセス直列化と例外時のキャッシュ破棄を共通化します。
+        private T RunLockedWithCacheReset<T>(Func<T> action)
+        {
             lock (_gate)
             {
                 try
                 {
-                    EnsureModelLoaded(classificationPath);
-
-                    var spectrumReshaped = np.array(normalizedSpectrum).reshape(new Shape(1, SpectrumDataLoader.SpectrumLength));
-                    var prediction = _classificationModel!.predict(spectrumReshaped);
-                    float[] probabilities = prediction.numpy().ToArray<float>();
-
-                    var orderedResults = _encoder!
-                        .Where(item => item.Value >= 0 && item.Value < probabilities.Length)
-                        .Select(item => new MineralClassificationProbability(item.Key, probabilities[item.Value]))
-                        .OrderByDescending(item => item.Confidence)
-                        .ToList();
-
-                    if (orderedResults.Count == 0)
-                        throw new InvalidDataException("分類モデルの出力と labelEncoder.json が対応していません。");
-
-                    var best = orderedResults[0];
-                    return new MineralClassificationPredictionResult(best.MineralName, best.Confidence, orderedResults);
+                    return action();
                 }
                 catch
                 {
-                    // 260522Codex: Drop the cache so a session cleared elsewhere (training/RunPrediction) reloads on the next click.
-                    _loadedClassificationPath = null;
-                    _classificationModel = null;
-                    _encoder = null;
+                    ResetModelCache();
                     throw;
                 }
             }
@@ -75,10 +147,38 @@ namespace MineraScope
             if (encoder is not { Count: > 0 })
                 throw new InvalidDataException("labelEncoder.json の内容を読み取れませんでした。");
 
+            // 260526Claude: 出力 index → 名前を一度だけ構築・検証し、推論経路で共有する。
+            string[] labelNames = BuildLabelNames(encoder);
+
             keras.backend.clear_session();
             _classificationModel = keras.models.load_model(classificationPath);
-            _encoder = encoder;
+            _labelNames = labelNames;
             _loadedClassificationPath = classificationPath;
+        }
+
+        // 260526Claude: encoder(name→index) を index 順の名前配列へ。負値・重複・欠番(0..count-1 の連続でない)を検出してエラーにする。
+        private static string[] BuildLabelNames(Dictionary<string, int> encoder)
+        {
+            int count = encoder.Count;
+            var names = new string[count];
+            var assigned = new bool[count];
+            foreach (var (name, index) in encoder)
+            {
+                if (index < 0 || index >= count || assigned[index])
+                    throw new InvalidDataException("labelEncoder.json のラベル index が不正です（負値・重複・欠番）。");
+
+                names[index] = name;
+                assigned[index] = true;
+            }
+            return names;
+        }
+
+        // 260526Claude: Drop the cache so a session cleared elsewhere (training/RunPrediction) reloads on the next call.
+        private void ResetModelCache()
+        {
+            _loadedClassificationPath = null;
+            _classificationModel = null;
+            _labelNames = null;
         }
     }
 

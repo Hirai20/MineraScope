@@ -29,32 +29,40 @@
         private void InitializeComponent()
         {
             groupBoxMineralAnalysis = new GroupBox();
+            buttonCancelMap = new Button();
+            scalablePictureBox1 = new Crystallography.Controls.ScalablePictureBox();
             scalablePictureBoxSEM = new Crystallography.Controls.ScalablePictureBox();
             flowLayoutPanelBinning = new FlowLayoutPanel();
             labelBinning = new Label();
             comboBoxBinning = new ComboBox();
             textBox1 = new TextBox();
-            button1 = new Button();
+            buttonClassifyMap = new Button();
             graphControl1 = new Crystallography.Controls.GraphControl();
             flowLayoutPanelModellFolder = new FlowLayoutPanel();
             labelModelFolder = new Label();
             comboBoxMappingModellFolder = new ComboBox();
             menuStrip1 = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
+            statusStrip1 = new StatusStrip();
+            toolStripProgressBarMapping = new ToolStripProgressBar();
+            toolStripStatusLabelMapping = new ToolStripStatusLabel();
             groupBoxMineralAnalysis.SuspendLayout();
             flowLayoutPanelBinning.SuspendLayout();
             flowLayoutPanelModellFolder.SuspendLayout();
             menuStrip1.SuspendLayout();
+            statusStrip1.SuspendLayout();
             SuspendLayout();
             // 
             // groupBoxMineralAnalysis
             // 
             groupBoxMineralAnalysis.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
             groupBoxMineralAnalysis.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            groupBoxMineralAnalysis.Controls.Add(buttonCancelMap);
+            groupBoxMineralAnalysis.Controls.Add(scalablePictureBox1);
             groupBoxMineralAnalysis.Controls.Add(scalablePictureBoxSEM);
             groupBoxMineralAnalysis.Controls.Add(flowLayoutPanelBinning);
             groupBoxMineralAnalysis.Controls.Add(textBox1);
-            groupBoxMineralAnalysis.Controls.Add(button1);
+            groupBoxMineralAnalysis.Controls.Add(buttonClassifyMap);
             groupBoxMineralAnalysis.Controls.Add(graphControl1);
             groupBoxMineralAnalysis.Controls.Add(flowLayoutPanelModellFolder);
             groupBoxMineralAnalysis.Location = new Point(12, 29);
@@ -63,6 +71,41 @@
             groupBoxMineralAnalysis.TabIndex = 88;
             groupBoxMineralAnalysis.TabStop = false;
             groupBoxMineralAnalysis.Text = "マッピング分析";
+            // 
+            // buttonCancelMap
+            // 
+            buttonCancelMap.AutoSize = true;
+            buttonCancelMap.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonCancelMap.Location = new Point(582, 38);
+            buttonCancelMap.Name = "buttonCancelMap";
+            buttonCancelMap.Size = new Size(41, 25);
+            buttonCancelMap.TabIndex = 33;
+            buttonCancelMap.Text = "中止";
+            buttonCancelMap.UseVisualStyleBackColor = true;
+            buttonCancelMap.Click += buttonCancelMap_Click;
+            // 
+            // scalablePictureBox1
+            // 
+            scalablePictureBox1.AllowDrop = true;
+            scalablePictureBox1.BackColor = SystemColors.ActiveCaption;
+            scalablePictureBox1.FixZoomAndCenter = false;
+            scalablePictureBox1.FocusEventEnabled = false;
+            scalablePictureBox1.HorizontalFlip = false;
+            scalablePictureBox1.Location = new Point(337, 355);
+            scalablePictureBox1.ManualSpotMode = false;
+            scalablePictureBox1.Margin = new Padding(0);
+            scalablePictureBox1.MouseScaling = true;
+            scalablePictureBox1.MouseTranslation = true;
+            scalablePictureBox1.Name = "scalablePictureBox1";
+            scalablePictureBox1.ShowAreaRectangle = false;
+            scalablePictureBox1.ShowRimRentangle = false;
+            scalablePictureBox1.Size = new Size(332, 217);
+            scalablePictureBox1.TabIndex = 32;
+            scalablePictureBox1.TitleVisible = false;
+            scalablePictureBox1.VerticalFlip = false;
+            scalablePictureBox1.Zoom = 128D;
+            scalablePictureBox1.MouseUp2 += scalablePictureBoxSEM_MouseUp2;
+            scalablePictureBox1.MouseDown2 += scalablePictureBoxSEM_MouseDown2;
             // 
             // scalablePictureBoxSEM
             // 
@@ -123,17 +166,20 @@
             textBox1.Location = new Point(16, 364);
             textBox1.Multiline = true;
             textBox1.Name = "textBox1";
-            textBox1.Size = new Size(527, 226);
+            textBox1.Size = new Size(307, 226);
             textBox1.TabIndex = 28;
             // 
-            // button1
+            // buttonClassifyMap
             // 
-            button1.Location = new Point(491, 29);
-            button1.Name = "button1";
-            button1.Size = new Size(101, 26);
-            button1.TabIndex = 27;
-            button1.Text = "button1";
-            button1.UseVisualStyleBackColor = true;
+            buttonClassifyMap.AutoSize = true;
+            buttonClassifyMap.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonClassifyMap.Location = new Point(491, 36);
+            buttonClassifyMap.Name = "buttonClassifyMap";
+            buttonClassifyMap.Size = new Size(85, 25);
+            buttonClassifyMap.TabIndex = 27;
+            buttonClassifyMap.Text = "鉱物マッピング";
+            buttonClassifyMap.UseVisualStyleBackColor = true;
+            buttonClassifyMap.Click += buttonClassifyMap_Click;
             // 
             // graphControl1
             // 
@@ -229,12 +275,32 @@
             fileToolStripMenuItem.Size = new Size(37, 20);
             fileToolStripMenuItem.Text = "File";
             // 
+            // statusStrip1
+            // 
+            statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripProgressBarMapping, toolStripStatusLabelMapping });
+            statusStrip1.Location = new Point(0, 672);
+            statusStrip1.Name = "statusStrip1";
+            statusStrip1.Size = new Size(711, 22);
+            statusStrip1.TabIndex = 90;
+            statusStrip1.Text = "statusStrip1";
+            // 
+            // toolStripProgressBarMapping
+            // 
+            toolStripProgressBarMapping.Name = "toolStripProgressBarMapping";
+            toolStripProgressBarMapping.Size = new Size(100, 16);
+            // 
+            // toolStripStatusLabelMapping
+            // 
+            toolStripStatusLabelMapping.Name = "toolStripStatusLabelMapping";
+            toolStripStatusLabelMapping.Size = new Size(0, 17);
+            // 
             // AnalyzerForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoScroll = true;
             ClientSize = new Size(711, 694);
+            Controls.Add(statusStrip1);
             Controls.Add(groupBoxMineralAnalysis);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
@@ -251,6 +317,8 @@
             flowLayoutPanelModellFolder.PerformLayout();
             menuStrip1.ResumeLayout(false);
             menuStrip1.PerformLayout();
+            statusStrip1.ResumeLayout(false);
+            statusStrip1.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -264,11 +332,16 @@
         private Label labelModelFolder;
         private ComboBox comboBoxMappingModellFolder;
         private Crystallography.Controls.GraphControl graphControl1;
-        private Button button1;
+        private Button buttonClassifyMap;
         private TextBox textBox1;
         private FlowLayoutPanel flowLayoutPanelBinning;
         private Label labelBinning;
         private ComboBox comboBoxBinning;
         private Crystallography.Controls.ScalablePictureBox scalablePictureBoxSEM;
+        private Crystallography.Controls.ScalablePictureBox scalablePictureBox1;
+        private Button buttonCancelMap;
+        private StatusStrip statusStrip1;
+        private ToolStripProgressBar toolStripProgressBarMapping;
+        private ToolStripStatusLabel toolStripStatusLabelMapping;
     }
 }

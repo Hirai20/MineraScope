@@ -128,6 +128,9 @@ namespace MineraScope
 
         public double PixelSize => parameter.PixelSize;
 
+        // 260526Claude: 読み取りに使えるチャンネル数（PTS属性とファイル側の小さい方）。クリック/グリッド/ブロック読みと検証で共有する。
+        internal int UsableChannelCount => Math.Min(ChannelCount, parameter.ChannelCount);
+
         public string StrHeader
         {
             get
@@ -661,7 +664,8 @@ namespace MineraScope
                 return null;
 
             // 260520Codex: PTS 属性とファイル側の小さい方を読み取り対象チャンネル数にします。
-            int usableChannelCount = Math.Min(ChannelCount, parameter.ChannelCount);
+            // 260526Claude: グリッド/ブロック読みと同じ算出を共有プロパティに寄せる。
+            int usableChannelCount = UsableChannelCount;
             if (usableChannelCount <= 0)
                 return null;
 
@@ -720,8 +724,8 @@ namespace MineraScope
                             if (x < binLeft || x > binRight || y < binTop || y > binBottom)
                                 break;
 
-                            int channel = value - parameter.ChannelOffset;
-                            if (channel <= parameter.DigitalLLD || channel >= usableChannelCount)
+                            // 260526Claude: チャンネル採否を共有 helper に寄せ、グリッド/ブロック読みと規則を一致させる。
+                            if (!TryAcceptChannel(value, usableChannelCount, out int channel))
                                 break;
 
                             counts[channel]++;
@@ -742,6 +746,251 @@ namespace MineraScope
             return new PtsPixelSpectrum(
                 targetX,
                 targetY,
+                usableChannelCount,
+                parameter.CoefB,
+                parameter.CoefA,
+                counts,
+                binLeft,
+                binTop,
+                binRight,
+                binBottom,
+                binSize);
+        }
+
+        // 260526Claude: グリッド集計を1回チェックする間隔（レコード数）。進捗報告とキャンセル確認をまとめて行う。
+        private const int GridReadCheckInterval = 1 << 20;
+
+        // 260526Claude: 0xB000 レコード値を採用チャンネルへ変換し LLD/範囲で採否を判定する（クリック/グリッド/ブロックで共有）。
+        private bool TryAcceptChannel(int value, int usableChannelCount, out int channel)
+        {
+            channel = value - parameter.ChannelOffset;
+            return channel > parameter.DigitalLLD && channel < usableChannelCount;
+        }
+
+        // 260526Claude: 原点基準の非重複ブロック境界（右下端は画像端でクランプ）。グリッド集計の x/binSize と数学的に対になる。
+        private (int Left, int Top, int Right, int Bottom) GetBlockBounds(int blockX, int blockY, int binSize)
+        {
+            int left = blockX * binSize;
+            int top = blockY * binSize;
+            int right = Math.Min((blockX + 1) * binSize - 1, Width - 1);
+            int bottom = Math.Min((blockY + 1) * binSize - 1, Height - 1);
+            return (left, top, right, bottom);
+        }
+
+        // 260526Claude: PTS イベント列を1パス走査し、非重複ブロックごとの全チャンネルカウントを作る（マップ生成用）。
+        // 大配列確保前のチャンネル数・メモリ検証は呼び出し側 (workflow) が行う前提。キャンセルは OperationCanceledException で抜ける。
+        internal PtsBinnedSpectrumGrid? TryReadBinnedSpectrumGrid(int binSize, IProgress<double>? progress, CancellationToken cancellationToken)
+        {
+            if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096 || binSize <= 0)
+                return null;
+
+            int coordinateUnit = 4096 / Width;
+            if (coordinateUnit <= 0)
+                return null;
+
+            int usableChannelCount = UsableChannelCount;
+            if (usableChannelCount <= 0)
+                return null;
+
+            int gridWidth = (Width + binSize - 1) / binSize;
+            int gridHeight = (Height + binSize - 1) / binSize;
+
+            long length = (long)gridWidth * gridHeight * usableChannelCount;
+            if (length > int.MaxValue)
+                throw new InvalidOperationException("ビニング格子が大きすぎて確保できません。binを大きくしてください。");
+
+            int[] counts = new int[(int)length];
+            BeginRead();
+
+            int x = 0;
+            int y = 0;
+            int previousX = 0;
+            int previousY = 0;
+            int realTimeRecords = 0;
+            int liveTimeRecords = 0;
+            int completedFrames = 0;
+            long totalXrayCounts = 0;
+            long endOffset = stream.Length;
+            if (header.Id != null && header.PttdSize > 0)
+                endOffset = Math.Min((long)header.PttdOffset + header.PttdSize, stream.Length);
+
+            long startPosition = stream.Position;
+            long span = Math.Max(1, endOffset - startPosition);
+            int sinceCheck = 0;
+
+            try
+            {
+                while (stream.Position + sizeof(ushort) <= endOffset)
+                {
+                    if (++sinceCheck >= GridReadCheckInterval)
+                    {
+                        sinceCheck = 0;
+                        cancellationToken.ThrowIfCancellationRequested();
+                        progress?.Report((double)(stream.Position - startPosition) / span);
+                    }
+
+                    ushort record = reader.ReadUInt16();
+                    int value = record & 0xFFF;
+                    switch (record & 0xF000)
+                    {
+                        case 0x6000:
+                            realTimeRecords++;
+                            break;
+                        case 0x7000:
+                            liveTimeRecords++;
+                            break;
+                        case 0x8000:
+                            if (previousX != value)
+                            {
+                                x = previousX == 0 || value != 0 ? value / coordinateUnit : 0;
+                                previousX = value;
+                            }
+                            break;
+                        case 0x9000:
+                            if (previousY == value)
+                                break;
+
+                            if (previousY != 0 && value == 0)
+                            {
+                                y = 0;
+                                completedFrames++;
+                            }
+                            else
+                                y = value / coordinateUnit;
+
+                            x = 0;
+                            previousY = value;
+                            break;
+                        case 0xB000:
+                            // 260526Claude: coordinateUnit が Width を割り切らない場合に x/y が範囲外になり得るため、ブロック算出前に必ず弾く。
+                            if ((uint)x >= (uint)Width || (uint)y >= (uint)Height)
+                                break;
+
+                            if (!TryAcceptChannel(value, usableChannelCount, out int channel))
+                                break;
+
+                            int blockIndex = (y / binSize) * gridWidth + x / binSize;
+                            counts[blockIndex * usableChannelCount + channel]++;
+                            totalXrayCounts++;
+                            break;
+                    }
+                }
+            }
+            catch (EndOfStreamException)
+            {
+            }
+
+            realTime = realTimeRecords;
+            liveTime = liveTimeRecords;
+            frameNumbers = completedFrames;
+            xcounts = totalXrayCounts;
+            progress?.Report(1.0);
+
+            return new PtsBinnedSpectrumGrid(
+                gridWidth,
+                gridHeight,
+                binSize,
+                usableChannelCount,
+                counts);
+        }
+
+        // 260526Claude: マップクリック詳細用に、指定ブロックだけをグリッドと同一の原点基準で1パス再読みする。
+        internal PtsPixelSpectrum? TryReadBinnedBlockSpectrum(int blockX, int blockY, int binSize)
+        {
+            if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096 || binSize <= 0)
+                return null;
+
+            if (blockX < 0 || blockY < 0)
+                return null;
+
+            var (binLeft, binTop, binRight, binBottom) = GetBlockBounds(blockX, blockY, binSize);
+            if (binLeft >= Width || binTop >= Height)
+                return null;
+
+            int coordinateUnit = 4096 / Width;
+            if (coordinateUnit <= 0)
+                return null;
+
+            int usableChannelCount = UsableChannelCount;
+            if (usableChannelCount <= 0)
+                return null;
+
+            int[] counts = new int[usableChannelCount];
+            BeginRead();
+
+            int x = 0;
+            int y = 0;
+            int previousX = 0;
+            int previousY = 0;
+            int realTimeRecords = 0;
+            int liveTimeRecords = 0;
+            int completedFrames = 0;
+            long totalXrayCounts = 0;
+            long endOffset = stream.Length;
+            if (header.Id != null && header.PttdSize > 0)
+                endOffset = Math.Min((long)header.PttdOffset + header.PttdSize, stream.Length);
+
+            try
+            {
+                while (stream.Position + sizeof(ushort) <= endOffset)
+                {
+                    ushort record = reader.ReadUInt16();
+                    int value = record & 0xFFF;
+                    switch (record & 0xF000)
+                    {
+                        case 0x6000:
+                            realTimeRecords++;
+                            break;
+                        case 0x7000:
+                            liveTimeRecords++;
+                            break;
+                        case 0x8000:
+                            if (previousX != value)
+                            {
+                                x = previousX == 0 || value != 0 ? value / coordinateUnit : 0;
+                                previousX = value;
+                            }
+                            break;
+                        case 0x9000:
+                            if (previousY == value)
+                                break;
+
+                            if (previousY != 0 && value == 0)
+                            {
+                                y = 0;
+                                completedFrames++;
+                            }
+                            else
+                                y = value / coordinateUnit;
+
+                            x = 0;
+                            previousY = value;
+                            break;
+                        case 0xB000:
+                            if (x < binLeft || x > binRight || y < binTop || y > binBottom)
+                                break;
+
+                            if (!TryAcceptChannel(value, usableChannelCount, out int channel))
+                                break;
+
+                            counts[channel]++;
+                            totalXrayCounts++;
+                            break;
+                    }
+                }
+            }
+            catch (EndOfStreamException)
+            {
+            }
+
+            realTime = realTimeRecords;
+            liveTime = liveTimeRecords;
+            frameNumbers = completedFrames;
+            xcounts = totalXrayCounts;
+
+            return new PtsPixelSpectrum(
+                binLeft,
+                binTop,
                 usableChannelCount,
                 parameter.CoefB,
                 parameter.CoefA,

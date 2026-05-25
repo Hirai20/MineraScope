@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 // 260517Codex: graphControl1 に渡すスペクトル点列を Profile/PointD として組み立てます。
 using Crystallography;
+using Crystallography.Controls;
 
 namespace MineraScope
 {
@@ -43,7 +45,8 @@ namespace MineraScope
         private PseudoBitmap? _semPseudoBitmap;
 
         // 260523Codex: Remember the ScalablePictureBox left-button start point until MouseUp2 decides click vs pan.
-        private Point? _scalableSemMouseDownPoint;
+        // 260526Claude: SEM/マップ両ボックスで共有するため名前を一般化。
+        private Point? _scalableMouseDownPoint;
 
         // 260519Codex: 後から完了した古いクリック読み取りが最新表示を上書きしないようにします。
         private int _spectrumReadVersion;
@@ -51,11 +54,20 @@ namespace MineraScope
         // 260522Codex: One service instance keeps the loaded classification model warm across clicks.
         private readonly MineralClassificationPredictionService _classificationService = new();
 
+        // 260526Claude: 鉱物マッピングの状態。result は Top-1 のみ軽量保持し、クリック再分類は作成時条件で再読みする。
+        private PtsClassificationMapResult? _classificationMap;
+        private PseudoBitmap? _mapPseudoBitmap;
+        private bool _isMappingBusy;
+        private int _mapBuildVersion;
+        private CancellationTokenSource? _mapClassificationCancellation;
+
         // 260416Codex: AnalyzerForm の UI 配線をフォーム本体にまとめて保守しやすくします。
         public AnalyzerForm()
         {
             InitializeComponent();
             InitializeBinningOptions();
+            // 260526Claude: 待機状態（マッピング有効・中止無効）を初期化する。
+            UpdateMappingButtons();
             // 260523Claude: .pts ドロップを復活。フォーム本体は Designer で DragEnter/DragDrop 済みなので AllowDrop だけ立て、
             // 子孫側は再帰で有効化する（ScalablePictureBox は内部 pictureBox がドロップ先になり、Designer では再帰配線できないため）。
             AllowDrop = true;
@@ -108,10 +120,11 @@ namespace MineraScope
 
             ModelComboBinder.Populate(comboBoxMappingModellFolder, _modelCatalog.ModelNames, preferredModelName);
         }
+
         private void AnalyzerForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             e.Cancel = true;
-            this.Visible = false;
+            Visible = false;
         }
 
         // 260519Codex: .pts ドロップ時は SEM画像だけを読み込み、EDXスペクトルはクリック時に1ピクセルだけ読みます。
@@ -176,11 +189,16 @@ namespace MineraScope
         }
 
         // 260519Codex: 新しい PTS を読み込む前に古い画像・キャッシュ・グラフ表示を破棄します。
+        // 260526Claude: 走行中マッピングを無効化・中止し、マップ表示と結果も破棄する。
         private void ClearLoadedPtsData()
         {
             _currentPtsFilePath = null;
             _pixelSpectrumCache.Clear();
             _spectrumReadVersion++;
+            _mapBuildVersion++;
+            _mapClassificationCancellation?.Cancel();
+            _classificationMap = null;
+            SetMapPseudoBitmap(null);
             SetSemPseudoBitmap(null);
             graphControl1.GraphTitle = "";
             graphControl1.ClearProfile();
@@ -195,11 +213,17 @@ namespace MineraScope
         // 260523Claude: scalablePictureBoxSEM に表示する SEM 画像を差し替え、置き換え前の PseudoBitmap を破棄する。
         private void SetSemPseudoBitmap(PseudoBitmap? semImage)
         {
-            PseudoBitmap? previousImage = _semPseudoBitmap;
-            _semPseudoBitmap = semImage ?? new PseudoBitmap([0d], 1);
-            scalablePictureBoxSEM.ShowAreaRectangle = false;
-            scalablePictureBoxSEM.PseudoBitmap = _semPseudoBitmap;
-            previousImage?.Dispose();
+            ReplacePseudoBitmap(scalablePictureBoxSEM, ref _semPseudoBitmap, semImage);
+        }
+
+        // 260526Codex: SEM と鉱物マップの PseudoBitmap 差し替え処理を共通化します。
+        private static void ReplacePseudoBitmap(ScalablePictureBox pictureBox, ref PseudoBitmap? current, PseudoBitmap? next)
+        {
+            PseudoBitmap? previous = current;
+            current = next ?? new PseudoBitmap([0d], 1);
+            pictureBox.ShowAreaRectangle = false;
+            pictureBox.PseudoBitmap = current;
+            previous?.Dispose();
         }
 
         // 260516Codex: ドロップされたファイル一覧から単一の .pts ファイルだけを安全に取り出します。
@@ -225,51 +249,80 @@ namespace MineraScope
         // 260523Codex: Designer-connected ScalablePictureBox MouseDown2 starts click-vs-pan tracking.
         private bool scalablePictureBoxSEM_MouseDown2(object sender, MouseEventArgs e, PointD pt)
         {
-            _scalableSemMouseDownPoint = e.Button == MouseButtons.Left && e.Clicks == 1
+            _scalableMouseDownPoint = e.Button == MouseButtons.Left && e.Clicks == 1
                 ? e.Location
                 : null;
             return false;
         }
 
         // 260523Codex: Designer-connected ScalablePictureBox MouseUp2 reads the clicked image pixel without blocking pan/zoom behavior.
+        // 260526Claude: sender で SEM とマップを分岐。SEM は中心ビニング、マップは作成時条件で該当ブロックを再分類する。
         private bool scalablePictureBoxSEM_MouseUp2(object sender, MouseEventArgs e, PointD pt)
         {
-            if (e.Button == MouseButtons.Left &&
-                IsScalableSemClick(e.Location) &&
-                TryGetImagePixelFromScalablePictureBox(pt, out int x, out int y))
-            {
-                _ = ReadAndDisplayBinnedPixelAsync(new Point(x, y));
-            }
+            if (e.Button == MouseButtons.Left && IsScalableClick(e.Location))
+                HandleScalableClick(sender, pt);
 
-            _scalableSemMouseDownPoint = null;
+            _scalableMouseDownPoint = null;
             return false;
         }
 
-        // 260523Codex: Keep ScalablePictureBox click handling tolerant of tiny hand movement but not drag panning.
-        private bool IsScalableSemClick(Point mouseUpPoint)
+        // 260526Codex: イベントハンドラ側の入れ子を減らし、SEM とマップのクリック処理だけを分岐します。
+        private void HandleScalableClick(object sender, PointD sourcePoint)
         {
-            if (_scalableSemMouseDownPoint is not { } mouseDownPoint)
+            if (ReferenceEquals(sender, scalablePictureBoxSEM))
+            {
+                if (TryGetImagePixel(_semPseudoBitmap, sourcePoint, clamp: true, out int x, out int y))
+                    _ = ReadAndDisplayBinnedPixelAsync(new Point(x, y));
+                return;
+            }
+
+            if (!ReferenceEquals(sender, scalablePictureBox1) || _classificationMap is null)
+                return;
+
+            if (TryGetImagePixel(_mapPseudoBitmap, sourcePoint, clamp: false, out int blockX, out int blockY))
+                _ = DisplayMapPixelAsync(new Point(blockX, blockY));
+        }
+
+        // 260523Codex: Keep ScalablePictureBox click handling tolerant of tiny hand movement but not drag panning.
+        private bool IsScalableClick(Point mouseUpPoint)
+        {
+            if (_scalableMouseDownPoint is not { } mouseDownPoint)
                 return false;
 
             return Math.Abs(mouseUpPoint.X - mouseDownPoint.X) <= ScalableSemClickMoveTolerance &&
                 Math.Abs(mouseUpPoint.Y - mouseDownPoint.Y) <= ScalableSemClickMoveTolerance;
         }
 
-        // 260523Codex: Convert ScalablePictureBox source coordinates into a clamped SEM pixel index.
-        private bool TryGetImagePixelFromScalablePictureBox(PointD sourcePoint, out int imageX, out int imageY)
+        // 260523Codex: Convert ScalablePictureBox source coordinates into an image pixel index.
+        // 260526Claude: 対象 PseudoBitmap を引数化。SEM は端へクランプ、マップは範囲外を無視する。
+        private static bool TryGetImagePixel(PseudoBitmap? bitmap, PointD sourcePoint, bool clamp, out int imageX, out int imageY)
         {
             imageX = 0;
             imageY = 0;
 
-            if (_semPseudoBitmap is null || _semPseudoBitmap.Width <= 1 || _semPseudoBitmap.Height <= 1)
+            if (bitmap is null || bitmap.Width <= 1 || bitmap.Height <= 1)
                 return false;
 
-            imageX = Math.Clamp((int)Math.Floor(sourcePoint.X), 0, _semPseudoBitmap.Width - 1);
-            imageY = Math.Clamp((int)Math.Floor(sourcePoint.Y), 0, _semPseudoBitmap.Height - 1);
+            int x = (int)Math.Floor(sourcePoint.X);
+            int y = (int)Math.Floor(sourcePoint.Y);
+
+            if (clamp)
+            {
+                imageX = Math.Clamp(x, 0, bitmap.Width - 1);
+                imageY = Math.Clamp(y, 0, bitmap.Height - 1);
+                return true;
+            }
+
+            if ((uint)x >= (uint)bitmap.Width || (uint)y >= (uint)bitmap.Height)
+                return false;
+
+            imageX = x;
+            imageY = y;
             return true;
         }
 
         // 260523Claude: SEM クリック位置のビニング済みスペクトルを読み込み、グラフ表示と分類まで行う。
+        // 260526Claude: グラフ描画・分類は共通メソッドへ寄せ、SEM 固有はコンボの bin/model 取得と SEM 枠への範囲描画のみ。
         private async Task ReadAndDisplayBinnedPixelAsync(Point pixel)
         {
             if (string.IsNullOrWhiteSpace(_currentPtsFilePath))
@@ -282,17 +335,9 @@ namespace MineraScope
             if (readVersion != _spectrumReadVersion || pixelSpectrum is null)
                 return;
 
-            string fileName = Path.GetFileName(filePath);
-            graphControl1.LabelX = "Energy";
-            graphControl1.UnitX = "keV";
-            graphControl1.LabelY = "Counts";
-            graphControl1.UnitY = "";
-            graphControl1.GraphTitle = $"{fileName} ({pixel.X}, {pixel.Y}) {pixelSpectrum.RequestedBinSize}×{pixelSpectrum.RequestedBinSize}";
-            graphControl1.Profile = CreateSpectrumProfile(pixelSpectrum);
-            graphControl1.Refresh();
             ShowBinningArea(pixelSpectrum);
-
-            await ClassifySelectedPixelAsync(pixelSpectrum, readVersion);
+            (string modelPath, string modelName) = GetSelectedMappingModel();
+            await DisplaySpectrumAndClassifyAsync(pixelSpectrum, modelPath, modelName, Path.GetFileName(filePath), readVersion);
         }
 
         // 260523Codex: Draw the actual clamped binning rectangle on the SEM image after a pixel is selected.
@@ -306,53 +351,75 @@ namespace MineraScope
             scalablePictureBoxSEM.ShowAreaRectangle = true;
         }
 
-        // 260522Codex: Runs the selected mapping model against the normalized binned PTS spectrum.
-        private async Task ClassifySelectedPixelAsync(PtsPixelSpectrum pixelSpectrum, int readVersion)
+        // 260526Claude: コンボで選択中のマッピングモデルのパスと名前を返す（SEM クリックとマッピング開始で共有）。
+        private (string ModelPath, string ModelName) GetSelectedMappingModel()
         {
-            string selectedModelName = comboBoxMappingModellFolder.SelectedItem as string ?? string.Empty;
-            string modelParentPath = _modelCatalog?.ParentPath ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(selectedModelName) || string.IsNullOrWhiteSpace(modelParentPath))
+            string modelName = comboBoxMappingModellFolder.SelectedItem as string ?? string.Empty;
+            string parentPath = _modelCatalog?.ParentPath ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(modelName) || string.IsNullOrWhiteSpace(parentPath))
+                return (string.Empty, modelName);
+
+            return (Path.Combine(parentPath, modelName), modelName);
+        }
+
+        // 260526Claude: 取得済みスペクトルのグラフ表示と分類を SEM クリック/マップクリックで共通化する。確率一覧は 0.1% 未満を非表示。
+        private async Task DisplaySpectrumAndClassifyAsync(PtsPixelSpectrum spectrum, string modelPath, string modelName, string fileName, int readVersion)
+        {
+            string binningLabel = $"{spectrum.RequestedBinSize}×{spectrum.RequestedBinSize}";
+            string rangeLabel = $"X {spectrum.BinLeft}-{spectrum.BinRight}, Y {spectrum.BinTop}-{spectrum.BinBottom}";
+
+            graphControl1.LabelX = "Energy";
+            graphControl1.UnitX = "keV";
+            graphControl1.LabelY = "Counts";
+            graphControl1.UnitY = "";
+            graphControl1.GraphTitle = $"{fileName} [{rangeLabel}] {binningLabel}";
+            graphControl1.Profile = CreateSpectrumProfile(spectrum);
+            graphControl1.Refresh();
+
+            if (string.IsNullOrWhiteSpace(modelPath) || string.IsNullOrWhiteSpace(modelName))
             {
                 textBox1.Text = "モデルフォルダが選択されていません。";
                 return;
             }
 
-            float[]? normalizedSpectrum = SpectrumDataLoader.CreateNormalizedSpectrum(pixelSpectrum);
+            float[]? normalizedSpectrum = SpectrumDataLoader.CreateNormalizedSpectrum(spectrum);
             if (normalizedSpectrum is null)
             {
                 textBox1.Text =
-                    $"選択ピクセルのスペクトル長は {pixelSpectrum.ChannelCount} 点です。\r\n" +
+                    $"選択範囲のスペクトル長は {spectrum.ChannelCount} 点です。\r\n" +
                     $"分類モデルは {SpectrumDataLoader.SpectrumLength} 点の入力に対応しています。";
                 return;
             }
 
-            string selectedModelPath = Path.Combine(modelParentPath, selectedModelName);
-            string binningLabel = $"{pixelSpectrum.RequestedBinSize}×{pixelSpectrum.RequestedBinSize}";
-            textBox1.Text = $"分類中... ピクセル ({pixelSpectrum.X}, {pixelSpectrum.Y}) / ビニング {binningLabel}";
+            textBox1.Text = $"分類中... 範囲 [{rangeLabel}] / ビニング {binningLabel}";
             UseWaitCursor = true;
 
             try
             {
-                var result = await Task.Run(() =>
-                    _classificationService.Predict(selectedModelPath, normalizedSpectrum));
+                var result = await Task.Run(() => _classificationService.Predict(modelPath, normalizedSpectrum));
 
                 if (readVersion != _spectrumReadVersion)
                     return;
 
                 var lines = new List<string>
                 {
-                    $"モデル: {selectedModelName}",
-                    $"ピクセル: ({pixelSpectrum.X}, {pixelSpectrum.Y})",
+                    $"モデル: {modelName}",
+                    $"加算範囲: {rangeLabel}",
+                    $"加算ピクセル数: {spectrum.BinnedPixelCount}",
                     $"ビニング: {binningLabel}",
-                    $"加算範囲: X {pixelSpectrum.BinLeft}-{pixelSpectrum.BinRight}, Y {pixelSpectrum.BinTop}-{pixelSpectrum.BinBottom}",
-                    $"加算ピクセル数: {pixelSpectrum.BinnedPixelCount}",
                     $"予測鉱物: {result.PredictedMineral} ({result.Confidence * 100:F2}%)",
                     "",
-                    "分類確率:"
+                    "分類確率 (0.00%は非表示):"
                 };
 
+                // 260526Claude: 表示は小数第2位。丸めて 0.00% になるものだけ隠し、0.01% 以上は表示する。
                 foreach (var probability in result.Probabilities)
-                    lines.Add($"  {probability.MineralName}: {probability.Confidence * 100:F2}%");
+                {
+                    string percentText = (probability.Confidence * 100).ToString("F2", CultureInfo.InvariantCulture);
+                    if (percentText == "0.00")
+                        continue;
+                    lines.Add($"  {probability.MineralName}: {percentText}%");
+                }
 
                 textBox1.Lines = lines.ToArray();
             }
@@ -419,6 +486,181 @@ namespace MineraScope
                 points.Add(new PointD(spectrum.GetEnergy(channel), spectrum.GetCount(channel)));
 
             return new Profile(points);
+        }
+
+        // 260526Claude: 全ブロック鉱物マッピングを開始する。実行中は中止ボタン側を有効化し、完了時に stale/キャンセルを判定する。
+        private async void buttonClassifyMap_Click(object sender, EventArgs e)
+        {
+            if (_isMappingBusy)
+                return;
+
+            if (string.IsNullOrWhiteSpace(_currentPtsFilePath))
+            {
+                MessageBox.Show("先にPTSファイルを読み込んでください。", "鉱物マッピング", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            (string modelPath, string modelName) = GetSelectedMappingModel();
+            if (string.IsNullOrWhiteSpace(modelPath))
+            {
+                MessageBox.Show("モデルフォルダが選択されていません。", "鉱物マッピング", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            string filePath = _currentPtsFilePath;
+            int binSize = GetSelectedBinningSize();
+            int buildVersion = ++_mapBuildVersion;
+            using var cancellation = new CancellationTokenSource();
+            _mapClassificationCancellation = cancellation;
+            _isMappingBusy = true;
+            UpdateMappingButtons();
+            var progress = new Progress<double>(ReportMappingProgress);
+
+            try
+            {
+                PtsClassificationMapResult result = await Task.Run(() => PtsClassificationMapWorkflow.Run(
+                    filePath, binSize, modelPath, modelName, _classificationService, progress, cancellation.Token));
+
+                // 260526Claude: 計算中に PTS や条件が変わっていたら反映しない。
+                if (buildVersion != _mapBuildVersion || !string.Equals(_currentPtsFilePath, filePath, StringComparison.Ordinal))
+                    return;
+
+                MineralMapImage image = MineralMapColorizer.Build(result);
+                _classificationMap = result;
+                SetMapPseudoBitmap(CreateMapPseudoBitmap(image));
+                ShowMapLegend(image, result);
+                SetMappingStatus(string.Empty, 0);
+            }
+            catch (OperationCanceledException)
+            {
+                // 260526Claude: 中止時は既存マップを残し、途中結果は反映しない。
+                SetMappingStatus("マッピングを中止しました", 0);
+            }
+            catch (Exception ex)
+            {
+                SetMappingStatus(string.Empty, 0);
+                MessageBox.Show($"鉱物マッピングに失敗しました。\r\n{ex.Message}", "鉱物マッピング", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                _isMappingBusy = false;
+                if (ReferenceEquals(_mapClassificationCancellation, cancellation))
+                    _mapClassificationCancellation = null;
+                UpdateMappingButtons();
+            }
+        }
+
+        // 260526Claude: 中止ボタンは取り消し要求だけ行い、状態表示を更新する。
+        private void buttonCancelMap_Click(object sender, EventArgs e)
+        {
+            _mapClassificationCancellation?.Cancel();
+            UpdateMappingButtons();
+        }
+
+        // 260526Claude: マッピングの 2 ボタン状態を 1 か所で更新する（待機/実行中/中止中）。例外時も finally から呼んで UI を必ず戻す。
+        private void UpdateMappingButtons()
+        {
+            bool cancelling = _mapClassificationCancellation?.IsCancellationRequested ?? false;
+            buttonClassifyMap.Enabled = !_isMappingBusy;
+            buttonCancelMap.Enabled = _isMappingBusy && !cancelling;
+            buttonCancelMap.Text = cancelling ? "中止中..." : "中止";
+        }
+
+        // 260526Claude: 進捗を statusStrip のラベルとバーへ反映する（Progress<double> は UI スレッドで生成済み）。
+        private void ReportMappingProgress(double fraction)
+        {
+            int percent = Math.Clamp((int)(fraction * 100), 0, 100);
+            string phase = fraction < 0.5 ? "読み取り中" : fraction < 0.95 ? "分類中" : "描画準備中";
+            SetMappingStatus($"{phase} {percent}%", percent);
+        }
+
+        // 260526Claude: statusStrip の文言と進捗バーをまとめて設定する。
+        private void SetMappingStatus(string text, int percent)
+        {
+            toolStripStatusLabelMapping.Text = text;
+            toolStripProgressBarMapping.Value = Math.Clamp(percent, 0, 100);
+        }
+
+        // 260526Claude: 案2。表示インデックスの double[] と K 長パレットから PseudoBitmap を作る。MinValue=0/MaxValue=K で 1:1 対応、GrayScale=false で色付け。
+        private static PseudoBitmap CreateMapPseudoBitmap(MineralMapImage image)
+        {
+            return new PseudoBitmap(image.Values, image.Width, image.Palette)
+            {
+                GrayScale = false,
+                IsNegative = false,
+                MinValue = 0,
+                MaxValue = image.CategoryCount,
+            };
+        }
+
+        // 260526Claude: scalablePictureBox1 のマップ画像を差し替え、置き換え前の PseudoBitmap を破棄する。
+        private void SetMapPseudoBitmap(PseudoBitmap? mapImage)
+        {
+            ReplacePseudoBitmap(scalablePictureBox1, ref _mapPseudoBitmap, mapImage);
+        }
+
+        // 260526Claude: 完了時に上位20＋Other＋未判定の凡例を textBox1 へ出す（plain TextBox のため色は RGB をテキスト表記）。
+        private void ShowMapLegend(MineralMapImage image, PtsClassificationMapResult result)
+        {
+            var lines = new List<string>
+            {
+                $"鉱物マッピング: {result.ModelName}",
+                $"ビニング: {result.BinSize}×{result.BinSize} / 格子 {result.GridWidth}×{result.GridHeight}",
+            };
+
+            if (result.GridWidth > scalablePictureBox1.ClientSize.Width - 1 || result.GridHeight > scalablePictureBox1.ClientSize.Height - 1)
+                lines.Add("⚠ 格子が表示枠より大きく、縮小表示でカテゴリ色が混ざる場合があります（binを大きくしてください）。");
+
+            lines.Add(string.Empty);
+            lines.Add("凡例 (R,G,B 鉱物: ブロック数):");
+            foreach (var entry in image.Legend)
+                lines.Add($"  ({entry.Color.R},{entry.Color.G},{entry.Color.B}) {entry.MineralName}: {entry.BlockCount}");
+
+            textBox1.Lines = lines.ToArray();
+        }
+
+        // 260526Claude: マップクリック。作成時の bin/model/file で該当ブロックを再読みし、SEM クリックと同じ表示・分類へ流す。
+        private async Task DisplayMapPixelAsync(Point block)
+        {
+            PtsClassificationMapResult? map = _classificationMap;
+            if (map is null)
+                return;
+
+            if ((uint)block.X >= (uint)map.GridWidth || (uint)block.Y >= (uint)map.GridHeight)
+                return;
+
+            string filePath = map.PtsFilePath;
+            int binSize = map.BinSize;
+            int readVersion = ++_spectrumReadVersion;
+
+            PtsPixelSpectrum? spectrum;
+            try
+            {
+                spectrum = await Task.Run(() =>
+                {
+                    using var pts = new PTSFile(filePath);
+                    return pts.TryReadBinnedBlockSpectrum(block.X, block.Y, binSize);
+                });
+            }
+            catch (Exception ex)
+            {
+                if (readVersion == _spectrumReadVersion)
+                    MessageBox.Show($"ブロックのEDXスペクトルを読み取れませんでした。\r\n{ex.Message}", "鉱物マッピング", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (readVersion != _spectrumReadVersion || spectrum is null)
+                return;
+
+            ShowMapBlockArea(block);
+            await DisplaySpectrumAndClassifyAsync(spectrum, map.ModelPath, map.ModelName, Path.GetFileName(filePath), readVersion);
+        }
+
+        // 260526Claude: クリックしたブロックをマップ側 (scalablePictureBox1) に枠表示する（案2 なので格子座標で 1×1）。
+        private void ShowMapBlockArea(Point block)
+        {
+            scalablePictureBox1.AreaRectangle = new RectangleD(block.X, block.Y, 1, 1);
+            scalablePictureBox1.ShowAreaRectangle = true;
         }
     }
 }
