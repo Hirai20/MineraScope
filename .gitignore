@@ -21,3 +21,5 @@ Thumbs.db
 agents.md
 # 260523Claude: Claude Code local instructions file should stay untracked.
 CLAUDE.md
+# 260526Codex: Claude Code local skill files should stay untracked.
+.claude/
