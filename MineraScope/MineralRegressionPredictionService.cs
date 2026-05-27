@@ -10,7 +10,6 @@ namespace MineraScope
     internal sealed class MineralRegressionPredictionService
     {
         // 260522Codex: Cache the loaded model + component order per path so a batch reuses them across files.
-        private readonly object _gate = new();
         private string? _loadedModelPath;
         private IModel? _model;
         private string[]? _componentNames;
@@ -23,7 +22,7 @@ namespace MineraScope
             if (normalizedSpectrum.Length != SpectrumDataLoader.SpectrumLength)
                 throw new InvalidOperationException($"{SpectrumDataLoader.SpectrumLength} 点のスペクトルだけを回帰できます。");
 
-            lock (_gate)
+            lock (TensorFlowRuntimeGate.SyncRoot)
             {
                 try
                 {

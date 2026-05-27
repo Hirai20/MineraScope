@@ -20,12 +20,14 @@ namespace MineraScope
             int gridWidth,
             int gridHeight,
             int[] top1LabelId,
-            string[] labelNames)
+            string[] labelNames,
+            PtsClassificationMapTimings timings)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(ptsFilePath);
             ArgumentException.ThrowIfNullOrWhiteSpace(modelPath);
             ArgumentNullException.ThrowIfNull(top1LabelId);
             ArgumentNullException.ThrowIfNull(labelNames);
+            ArgumentNullException.ThrowIfNull(timings);
 
             if (binSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(binSize));
@@ -45,6 +47,7 @@ namespace MineraScope
             BinSize = binSize;
             GridWidth = gridWidth;
             GridHeight = gridHeight;
+            Timings = timings;
             _top1LabelId = top1LabelId;
             _labelNames = labelNames;
         }
@@ -61,6 +64,8 @@ namespace MineraScope
 
         public int GridHeight { get; }
 
+        public PtsClassificationMapTimings Timings { get; }
+
         public int BlockCount => GridWidth * GridHeight;
 
         // 260526Claude: colorizer はフラット走査するため index アクセサを公開する。
@@ -70,4 +75,15 @@ namespace MineraScope
         public string GetMineralName(int labelId)
             => labelId >= 0 && labelId < _labelNames.Length ? _labelNames[labelId] : string.Empty;
     }
+
+    // 260527Codex: Carries map-generation timing diagnostics so UI can show whether reading or inference dominates.
+    internal sealed record PtsClassificationMapTimings(
+        TimeSpan ModelPreparation,
+        TimeSpan ReadAndAggregate,
+        TimeSpan NormalizeAndPack,
+        TimeSpan Inference,
+        TimeSpan Total,
+        int TileCount,
+        int BatchSize,
+        long TileMemoryBudgetBytes);
 }

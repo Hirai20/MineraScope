@@ -44,6 +44,12 @@ namespace MineraScope
         // 260523Codex: Keep ownership of the image assigned to scalablePictureBoxSEM so replaced SEM images can be disposed.
         private PseudoBitmap? _semPseudoBitmap;
 
+        // 260527Codex: Prevent duplicate or rapid .pts drops from opening the same file concurrently.
+        private bool _isPtsDropLoading;
+
+        // 260527Codex: Ignore rapid image clicks while the previous PTS read/classification is still running.
+        private bool _isSpectrumClickBusy;
+
         // 260523Codex: Remember the ScalablePictureBox left-button start point until MouseUp2 decides click vs pan.
         // 260526Claude: SEM/マップ両ボックスで共有するため名前を一般化。
         private Point? _scalableMouseDownPoint;
@@ -61,6 +67,9 @@ namespace MineraScope
         private int _mapBuildVersion;
         private CancellationTokenSource? _mapClassificationCancellation;
 
+        // 260527Codex: Name the shared prediction-service gate used by click and full-map classification.
+        private bool IsInteractiveClassificationBusy => _isMappingBusy || _isSpectrumClickBusy;
+
         // 260416Codex: AnalyzerForm の UI 配線をフォーム本体にまとめて保守しやすくします。
         public AnalyzerForm()
         {
@@ -71,7 +80,8 @@ namespace MineraScope
             // 260523Claude: .pts ドロップを復活。フォーム本体は Designer で DragEnter/DragDrop 済みなので AllowDrop だけ立て、
             // 子孫側は再帰で有効化する（ScalablePictureBox は内部 pictureBox がドロップ先になり、Designer では再帰配線できないため）。
             AllowDrop = true;
-            ControlDropHelper.EnableRecursive(this, AnalyzerForm_DragEnter, AnalyzerForm_DragDrop);
+            // 260527Codex: scalablePictureBoxSEM itself is already wired by the Designer; only its descendants need runtime wiring.
+            ControlDropHelper.EnableRecursive(this, AnalyzerForm_DragEnter, AnalyzerForm_DragDrop, scalablePictureBoxSEM);
         }
 
         // 260522Codex: Store binning choices as typed combo items instead of parsing display text later.
@@ -130,9 +140,13 @@ namespace MineraScope
         // 260519Codex: .pts ドロップ時は SEM画像だけを読み込み、EDXスペクトルはクリック時に1ピクセルだけ読みます。
         private async void AnalyzerForm_DragDrop(object? sender, DragEventArgs e)
         {
+            if (_isPtsDropLoading)
+                return;
+
             if (!TryGetSingleDroppedPtsFile(e, out var filePath))
                 return;
 
+            _isPtsDropLoading = true;
             ClearLoadedPtsData();
             UseWaitCursor = true;
             try
@@ -165,6 +179,7 @@ namespace MineraScope
             finally
             {
                 UseWaitCursor = false;
+                _isPtsDropLoading = false;
             }
         }
 
@@ -198,6 +213,8 @@ namespace MineraScope
             _mapBuildVersion++;
             _mapClassificationCancellation?.Cancel();
             _classificationMap = null;
+            // 260526Claude: 凡例も合わせて破棄（PTS が変わったら色対応も無効）。
+            listBoxLegend.Items.Clear();
             SetMapPseudoBitmap(null);
             SetSemPseudoBitmap(null);
             graphControl1.GraphTitle = "";
@@ -217,12 +234,24 @@ namespace MineraScope
         }
 
         // 260526Codex: SEM と鉱物マップの PseudoBitmap 差し替え処理を共通化します。
-        private static void ReplacePseudoBitmap(ScalablePictureBox pictureBox, ref PseudoBitmap? current, PseudoBitmap? next)
+        private static void ReplacePseudoBitmap(ScalablePictureBox viewer, ref PseudoBitmap? current, PseudoBitmap? next)
         {
             PseudoBitmap? previous = current;
-            current = next ?? new PseudoBitmap([0d], 1);
-            pictureBox.ShowAreaRectangle = false;
-            pictureBox.PseudoBitmap = current;
+            current = next;
+            viewer.ShowAreaRectangle = false;
+            if (next is null)
+            {
+                // 260527Codex: Clear the viewer without drawing a 1x1 fallback image, which shows ScalablePictureBox's green out-of-range color.
+                viewer.SkipDrawing = true;
+                viewer.pictureBox.Image = null;
+                viewer.Refresh();
+            }
+            else
+            {
+                viewer.SkipDrawing = false;
+                viewer.PseudoBitmap = next;
+            }
+
             previous?.Dispose();
         }
 
@@ -272,15 +301,42 @@ namespace MineraScope
             if (ReferenceEquals(sender, scalablePictureBoxSEM))
             {
                 if (TryGetImagePixel(_semPseudoBitmap, sourcePoint, clamp: true, out int x, out int y))
-                    _ = ReadAndDisplayBinnedPixelAsync(new Point(x, y));
+                    _ = RunSpectrumClickAsync(() => ReadAndDisplayBinnedPixelAsync(new Point(x, y)));
                 return;
             }
 
-            if (!ReferenceEquals(sender, scalablePictureBox1) || _classificationMap is null)
+            if (!ReferenceEquals(sender, scalablePictureBoxMap) || _classificationMap is null)
                 return;
 
             if (TryGetImagePixel(_mapPseudoBitmap, sourcePoint, clamp: false, out int blockX, out int blockY))
-                _ = DisplayMapPixelAsync(new Point(blockX, blockY));
+                _ = RunSpectrumClickAsync(() => DisplayMapPixelAsync(new Point(blockX, blockY)));
+        }
+
+        // 260527Codex: Keep image clicks idle during map builds so TensorFlow prediction and UI updates do not interleave.
+        private async Task RunSpectrumClickAsync(Func<Task> action)
+        {
+            if (IsInteractiveClassificationBusy)
+                return;
+
+            _isSpectrumClickBusy = true;
+            UpdateMappingButtons();
+            try
+            {
+                await action();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"クリック位置のスペクトル表示に失敗しました。\r\n{ex.Message}",
+                    "PTS EDXスペクトル",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                _isSpectrumClickBusy = false;
+                UpdateMappingButtons();
+            }
         }
 
         // 260523Codex: Keep ScalablePictureBox click handling tolerant of tiny hand movement but not drag panning.
@@ -491,7 +547,7 @@ namespace MineraScope
         // 260526Claude: 全ブロック鉱物マッピングを開始する。実行中は中止ボタン側を有効化し、完了時に stale/キャンセルを判定する。
         private async void buttonClassifyMap_Click(object sender, EventArgs e)
         {
-            if (_isMappingBusy)
+            if (IsInteractiveClassificationBusy)
                 return;
 
             if (string.IsNullOrWhiteSpace(_currentPtsFilePath))
@@ -543,6 +599,8 @@ namespace MineraScope
             }
             finally
             {
+                // 260527Codex: Full-map inference is long-running; reset Keras state so repeated maps do not reuse stale native resources.
+                _classificationService.ReleaseModel();
                 _isMappingBusy = false;
                 if (ReferenceEquals(_mapClassificationCancellation, cancellation))
                     _mapClassificationCancellation = null;
@@ -561,7 +619,8 @@ namespace MineraScope
         private void UpdateMappingButtons()
         {
             bool cancelling = _mapClassificationCancellation?.IsCancellationRequested ?? false;
-            buttonClassifyMap.Enabled = !_isMappingBusy;
+            // 260527Codex: Disable map creation while a click classification is still using the shared prediction service.
+            buttonClassifyMap.Enabled = !IsInteractiveClassificationBusy;
             buttonCancelMap.Enabled = _isMappingBusy && !cancelling;
             buttonCancelMap.Text = cancelling ? "中止中..." : "中止";
         }
@@ -596,28 +655,55 @@ namespace MineraScope
         // 260526Claude: scalablePictureBox1 のマップ画像を差し替え、置き換え前の PseudoBitmap を破棄する。
         private void SetMapPseudoBitmap(PseudoBitmap? mapImage)
         {
-            ReplacePseudoBitmap(scalablePictureBox1, ref _mapPseudoBitmap, mapImage);
+            ReplacePseudoBitmap(scalablePictureBoxMap, ref _mapPseudoBitmap, mapImage);
         }
 
-        // 260526Claude: 完了時に上位20＋Other＋未判定の凡例を textBox1 へ出す（plain TextBox のため色は RGB をテキスト表記）。
+        // 260526Claude: 完了時に上位20＋Other＋未判定の凡例を listBoxLegend へ反映する（色見本は owner-draw）。
+        // 260527Codex: textBox1 is limited to map summary and timing diagnostics; the persistent legend stays in listBoxLegend.
         private void ShowMapLegend(MineralMapImage image, PtsClassificationMapResult result)
         {
+            listBoxLegend.BeginUpdate();
+            try
+            {
+                listBoxLegend.Items.Clear();
+                foreach (var entry in image.Legend)
+                    listBoxLegend.Items.Add(entry);
+                // 260526Claude: owner-draw では ListBox が項目幅を測れないため、最長行を実測して HorizontalExtent に渡す。
+                listBoxLegend.HorizontalExtent = MeasureLegendMaxWidth(image.Legend);
+            }
+            finally
+            {
+                listBoxLegend.EndUpdate();
+            }
+
             var lines = new List<string>
             {
                 $"鉱物マッピング: {result.ModelName}",
                 $"ビニング: {result.BinSize}×{result.BinSize} / 格子 {result.GridWidth}×{result.GridHeight}",
             };
 
-            if (result.GridWidth > scalablePictureBox1.ClientSize.Width - 1 || result.GridHeight > scalablePictureBox1.ClientSize.Height - 1)
+            // 260527Claude: 格子が表示枠より大きいと縮小描画でスカラー値が平均されカテゴリ色が混ざる（案2 の安全条件）。
+            if (result.GridWidth > scalablePictureBoxMap.ClientSize.Width - 1 || result.GridHeight > scalablePictureBoxMap.ClientSize.Height - 1)
                 lines.Add("⚠ 格子が表示枠より大きく、縮小表示でカテゴリ色が混ざる場合があります（binを大きくしてください）。");
 
+            PtsClassificationMapTimings timings = result.Timings;
             lines.Add(string.Empty);
-            lines.Add("凡例 (R,G,B 鉱物: ブロック数):");
-            foreach (var entry in image.Legend)
-                lines.Add($"  ({entry.Color.R},{entry.Color.G},{entry.Color.B}) {entry.MineralName}: {entry.BlockCount}");
+            lines.Add("Timing:");
+            lines.Add($"  Total: {FormatDuration(timings.Total)}");
+            lines.Add($"  Model prep: {FormatDuration(timings.ModelPreparation)}");
+            lines.Add($"  Read/Aggregate: {FormatDuration(timings.ReadAndAggregate)}");
+            lines.Add($"  Normalize/Pack: {FormatDuration(timings.NormalizeAndPack)}");
+            lines.Add($"  Inference: {FormatDuration(timings.Inference)}");
+            lines.Add($"  Tiles: {timings.TileCount}, Batch: {timings.BatchSize}, Tile memory: {timings.TileMemoryBudgetBytes / (1024 * 1024)} MB");
 
             textBox1.Lines = lines.ToArray();
         }
+
+        // 260527Codex: Keep timing diagnostics compact enough for the map summary textbox.
+        private static string FormatDuration(TimeSpan value)
+            => value.TotalMilliseconds < 1000
+                ? string.Format(CultureInfo.InvariantCulture, "{0:F0} ms", value.TotalMilliseconds)
+                : string.Format(CultureInfo.InvariantCulture, "{0:F2} s", value.TotalSeconds);
 
         // 260526Claude: マップクリック。作成時の bin/model/file で該当ブロックを再読みし、SEM クリックと同じ表示・分類へ流す。
         private async Task DisplayMapPixelAsync(Point block)
@@ -659,8 +745,55 @@ namespace MineraScope
         // 260526Claude: クリックしたブロックをマップ側 (scalablePictureBox1) に枠表示する（案2 なので格子座標で 1×1）。
         private void ShowMapBlockArea(Point block)
         {
-            scalablePictureBox1.AreaRectangle = new RectangleD(block.X, block.Y, 1, 1);
-            scalablePictureBox1.ShowAreaRectangle = true;
+            scalablePictureBoxMap.AreaRectangle = new RectangleD(block.X, block.Y, 1, 1);
+            scalablePictureBoxMap.ShowAreaRectangle = true;
+        }
+
+        // 260526Claude: 凡例 (MeasureLegendMaxWidth と listBoxLegend_DrawItem) のレイアウト定数。両者がドリフトしないよう1か所に集約。
+        private const int LegendPadding = 2;
+        private const int LegendTextGap = 6;
+        private const int LegendTrailingPadding = 4;
+
+        private int MeasureLegendMaxWidth(IReadOnlyList<MineralMapLegendEntry> entries)
+        {
+            int swatchSize = listBoxLegend.ItemHeight - LegendPadding * 2;
+            int swatchAndGap = LegendPadding + swatchSize + LegendTextGap;
+            int max = 0;
+            foreach (var entry in entries)
+            {
+                Size textSize = TextRenderer.MeasureText($"{entry.MineralName}: {entry.BlockCount}", listBoxLegend.Font);
+                int total = swatchAndGap + textSize.Width + LegendTrailingPadding;
+                if (total > max)
+                    max = total;
+            }
+            return max;
+        }
+
+        private void listBoxLegend_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            if (e.Index < 0)
+                return;
+
+            e.DrawBackground();
+
+            if (listBoxLegend.Items[e.Index] is MineralMapLegendEntry entry)
+            {
+                int swatchSize = e.Bounds.Height - LegendPadding * 2;
+                var swatchRect = new Rectangle(e.Bounds.Left + LegendPadding, e.Bounds.Top + LegendPadding, swatchSize, swatchSize);
+                using (var brush = new SolidBrush(entry.Color))
+                    e.Graphics.FillRectangle(brush, swatchRect);
+                e.Graphics.DrawRectangle(Pens.Gray, swatchRect);
+
+                var textRect = new Rectangle(
+                    swatchRect.Right + LegendTextGap,
+                    e.Bounds.Top,
+                    e.Bounds.Right - swatchRect.Right - LegendTextGap,
+                    e.Bounds.Height);
+                TextRenderer.DrawText(e.Graphics, $"{entry.MineralName}: {entry.BlockCount}", e.Font ?? listBoxLegend.Font, textRect, e.ForeColor,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            }
+
+            e.DrawFocusRectangle();
         }
     }
 }

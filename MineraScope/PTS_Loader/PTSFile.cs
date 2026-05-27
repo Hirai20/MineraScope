@@ -777,12 +777,21 @@ namespace MineraScope
             return (left, top, right, bottom);
         }
 
-        // 260526Claude: PTS イベント列を1パス走査し、非重複ブロックごとの全チャンネルカウントを作る（マップ生成用）。
-        // 大配列確保前のチャンネル数・メモリ検証は呼び出し側 (workflow) が行う前提。キャンセルは OperationCanceledException で抜ける。
-        internal PtsBinnedSpectrumGrid? TryReadBinnedSpectrumGrid(int binSize, IProgress<double>? progress, CancellationToken cancellationToken)
+        // 260527Codex: PTS イベント列を1パス走査し、指定したブロック行帯のチャンネルカウントだけを返す（タイル読み対応）。
+        // 全グリッドが要るときは startBlockY=0, blockRowCount=gridHeight を渡す。大配列確保前のチャンネル/メモリ検証は呼び出し側 (workflow) が行う前提。
+        // 260526Claude: ホットループの band 比較は分岐予測が効くため、フルスキャン時の余分なコストは無視できる範囲。
+        internal PtsBinnedSpectrumGrid? TryReadBinnedSpectrumGridRows(
+            int binSize,
+            int startBlockY,
+            int blockRowCount,
+            IProgress<double>? progress,
+            CancellationToken cancellationToken)
         {
             if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096 || binSize <= 0)
                 return null;
+
+            if (startBlockY < 0 || blockRowCount <= 0)
+                throw new ArgumentOutOfRangeException(startBlockY < 0 ? nameof(startBlockY) : nameof(blockRowCount));
 
             int coordinateUnit = 4096 / Width;
             if (coordinateUnit <= 0)
@@ -794,8 +803,12 @@ namespace MineraScope
 
             int gridWidth = (Width + binSize - 1) / binSize;
             int gridHeight = (Height + binSize - 1) / binSize;
+            if (startBlockY >= gridHeight)
+                return null;
 
-            long length = (long)gridWidth * gridHeight * usableChannelCount;
+            int localGridHeight = Math.Min(blockRowCount, gridHeight - startBlockY);
+            int endBlockY = startBlockY + localGridHeight;
+            long length = (long)gridWidth * localGridHeight * usableChannelCount;
             if (length > int.MaxValue)
                 throw new InvalidOperationException("ビニング格子が大きすぎて確保できません。binを大きくしてください。");
 
@@ -869,7 +882,11 @@ namespace MineraScope
                             if (!TryAcceptChannel(value, usableChannelCount, out int channel))
                                 break;
 
-                            int blockIndex = (y / binSize) * gridWidth + x / binSize;
+                            int blockY = y / binSize;
+                            if (blockY < startBlockY || blockY >= endBlockY)
+                                break;
+
+                            int blockIndex = ((blockY - startBlockY) * gridWidth) + x / binSize;
                             counts[blockIndex * usableChannelCount + channel]++;
                             totalXrayCounts++;
                             break;
@@ -888,7 +905,7 @@ namespace MineraScope
 
             return new PtsBinnedSpectrumGrid(
                 gridWidth,
-                gridHeight,
+                localGridHeight,
                 binSize,
                 usableChannelCount,
                 counts);

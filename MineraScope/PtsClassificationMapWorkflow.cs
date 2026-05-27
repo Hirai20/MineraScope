@@ -1,17 +1,17 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 
 namespace MineraScope
 {
-    // 260526Claude: PTS 読み取り → 正規化 → バッチ Top-1 推論 → 結果組み立てを担う。重い処理は Task.Run から呼ぶ前提。
-    // メモリ: BlockCounts(grid) は本メソッド内だけで保持し、推論後に破棄する。正規化スペクトルはチャンク float[,] を都度作り再利用する。
+    // 260527Codex: Builds PTS mineral maps by reading bounded block-count tiles and classifying each tile in batches.
     internal static class PtsClassificationMapWorkflow
     {
-        // 260526Claude: 推論バッチ行数。変更しやすいよう定数で持つ。
-        public const int InferenceBatchSize = 512;
+        // 260527Codex: Use a larger inference batch to reduce TensorFlow call overhead while keeping input memory modest.
+        public const int InferenceBatchSize = 8192;
 
-        // 260526Claude: BlockCounts の確保上限 (v1)。超えたら確保前に中断する。
-        public const long MemoryCapBytes = 512L * 1024 * 1024;
+        // 260527Codex: This budget applies only to the temporary int[counts] tile, not to the full map result.
+        public const long TileMemoryBudgetBytes = 1024L * 1024 * 1024;
 
         public static PtsClassificationMapResult Run(
             string filePath,
@@ -29,9 +29,14 @@ namespace MineraScope
             if (binSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(binSize));
 
+            var totalTimer = Stopwatch.StartNew();
+            long modelPreparationTicks = 0;
+            long readAndAggregateTicks = 0;
+            long normalizeAndPackTicks = 0;
+            long inferenceTicks = 0;
+
             using var pts = new PTSFile(filePath);
 
-            // 260526Claude: 大配列確保前にチャンネル数とメモリを検証する。
             int channelCount = pts.UsableChannelCount;
             if (channelCount != SpectrumDataLoader.SpectrumLength)
                 throw new InvalidOperationException(
@@ -42,23 +47,18 @@ namespace MineraScope
 
             int gridWidth = (pts.Width + binSize - 1) / binSize;
             int gridHeight = (pts.Height + binSize - 1) / binSize;
-            long estimatedBytes = (long)gridWidth * gridHeight * channelCount * sizeof(int);
-            if (estimatedBytes > MemoryCapBytes)
-                throw new InvalidOperationException(
-                    $"ビニング格子の推定メモリが {estimatedBytes / (1024 * 1024)}MB で上限 {MemoryCapBytes / (1024 * 1024)}MB を超えます。binを大きくしてください。");
+            long blockCountLong = (long)gridWidth * gridHeight;
+            if (blockCountLong > int.MaxValue)
+                throw new InvalidOperationException("ビニング格子が大きすぎて確保できません。binを大きくしてください。");
 
-            // 260526Claude: 読み取りは進捗 0..0.5 に割り当てる。
-            IProgress<double>? readProgress = progress is null ? null : new ScaledProgress(progress, 0.5, 0.0);
-            PtsBinnedSpectrumGrid? grid = pts.TryReadBinnedSpectrumGrid(binSize, readProgress, cancellationToken);
-            if (grid is null)
-                throw new InvalidOperationException("PTSからスペクトル格子を読み取れませんでした。");
-
-            cancellationToken.ThrowIfCancellationRequested();
-
+            var stageTimer = Stopwatch.StartNew();
             string[] labelNames = service.GetLabelNames(modelPath);
+            modelPreparationTicks += stageTimer.ElapsedTicks;
 
-            int blockCount = grid.BlockCount;
+            int blockCount = (int)blockCountLong;
             var top1LabelId = new int[blockCount];
+            int tileBlockRows = CalculateTileBlockRows(gridWidth, channelCount, gridHeight);
+            int tileCount = (gridHeight + tileBlockRows - 1) / tileBlockRows;
 
             // 260526Claude: チャンク batch を 1 つだけ確保して使い回す（全 float[] は保持しない）。
             var batch = new float[InferenceBatchSize, SpectrumDataLoader.SpectrumLength];
@@ -66,55 +66,103 @@ namespace MineraScope
             int rowsInChunk = 0;
             int processedBlocks = 0;
 
-            for (int blockY = 0; blockY < grid.GridHeight; blockY++)
+            for (int tileIndex = 0, startBlockY = 0; startBlockY < gridHeight; tileIndex++, startBlockY += tileBlockRows)
             {
-                for (int blockX = 0; blockX < grid.GridWidth; blockX++)
+                cancellationToken.ThrowIfCancellationRequested();
+
+                int rowsInTile = Math.Min(tileBlockRows, gridHeight - startBlockY);
+                double tileOffset = (double)tileIndex / tileCount;
+                double tileScale = 1.0 / tileCount;
+                IProgress<double>? readProgress = progress is null ? null : new ScaledProgress(progress, tileScale * 0.6, tileOffset);
+                stageTimer.Restart();
+                PtsBinnedSpectrumGrid? grid = pts.TryReadBinnedSpectrumGridRows(
+                    binSize,
+                    startBlockY,
+                    rowsInTile,
+                    readProgress,
+                    cancellationToken);
+                readAndAggregateTicks += stageTimer.ElapsedTicks;
+
+                if (grid is null)
+                    throw new InvalidOperationException("PTSからスペクトル格子を読み取れませんでした。");
+
+                int tileBlockCount = grid.BlockCount;
+                int processedTileBlocks = 0;
+                long tileInferenceTicksStart = inferenceTicks;
+                stageTimer.Restart();
+                for (int localBlockY = 0; localBlockY < grid.GridHeight; localBlockY++)
                 {
-                    int flatIndex = blockY * grid.GridWidth + blockX;
-                    bool hasSignal = SpectrumDataLoader.NormalizeInto(grid.GetBlockCounts(blockX, blockY), batch, rowsInChunk);
-                    if (!hasSignal)
+                    int globalBlockY = startBlockY + localBlockY;
+                    for (int blockX = 0; blockX < grid.GridWidth; blockX++)
                     {
-                        // 260526Claude: ゼロカウントは未判定。推論しない。
-                        top1LabelId[flatIndex] = PtsClassificationMapResult.UnclassifiedLabelId;
-                    }
-                    else
-                    {
-                        rowToBlock[rowsInChunk] = flatIndex;
-                        rowsInChunk++;
-                        if (rowsInChunk == InferenceBatchSize)
+                        int flatIndex = globalBlockY * gridWidth + blockX;
+                        bool hasSignal = SpectrumDataLoader.NormalizeInto(grid.GetBlockCounts(blockX, localBlockY), batch, rowsInChunk);
+                        if (!hasSignal)
                         {
-                            ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken);
-                            rowsInChunk = 0;
+                            top1LabelId[flatIndex] = PtsClassificationMapResult.UnclassifiedLabelId;
+                        }
+                        else
+                        {
+                            rowToBlock[rowsInChunk] = flatIndex;
+                            rowsInChunk++;
+                            if (rowsInChunk == InferenceBatchSize)
+                            {
+                                inferenceTicks += ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken);
+                                rowsInChunk = 0;
+                            }
+                        }
+
+                        processedBlocks++;
+                        processedTileBlocks++;
+                        if ((processedBlocks & 0x3FF) == 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            progress?.Report(tileOffset + tileScale * (0.6 + 0.35 * processedTileBlocks / tileBlockCount));
                         }
                     }
-
-                    processedBlocks++;
-                    if ((processedBlocks & 0x3FF) == 0)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        progress?.Report(0.5 + 0.45 * processedBlocks / blockCount);
-                    }
                 }
+
+                inferenceTicks += ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken);
+                normalizeAndPackTicks += Math.Max(0, stageTimer.ElapsedTicks - (inferenceTicks - tileInferenceTicksStart));
+                rowsInChunk = 0;
+                progress?.Report((double)(tileIndex + 1) / tileCount);
             }
 
-            ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken);
-
             progress?.Report(1.0);
+            totalTimer.Stop();
+            var timings = new PtsClassificationMapTimings(
+                ElapsedTime(modelPreparationTicks),
+                ElapsedTime(readAndAggregateTicks),
+                ElapsedTime(normalizeAndPackTicks),
+                ElapsedTime(inferenceTicks),
+                totalTimer.Elapsed,
+                tileCount,
+                InferenceBatchSize,
+                TileMemoryBudgetBytes);
 
             return new PtsClassificationMapResult(
                 filePath,
                 modelPath,
                 modelName,
                 binSize,
-                grid.GridWidth,
-                grid.GridHeight,
+                gridWidth,
+                gridHeight,
                 top1LabelId,
-                labelNames);
+                labelNames,
+                timings);
+        }
+
+        // 260527Codex: Derive the tallest tile that stays under the temporary count-array budget.
+        private static int CalculateTileBlockRows(int gridWidth, int channelCount, int gridHeight)
+        {
+            long bytesPerBlockRow = Math.Max(1, (long)gridWidth * channelCount * sizeof(int));
+            long rows = Math.Max(1, TileMemoryBudgetBytes / bytesPerBlockRow);
+            return (int)Math.Clamp(rows, 1, gridHeight);
         }
 
         // 260526Claude: 溜まったチャンクを推論し、行→ブロックの対応で結果へ書き戻す。
         // 260526Codex: 呼び出し側で rowsInChunk を明示的に戻し、戻り値の番兵 0 をなくします。
-        private static void ClassifyChunk(
+        private static long ClassifyChunk(
             MineralClassificationPredictionService service,
             string modelPath,
             float[,] batch,
@@ -124,13 +172,21 @@ namespace MineraScope
             CancellationToken cancellationToken)
         {
             if (rowsInChunk == 0)
-                return;
+                return 0;
 
             float[,] chunk = rowsInChunk == batch.GetLength(0) ? batch : SliceRows(batch, rowsInChunk);
+            var inferenceTimer = Stopwatch.StartNew();
             var predictions = service.PredictTop1Batch(modelPath, chunk, cancellationToken);
+            long elapsedTicks = inferenceTimer.ElapsedTicks;
             for (int row = 0; row < rowsInChunk; row++)
                 top1LabelId[rowToBlock[row]] = predictions[row];
+
+            return elapsedTicks;
         }
+
+        // 260527Codex: Convert Stopwatch ticks to TimeSpan without assuming Stopwatch frequency equals TimeSpan ticks.
+        private static TimeSpan ElapsedTime(long stopwatchTicks)
+            => TimeSpan.FromSeconds((double)stopwatchTicks / Stopwatch.Frequency);
 
         // 260526Claude: batch の先頭 rows 行だけを取り出す（最終チャンク用）。float[,] は行優先連続なので線形コピーでよい。
         private static float[,] SliceRows(float[,] batch, int rows)

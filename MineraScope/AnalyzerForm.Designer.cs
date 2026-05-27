@@ -29,8 +29,9 @@
         private void InitializeComponent()
         {
             groupBoxMineralAnalysis = new GroupBox();
+            listBoxLegend = new ListBox();
             buttonCancelMap = new Button();
-            scalablePictureBox1 = new Crystallography.Controls.ScalablePictureBox();
+            scalablePictureBoxMap = new Crystallography.Controls.ScalablePictureBox();
             scalablePictureBoxSEM = new Crystallography.Controls.ScalablePictureBox();
             flowLayoutPanelBinning = new FlowLayoutPanel();
             labelBinning = new Label();
@@ -57,8 +58,9 @@
             // 
             groupBoxMineralAnalysis.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
             groupBoxMineralAnalysis.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            groupBoxMineralAnalysis.Controls.Add(listBoxLegend);
             groupBoxMineralAnalysis.Controls.Add(buttonCancelMap);
-            groupBoxMineralAnalysis.Controls.Add(scalablePictureBox1);
+            groupBoxMineralAnalysis.Controls.Add(scalablePictureBoxMap);
             groupBoxMineralAnalysis.Controls.Add(scalablePictureBoxSEM);
             groupBoxMineralAnalysis.Controls.Add(flowLayoutPanelBinning);
             groupBoxMineralAnalysis.Controls.Add(textBox1);
@@ -67,10 +69,22 @@
             groupBoxMineralAnalysis.Controls.Add(flowLayoutPanelModellFolder);
             groupBoxMineralAnalysis.Location = new Point(12, 29);
             groupBoxMineralAnalysis.Name = "groupBoxMineralAnalysis";
-            groupBoxMineralAnalysis.Size = new Size(669, 653);
+            groupBoxMineralAnalysis.Size = new Size(772, 730);
             groupBoxMineralAnalysis.TabIndex = 88;
             groupBoxMineralAnalysis.TabStop = false;
             groupBoxMineralAnalysis.Text = "マッピング分析";
+            // 
+            // listBoxLegend
+            // 
+            listBoxLegend.DrawMode = DrawMode.OwnerDrawFixed;
+            listBoxLegend.FormattingEnabled = true;
+            listBoxLegend.HorizontalScrollbar = true;
+            listBoxLegend.ItemHeight = 18;
+            listBoxLegend.Location = new Point(417, 409);
+            listBoxLegend.Name = "listBoxLegend";
+            listBoxLegend.Size = new Size(142, 184);
+            listBoxLegend.TabIndex = 34;
+            listBoxLegend.DrawItem += listBoxLegend_DrawItem;
             // 
             // buttonCancelMap
             // 
@@ -84,28 +98,28 @@
             buttonCancelMap.UseVisualStyleBackColor = true;
             buttonCancelMap.Click += buttonCancelMap_Click;
             // 
-            // scalablePictureBox1
+            // scalablePictureBoxMap
             // 
-            scalablePictureBox1.AllowDrop = true;
-            scalablePictureBox1.BackColor = SystemColors.ActiveCaption;
-            scalablePictureBox1.FixZoomAndCenter = false;
-            scalablePictureBox1.FocusEventEnabled = false;
-            scalablePictureBox1.HorizontalFlip = false;
-            scalablePictureBox1.Location = new Point(337, 355);
-            scalablePictureBox1.ManualSpotMode = false;
-            scalablePictureBox1.Margin = new Padding(0);
-            scalablePictureBox1.MouseScaling = true;
-            scalablePictureBox1.MouseTranslation = true;
-            scalablePictureBox1.Name = "scalablePictureBox1";
-            scalablePictureBox1.ShowAreaRectangle = false;
-            scalablePictureBox1.ShowRimRentangle = false;
-            scalablePictureBox1.Size = new Size(332, 217);
-            scalablePictureBox1.TabIndex = 32;
-            scalablePictureBox1.TitleVisible = false;
-            scalablePictureBox1.VerticalFlip = false;
-            scalablePictureBox1.Zoom = 128D;
-            scalablePictureBox1.MouseUp2 += scalablePictureBoxSEM_MouseUp2;
-            scalablePictureBox1.MouseDown2 += scalablePictureBoxSEM_MouseDown2;
+            scalablePictureBoxMap.AllowDrop = true;
+            scalablePictureBoxMap.BackColor = SystemColors.ActiveCaption;
+            scalablePictureBoxMap.FixZoomAndCenter = false;
+            scalablePictureBoxMap.FocusEventEnabled = false;
+            scalablePictureBoxMap.HorizontalFlip = false;
+            scalablePictureBoxMap.Location = new Point(16, 409);
+            scalablePictureBoxMap.ManualSpotMode = false;
+            scalablePictureBoxMap.Margin = new Padding(0);
+            scalablePictureBoxMap.MouseScaling = true;
+            scalablePictureBoxMap.MouseTranslation = true;
+            scalablePictureBoxMap.Name = "scalablePictureBoxMap";
+            scalablePictureBoxMap.ShowAreaRectangle = false;
+            scalablePictureBoxMap.ShowRimRentangle = false;
+            scalablePictureBoxMap.Size = new Size(400, 300);
+            scalablePictureBoxMap.TabIndex = 32;
+            scalablePictureBoxMap.TitleVisible = false;
+            scalablePictureBoxMap.VerticalFlip = false;
+            scalablePictureBoxMap.Zoom = 128D;
+            scalablePictureBoxMap.MouseUp2 += scalablePictureBoxSEM_MouseUp2;
+            scalablePictureBoxMap.MouseDown2 += scalablePictureBoxSEM_MouseDown2;
             // 
             // scalablePictureBoxSEM
             // 
@@ -122,7 +136,7 @@
             scalablePictureBoxSEM.Name = "scalablePictureBoxSEM";
             scalablePictureBoxSEM.ShowAreaRectangle = false;
             scalablePictureBoxSEM.ShowRimRentangle = false;
-            scalablePictureBoxSEM.Size = new Size(332, 217);
+            scalablePictureBoxSEM.Size = new Size(400, 300);
             scalablePictureBoxSEM.TabIndex = 31;
             scalablePictureBoxSEM.TitleVisible = false;
             scalablePictureBoxSEM.VerticalFlip = false;
@@ -163,10 +177,10 @@
             // 
             // textBox1
             // 
-            textBox1.Location = new Point(16, 364);
+            textBox1.Location = new Point(565, 409);
             textBox1.Multiline = true;
             textBox1.Name = "textBox1";
-            textBox1.Size = new Size(307, 226);
+            textBox1.Size = new Size(188, 226);
             textBox1.TabIndex = 28;
             // 
             // buttonClassifyMap
@@ -205,7 +219,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(372, 93);
+            graphControl1.Location = new Point(433, 93);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -218,7 +232,7 @@
             graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
             graphControl1.OriginPosition = new Point(40, 20);
-            graphControl1.Size = new Size(273, 217);
+            graphControl1.Size = new Size(320, 225);
             graphControl1.TabIndex = 26;
             graphControl1.UnitX = "";
             graphControl1.UnitY = "";
@@ -265,7 +279,7 @@
             menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
-            menuStrip1.Size = new Size(711, 24);
+            menuStrip1.Size = new Size(796, 24);
             menuStrip1.TabIndex = 89;
             menuStrip1.Text = "menuStrip1";
             // 
@@ -278,9 +292,9 @@
             // statusStrip1
             // 
             statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripProgressBarMapping, toolStripStatusLabelMapping });
-            statusStrip1.Location = new Point(0, 672);
+            statusStrip1.Location = new Point(0, 749);
             statusStrip1.Name = "statusStrip1";
-            statusStrip1.Size = new Size(711, 22);
+            statusStrip1.Size = new Size(796, 22);
             statusStrip1.TabIndex = 90;
             statusStrip1.Text = "statusStrip1";
             // 
@@ -299,7 +313,7 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoScroll = true;
-            ClientSize = new Size(711, 694);
+            ClientSize = new Size(796, 771);
             Controls.Add(statusStrip1);
             Controls.Add(groupBoxMineralAnalysis);
             Controls.Add(menuStrip1);
@@ -338,10 +352,11 @@
         private Label labelBinning;
         private ComboBox comboBoxBinning;
         private Crystallography.Controls.ScalablePictureBox scalablePictureBoxSEM;
-        private Crystallography.Controls.ScalablePictureBox scalablePictureBox1;
+        private Crystallography.Controls.ScalablePictureBox scalablePictureBoxMap;
         private Button buttonCancelMap;
         private StatusStrip statusStrip1;
         private ToolStripProgressBar toolStripProgressBarMapping;
         private ToolStripStatusLabel toolStripStatusLabelMapping;
+        private ListBox listBoxLegend;
     }
 }
