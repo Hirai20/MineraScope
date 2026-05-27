@@ -36,6 +36,36 @@ namespace MineraScope
         string? ExceptionMessage,
         bool IsCanceled = false);
 
+    // 260528Codex: DTSA-II 実行中の進捗を UI へ渡すため、外部実行 service から段階ごとに通知します。
+    internal enum SimulationExecutionProgressKind
+    {
+        BatchStarted,
+        JobStarted,
+        ScriptWritten,
+        ProcessStarted,
+        SpectrumSaved,
+        JobCompleted,
+        JobFailed,
+        JobCanceled,
+        BatchCompleted
+    }
+
+    // 260528Codex: status strip と訓練ログの両方で使えるよう、job 件数と spectrum 件数をまとめて運びます。
+    internal sealed record SimulationExecutionProgress(
+        SimulationExecutionProgressKind Kind,
+        string SolutionName,
+        int BatchIndex,
+        int BatchCount,
+        int JobIndex,
+        int TotalJobCount,
+        int CompletedJobCount,
+        int TotalSpectrumCount,
+        int CompletedSpectrumCount,
+        int SpectrumCount,
+        string Message,
+        int? ExitCode = null,
+        TimeSpan? Elapsed = null);
+
     // 260507Codex: 実行 plan は予約済み spectrum を並列数で分割した batch の集合です。
     internal sealed record SimulationExecutionPlan(
         IReadOnlyList<SimulationExecutionBatch> Batches);

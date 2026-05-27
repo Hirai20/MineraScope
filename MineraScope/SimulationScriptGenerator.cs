@@ -18,6 +18,8 @@ namespace MineraScope
 
             builder.AppendLine("import dtsa2.mcSimulate3 as mc");
             builder.AppendLine("import os");
+            // 260528Codex: DTSA-II の保存完了を外側の進捗表示へ即時通知できるよう stdout を明示 flush します。
+            builder.AppendLine("import sys");
             builder.AppendLine("output_dir = " + ToPythonString(property.OutputFolder));
             builder.AppendLine("det = findDetector(" + ToPythonString(property.DetectorName) + ")");
             builder.AppendLine("e0 = " + ToInvariantString(property.BeamEnergy));
@@ -67,8 +69,9 @@ namespace MineraScope
             builder.AppendLine("\tsd = mc.coatedSubstrate(carbonCoating, cThickness, material, det, dose = dose)");
             builder.AppendLine("\toutput_file = os.path.join(output_dir, FileNames[idx])");
             builder.AppendLine("\tsd.rename(FileNames[idx])");
-            builder.AppendLine("\tprint(\"Simulation {0} saved to {1}\".format(idx + 1, output_file))");
             builder.AppendLine("\tsd.save(output_file)");
+            builder.AppendLine("\tprint(\"MINERASCOPE_SPECTRUM_SAVED|{0}|{1}\".format(idx + 1, output_file))");
+            builder.AppendLine("\tsys.stdout.flush()");
             builder.AppendLine("exit()");
             return builder.ToString();
         }

@@ -206,6 +206,8 @@ namespace MineraScope
             buttonModelTrain.Text = "モデルを作成";
             // 260513Codex: 中止ボタンの Click 接続は Designer 側で持ち、ここでは初期状態だけをそろえます。
             buttonCancel.Enabled = false;
+            // 260527Codex: Designer 上の statusStrip1 を進捗表示として使うため、初期値だけ code-behind でそろえます。
+            InitializeSimulationStatus();
 
             UpdateAdvancedSettingsButtonText();
         }
@@ -359,11 +361,13 @@ namespace MineraScope
 
             // 260507Codex: manifest の Completed 不足分だけを予約し、予約済み spectrum から実行 plan を作ります。
             var plan = _spectrumPoolWorkflow.CreateMissingSimulationPlan(request, out var shortages);
+            LogSimulationShortages(shortages);
             if (plan.Batches.Count == 0)
             {
                 string message = shortages.Count == 0
                     ? "不足している spectrum はありません。"
                     : SpectrumPoolWorkflow.FormatShortageMessage(shortages);
+                SetSimulationStatus(shortages.Count == 0 ? "spectrum 生成: 不足なし" : "spectrum 生成: 実行できる予約なし", 0, 1);
                 MessageBox.Show(message, "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -381,17 +385,22 @@ namespace MineraScope
                 .Sum(job => job.Reservations.Count);
             // 260513Codex: spectrum 生成ログは既存の訓練ログ欄へ流し、開始とジョブ数を最低限残します。
             TrainLog($"spectrum 生成開始: ジョブ {jobCount} 件、spectrum {reservedSpectrumCount} 件");
+            SetSimulationStatus($"spectrum 生成開始: ジョブ {jobCount} 件 / spectrum {reservedSpectrumCount} 件", 0, reservedSpectrumCount);
 
             try
             {
                 // 260513Codex: 実行結果を受け取り、キャンセル結果は manifest 側で Pending に戻します。
-                var results = await _simulationExecutionService.RunAsync(plan, cancellationTokenSource.Token);
+                var progress = new Progress<SimulationExecutionProgress>(ReportSimulationProgress);
+                var results = await _simulationExecutionService.RunAsync(plan, progress, cancellationTokenSource.Token);
                 foreach (var result in results)
                     LogSimulationExecutionResult(result);
 
                 _spectrumPoolWorkflow.ApplySimulationResults(results);
                 if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
+                {
                     TrainLog("spectrum 生成をキャンセルしました。");
+                    SetSimulationStatus("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
+                }
             }
             finally
             {
@@ -406,10 +415,18 @@ namespace MineraScope
             var statusCounts = _spectrumPoolWorkflow.GetStatusCounts(request);
             TrainLog(
                 $"manifest status: Completed {statusCounts.Completed} 件 / Failed {statusCounts.Failed} 件 / Missing {statusCounts.Missing} 件 / Pending {statusCounts.Pending} 件");
+            SetSimulationStatus(
+                $"manifest status: Completed {statusCounts.Completed} / Failed {statusCounts.Failed} / Missing {statusCounts.Missing} / Pending {statusCounts.Pending}",
+                toolStripProgressBar1.Value,
+                Math.Max(reservedSpectrumCount, 1));
 
             var remainingShortages = _spectrumPoolWorkflow.GetShortages(request);
             if (remainingShortages.Count > 0)
             {
+                SetSimulationStatus(
+                    $"spectrum 生成: 不足 {remainingShortages.Sum(shortage => shortage.MissingCount)} 件",
+                    toolStripProgressBar1.Value,
+                    Math.Max(reservedSpectrumCount, 1));
                 MessageBox.Show(
                     SpectrumPoolWorkflow.FormatShortageMessage(remainingShortages),
                     "スペクトル生成",
@@ -418,13 +435,17 @@ namespace MineraScope
             }
             else
             {
+                SetSimulationStatus("spectrum 生成完了: 必要な spectrum pool がそろいました", reservedSpectrumCount, reservedSpectrumCount);
                 MessageBox.Show("必要な spectrum pool がそろいました。", "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
-        // 260513Codex: DTSA-II の終了コードをジョブ単位でログに残し、キャンセル結果は終了コードと分けて表示します。
+        // 260527Codex: 正常完了は progress 側で逐次表示し、ここでは失敗・キャンセルの詳細だけを補足します。
         private void LogSimulationExecutionResult(SimulationExecutionResult result)
         {
+            if (!result.IsCanceled && result.ExitCode == 0 && result.ExceptionMessage is null)
+                return;
+
             string solutionName = result.Reservations.Count > 0
                 ? result.Reservations[0].SolutionName
                 : "unknown";
@@ -433,10 +454,12 @@ namespace MineraScope
             if (result.IsCanceled)
             {
                 TrainLog($"DTSA-II キャンセル: {solutionName} ({spectrumCount} spectra)");
+                LogSimulationFailureDetail(result);
                 return;
             }
 
             TrainLog($"DTSA-II 終了コード {result.ExitCode}: {solutionName} ({spectrumCount} spectra)");
+            LogSimulationFailureDetail(result);
         }
         #region EndmemberControl
         // EndmemberControlに端成分の情報を設定
@@ -698,6 +721,103 @@ namespace MineraScope
         #endregion
         private void TrainLog(string message)
             => TextBoxLogHelper.AppendLine(textBoxModelLog, message);
+
+        // 260527Codex: statusStrip1 は Designer の部品をそのまま使い、待機中の初期表示だけを整えます。
+        private void InitializeSimulationStatus() =>
+            SetSimulationStatus("待機中", 0, 1);
+
+        // 260527Codex: status strip 更新を一か所に集め、並列 progress 通知でも UI スレッドへ安全に戻します。
+        private void SetSimulationStatus(string text, int value, int maximum)
+        {
+            if (IsDisposed)
+                return;
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => SetSimulationStatus(text, value, maximum)));
+                return;
+            }
+
+            int safeMaximum = Math.Max(1, maximum);
+            toolStripProgressBar1.Style = ProgressBarStyle.Blocks;
+            toolStripProgressBar1.Minimum = 0;
+            toolStripProgressBar1.Maximum = safeMaximum;
+            toolStripProgressBar1.Value = Math.Clamp(value, 0, safeMaximum);
+            toolStripStatusLabel1.Text = text;
+        }
+
+        // 260528Codex: status strip は spectrum 数で毎回更新し、訓練ログは長くなりすぎない間隔に絞ります。
+        private void ReportSimulationProgress(SimulationExecutionProgress progress)
+        {
+            int maximum = progress.TotalSpectrumCount > 0
+                ? progress.TotalSpectrumCount
+                : progress.TotalJobCount;
+            int value = progress.TotalSpectrumCount > 0
+                ? progress.CompletedSpectrumCount
+                : progress.CompletedJobCount;
+
+            SetSimulationStatus(progress.Message, value, maximum);
+            if (ShouldLogSimulationProgress(progress))
+                TrainLog(FormatSimulationProgressLog(progress));
+        }
+
+        // 260528Codex: 1000 spectrum 規模でもログ欄が埋まりすぎないよう、保存進捗は節目だけ残します。
+        private static bool ShouldLogSimulationProgress(SimulationExecutionProgress progress) =>
+            progress.Kind != SimulationExecutionProgressKind.SpectrumSaved
+            || progress.CompletedSpectrumCount <= 5
+            || progress.CompletedSpectrumCount == progress.TotalSpectrumCount
+            || progress.CompletedSpectrumCount % 10 == 0;
+
+        // 260527Codex: 生成前の manifest 不足状況をログに出し、何を生成する予定かを見えるようにします。
+        private void LogSimulationShortages(IReadOnlyList<SpectrumPoolShortage> shortages)
+        {
+            if (shortages.Count == 0)
+            {
+                TrainLog("spectrum 生成確認: 不足なし");
+                return;
+            }
+
+            TrainLog("spectrum 生成確認: 不足あり");
+            foreach (var shortage in shortages)
+                TrainLog($"{shortage.MineralName}: Completed {shortage.CompletedCount}/{shortage.RequiredCount}, 不足 {shortage.MissingCount}");
+        }
+
+        // 260527Codex: 進捗ログへ終了コードと経過時間を付け、DTSA-II のどこまで進んだかを追いやすくします。
+        private static string FormatSimulationProgressLog(SimulationExecutionProgress progress)
+        {
+            string message = progress.Message;
+            if (progress.ExitCode is int exitCode)
+                message += $", exit code {exitCode}";
+
+            if (progress.Elapsed is TimeSpan elapsed)
+                message += $", elapsed {elapsed:hh\\:mm\\:ss}";
+
+            return message;
+        }
+
+        // 260527Codex: 失敗時の詳細は長くなりすぎないよう、stderr/stdout の先頭だけをログに残します。
+        private void LogSimulationFailureDetail(SimulationExecutionResult result)
+        {
+            if (!string.IsNullOrWhiteSpace(result.ExceptionMessage))
+            {
+                TrainLog($"DTSA-II 例外: {result.ExceptionMessage}");
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.StandardError))
+            {
+                TrainLog($"DTSA-II stderr: {TrimSimulationLogDetail(result.StandardError)}");
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(result.StandardOutput))
+                TrainLog($"DTSA-II stdout: {TrimSimulationLogDetail(result.StandardOutput)}");
+        }
+
+        // 260527Codex: 外部プロセス出力を訓練ログ欄へ出すときの上限を決め、画面が埋まりすぎないようにします。
+        private static string TrimSimulationLogDetail(string value) =>
+            value.Length <= 500 ? value : value[..500];
+
         //分類モデル
         private async void buttonModelTrain_Click(object sender, EventArgs e)
         {
