@@ -15,6 +15,9 @@ namespace MineraScope
         private static readonly Color OtherColor = Color.FromArgb(128, 128, 128);
         private static readonly Color UnclassifiedColor = Color.FromArgb(0, 0, 0);
 
+        // 260528Claude: 凡例で 1 つだけ強調するとき、非選択カテゴリを塗る dim color。Unclassified(黒) と Other(灰) の中間域に置いて区別を保つ。
+        private static readonly (byte R, byte G, byte B) DimColor = (48, 48, 48);
+
         // 260526Claude: 視認性重視の固定 20 色（グレー/黒は Other/未判定と衝突するため含めない）。
         private static readonly Color[] TopPalette =
         [
@@ -62,13 +65,14 @@ namespace MineraScope
             int categoryCount = topLabelIds.Count + 2;
 
             var palette = new (byte R, byte G, byte B)[categoryCount];
+            // 260528Codex: 凡例と palette が同じ色選択を使うよう、色取得と RGB 変換を helper に寄せます。
             for (int display = 0; display < topLabelIds.Count; display++)
             {
-                Color color = TopPalette[display % TopPalette.Length];
-                palette[display] = (color.R, color.G, color.B);
+                Color color = GetTopColor(display);
+                palette[display] = ToPaletteEntry(color);
             }
-            palette[otherDisplayIndex] = (OtherColor.R, OtherColor.G, OtherColor.B);
-            palette[unclassifiedDisplayIndex] = (UnclassifiedColor.R, UnclassifiedColor.G, UnclassifiedColor.B);
+            palette[otherDisplayIndex] = ToPaletteEntry(OtherColor);
+            palette[unclassifiedDisplayIndex] = ToPaletteEntry(UnclassifiedColor);
 
             // 260526Claude: 各ブロックを表示インデックスへ。Other に落ちたブロック数も数える。
             var values = new double[result.BlockCount];
@@ -93,7 +97,7 @@ namespace MineraScope
             for (int display = 0; display < topLabelIds.Count; display++)
             {
                 int labelId = topLabelIds[display];
-                Color color = Color.FromArgb(palette[display].R, palette[display].G, palette[display].B);
+                Color color = GetTopColor(display);
                 legend.Add(new MineralMapLegendEntry(result.GetMineralName(labelId), color, occurrence[labelId], false, false));
             }
             legend.Add(new MineralMapLegendEntry("Other", OtherColor, otherCount, true, false));
@@ -101,6 +105,22 @@ namespace MineraScope
 
             return new MineralMapImage(values, result.GridWidth, palette, categoryCount, legend);
         }
+
+        // 260528Claude: 凡例ハイライト用に、選択カテゴリだけ元色・他は DimColor の palette を新規生成する。Values 配列はそのまま使い回せる。
+        public static (byte R, byte G, byte B)[] BuildHighlightedPalette((byte R, byte G, byte B)[] source, int selectedDisplayIndex)
+        {
+            ArgumentNullException.ThrowIfNull(source);
+            var result = new (byte R, byte G, byte B)[source.Length];
+            for (int i = 0; i < source.Length; i++)
+                result[i] = i == selectedDisplayIndex ? source[i] : DimColor;
+            return result;
+        }
+
+        // 260528Codex: 上位鉱物の色選択を一か所に集め、palette と凡例のずれを防ぎます。
+        private static Color GetTopColor(int displayIndex) => TopPalette[displayIndex % TopPalette.Length];
+
+        // 260528Codex: PseudoBitmap 用 palette entry への変換を明示し、Color.FromArgb 往復を避けます。
+        private static (byte R, byte G, byte B) ToPaletteEntry(Color color) => (color.R, color.G, color.B);
     }
 
     // 260526Claude: PseudoBitmap 生成に必要な案2 表示データ。Values は表示インデックス、Palette/CategoryCount で色付けする。

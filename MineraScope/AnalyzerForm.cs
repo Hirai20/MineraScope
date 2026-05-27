@@ -67,6 +67,9 @@ namespace MineraScope
         private int _mapBuildVersion;
         private CancellationTokenSource? _mapClassificationCancellation;
 
+        // 260528Claude: 凡例ハイライト用に colorizer 出力を保持。palette だけ差し替えて bitmap を作り直すための源データ。
+        private MineralMapImage? _mapImage;
+
         // 260527Codex: Name the shared prediction-service gate used by click and full-map classification.
         private bool IsInteractiveClassificationBusy => _isMappingBusy || _isSpectrumClickBusy;
 
@@ -213,6 +216,8 @@ namespace MineraScope
             _mapBuildVersion++;
             _mapClassificationCancellation?.Cancel();
             _classificationMap = null;
+            // 260528Claude: Items.Clear が SelectedIndexChanged を発火して RebuildMapBitmapForSelection が走るので、源データを先に無効化する。
+            _mapImage = null;
             // 260526Claude: 凡例も合わせて破棄（PTS が変わったら色対応も無効）。
             listBoxLegend.Items.Clear();
             SetMapPseudoBitmap(null);
@@ -580,6 +585,8 @@ namespace MineraScope
 
                 MineralMapImage image = MineralMapColorizer.Build(result);
                 _classificationMap = result;
+                // 260528Claude: 凡例選択時の palette 差し替えに使う源データ。ShowMapLegend の Items.Clear で rebuild が走るので Set より前に必須。
+                _mapImage = image;
                 SetMapPseudoBitmap(CreateMapPseudoBitmap(image));
                 ShowMapLegend(image, result);
                 SetMappingStatus(string.Empty, 0);
@@ -638,9 +645,10 @@ namespace MineraScope
         }
 
         // 260526Claude: 案2。表示インデックスの double[] と K 長パレットから PseudoBitmap を作る。MinValue=0/MaxValue=K で 1:1 対応、GrayScale=false で色付け。
-        private static PseudoBitmap CreateMapPseudoBitmap(MineralMapImage image)
+        // 260528Claude: paletteOverride を渡せば Values/CategoryCount は据え置きで palette だけ差し替えた bitmap を作れる（凡例ハイライト用）。
+        private static PseudoBitmap CreateMapPseudoBitmap(MineralMapImage image, (byte R, byte G, byte B)[]? paletteOverride = null)
         {
-            return new PseudoBitmap(image.Values, image.Width, image.Palette)
+            return new PseudoBitmap(image.Values, image.Width, paletteOverride ?? image.Palette)
             {
                 GrayScale = false,
                 IsNegative = false,
@@ -653,6 +661,19 @@ namespace MineraScope
         private void SetMapPseudoBitmap(PseudoBitmap? mapImage)
         {
             ReplacePseudoBitmap(scalablePictureBoxMap, ref _mapPseudoBitmap, mapImage);
+        }
+
+        // 260528Claude: 凡例選択状態に合わせてマップ palette を作り直す。Values と CategoryCount は変えず palette だけ差し替える。
+        private void RebuildMapBitmapForSelection()
+        {
+            if (_mapImage is null) return;
+
+            int selectedIndex = listBoxLegend.SelectedIndex;
+            (byte R, byte G, byte B)[]? palette = selectedIndex >= 0
+                ? MineralMapColorizer.BuildHighlightedPalette(_mapImage.Palette, selectedIndex)
+                : null;
+
+            SetMapPseudoBitmap(CreateMapPseudoBitmap(_mapImage, palette));
         }
 
         // 260526Claude: 完了時に上位20＋Other＋未判定の凡例を listBoxLegend へ反映する（色見本は owner-draw）。
@@ -766,6 +787,19 @@ namespace MineraScope
             }
             return max;
         }
+
+        // 260528Claude: 凡例で同じ項目を再クリックしたら選択解除。MouseDown は ListBox 既定の選択処理より先に発火し、
+        // ここで SelectedIndex=-1 を直接代入しても直後の基底処理で再選択される。BeginInvoke で基底処理後に解除する。
+        private void listBoxLegend_MouseDown(object sender, MouseEventArgs e)
+        {
+            int idx = listBoxLegend.IndexFromPoint(e.Location);
+            if (idx >= 0 && idx == listBoxLegend.SelectedIndex)
+                listBoxLegend.BeginInvoke(() => listBoxLegend.SelectedIndex = -1);
+        }
+
+        // 260528Claude: 凡例選択が変わったらマップのハイライト表示を作り直す。マウス・キーボード・プログラム更新の全経路がここに集約される。
+        private void listBoxLegend_SelectedIndexChanged(object sender, EventArgs e)
+            => RebuildMapBitmapForSelection();
 
         private void listBoxLegend_DrawItem(object sender, DrawItemEventArgs e)
         {

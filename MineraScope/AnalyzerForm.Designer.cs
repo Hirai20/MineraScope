@@ -85,6 +85,8 @@
             listBoxLegend.Size = new Size(142, 184);
             listBoxLegend.TabIndex = 34;
             listBoxLegend.DrawItem += listBoxLegend_DrawItem;
+            listBoxLegend.SelectedIndexChanged += listBoxLegend_SelectedIndexChanged;
+            listBoxLegend.MouseDown += listBoxLegend_MouseDown;
             // 
             // buttonCancelMap
             // 
