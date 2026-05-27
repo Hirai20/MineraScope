@@ -359,23 +359,20 @@ namespace MineraScope
             if (bitmap is null || bitmap.Width <= 1 || bitmap.Height <= 1)
                 return false;
 
-            int x = (int)Math.Floor(sourcePoint.X);
-            int y = (int)Math.Floor(sourcePoint.Y);
+            int x = ToDisplayedPixelIndex(sourcePoint.X);
+            int y = ToDisplayedPixelIndex(sourcePoint.Y);
 
-            if (clamp)
-            {
-                imageX = Math.Clamp(x, 0, bitmap.Width - 1);
-                imageY = Math.Clamp(y, 0, bitmap.Height - 1);
-                return true;
-            }
-
-            if ((uint)x >= (uint)bitmap.Width || (uint)y >= (uint)bitmap.Height)
+            if (!clamp && ((uint)x >= (uint)bitmap.Width || (uint)y >= (uint)bitmap.Height))
                 return false;
 
-            imageX = x;
-            imageY = y;
+            imageX = clamp ? Math.Clamp(x, 0, bitmap.Width - 1) : x;
+            imageY = clamp ? Math.Clamp(y, 0, bitmap.Height - 1) : y;
             return true;
         }
+
+        // 260527Codex: Match PseudoBitmap's display sampler, where integer source coordinates represent pixel centers.
+        private static int ToDisplayedPixelIndex(double sourceCoordinate)
+            => (int)Math.Floor(sourceCoordinate + 0.5);
 
         // 260523Claude: SEM クリック位置のビニング済みスペクトルを読み込み、グラフ表示と分類まで行う。
         // 260526Claude: グラフ描画・分類は共通メソッドへ寄せ、SEM 固有はコンボの bin/model 取得と SEM 枠への範囲描画のみ。
@@ -745,7 +742,8 @@ namespace MineraScope
         // 260526Claude: クリックしたブロックをマップ側 (scalablePictureBox1) に枠表示する（案2 なので格子座標で 1×1）。
         private void ShowMapBlockArea(Point block)
         {
-            scalablePictureBoxMap.AreaRectangle = new RectangleD(block.X, block.Y, 1, 1);
+            // 260527Codex: Center the 1x1 selection on the displayed map pixel instead of starting at its center.
+            scalablePictureBoxMap.AreaRectangle = new RectangleD(block.X - 0.5, block.Y - 0.5, 1, 1);
             scalablePictureBoxMap.ShowAreaRectangle = true;
         }
 
