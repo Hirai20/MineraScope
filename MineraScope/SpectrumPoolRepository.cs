@@ -84,25 +84,6 @@ namespace MineraScope
             File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, JsonOptions));
         }
 
-        // 260513Codex: Completed でも実ファイルを読めないものは Missing に戻し、学習対象から外します。
-        public bool RefreshCompletedStatuses(SpectrumPoolHandle handle, SpectrumPoolManifest manifest)
-        {
-            bool changed = false;
-            foreach (var entry in manifest.Spectra.Where(entry => entry.Status == SpectrumManifestStatus.Completed))
-            {
-                string filePath = Path.Combine(handle.PoolFolder, entry.FileName);
-                if (SpectrumDataLoader.LoadNormalizedSpectrum(filePath) is not null)
-                    continue;
-
-                entry.Status = SpectrumManifestStatus.Missing;
-                // 260513Codex: manifest に残る理由はユーザーが読める自然な日本語にします。
-                entry.FailureReason = "Completed と記録されていますが、実ファイルを学習用スペクトルとして読み込めません。";
-                changed = true;
-            }
-
-            return changed;
-        }
-
         // 260513Codex: ファイルシステム上で安全に使える名前へ鉱物名を変換します。
         public static string SanitizeFileName(string value)
         {

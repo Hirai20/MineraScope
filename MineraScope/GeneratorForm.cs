@@ -201,7 +201,8 @@ namespace MineraScope
         {
             ConfigureBottomDrawerInitialState();
 
-            buttonRunSpectrumGeneration.Visible = false;
+            // 260527Codex: DTSA-II spectrum 生成だけを先に実行できるよう、実行ボタンは常時表示します。
+            buttonRunSpectrumGeneration.Visible = true;
             buttonModelTrain.Text = "モデルを作成";
             // 260513Codex: 中止ボタンの Click 接続は Designer 側で持ち、ここでは初期状態だけをそろえます。
             buttonCancel.Enabled = false;
@@ -315,7 +316,10 @@ namespace MineraScope
                 checkedListBoxMinerals.CheckedItems.Cast<SolidSolution>().ToArray());
 
         // 260507Codex: manifest/pool フローに必要な最低限の画面入力を実行前に検証します。
-        private static string ValidateModelCreationRequest(ModelCreationRequest request, bool requireDtsaPath)
+        private static string ValidateModelCreationRequest(
+            ModelCreationRequest request,
+            bool requireDtsaPath,
+            bool requireModelName = true)
         {
             if (request.SelectedMineralSolutions.Count == 0)
                 return "モデル作成対象の鉱物が選択されていません。";
@@ -329,11 +333,11 @@ namespace MineraScope
             if (string.IsNullOrWhiteSpace(request.Paths.SpectrumOutputFolder))
                 return "スペクトル pool の保存先を指定してください。";
 
-            // 260511Codex: モデル名は保存先の子フォルダ名になるため、空欄と禁止文字を実行前に止めます。
-            if (string.IsNullOrWhiteSpace(request.ModelName))
+            // 260527Codex: spectrum 生成だけの実行ではモデル名を使わないため、学習開始時だけ必須にします。
+            if (requireModelName && string.IsNullOrWhiteSpace(request.ModelName))
                 return "モデル名を入力してください。";
 
-            if (request.ModelName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            if (requireModelName && request.ModelName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
                 return "モデル名にフォルダ名として使えない文字が含まれています。";
 
             if (requireDtsaPath && string.IsNullOrWhiteSpace(request.Paths.DtsaFolder))
@@ -346,7 +350,7 @@ namespace MineraScope
         private async void buttonRunSpectrumGeneration_Click(object sender, EventArgs e)
         {
             var request = CreateModelCreationRequest();
-            string validationMessage = ValidateModelCreationRequest(request, requireDtsaPath: true);
+            string validationMessage = ValidateModelCreationRequest(request, requireDtsaPath: true, requireModelName: false);
             if (!string.IsNullOrEmpty(validationMessage))
             {
                 MessageBox.Show(validationMessage, "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -367,6 +371,8 @@ namespace MineraScope
             using var cancellationTokenSource = new CancellationTokenSource();
             _simulationCancellationTokenSource = cancellationTokenSource;
             buttonRunSpectrumGeneration.Enabled = false;
+            // 260527Codex: 生成と学習が同時に同じ pool を触らないよう、生成中はモデル作成を止めます。
+            buttonModelTrain.Enabled = false;
             buttonCancel.Enabled = true;
 
             int jobCount = plan.Batches.Sum(batch => batch.Jobs.Count);
@@ -393,6 +399,7 @@ namespace MineraScope
                     _simulationCancellationTokenSource = null;
 
                 buttonRunSpectrumGeneration.Enabled = true;
+                buttonModelTrain.Enabled = true;
                 buttonCancel.Enabled = false;
             }
 
@@ -411,7 +418,6 @@ namespace MineraScope
             }
             else
             {
-                buttonRunSpectrumGeneration.Visible = false;
                 MessageBox.Show("必要な spectrum pool がそろいました。", "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
@@ -708,7 +714,6 @@ namespace MineraScope
             var trainingPools = _spectrumPoolWorkflow.CreateTrainingPools(request, out var shortages);
             if (shortages.Count > 0)
             {
-                buttonRunSpectrumGeneration.Visible = true;
                 MessageBox.Show(
                     SpectrumPoolWorkflow.FormatShortageMessage(shortages),
                     "スペクトル不足",
@@ -729,12 +734,13 @@ namespace MineraScope
             ModelOutputPath = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
                 ? DefaultStoragePaths.ModelsFolder
                 : request.Paths.ModelOutputFolder;
-            buttonRunSpectrumGeneration.Visible = false;
 
             // 260514Codex: モデル作成中だけ中止ボタンから CancellationToken を要求できるようにします。
             using var cancellationTokenSource = new CancellationTokenSource();
             _modelTrainingCancellationTokenSource = cancellationTokenSource;
             buttonModelTrain.Enabled = false;
+            // 260527Codex: 学習中も実行ボタンは見せたまま、同時実行だけを避けます。
+            buttonRunSpectrumGeneration.Enabled = false;
             buttonCancel.Enabled = true;
             textBoxModelLog.Clear();
 
@@ -754,6 +760,7 @@ namespace MineraScope
                     _modelTrainingCancellationTokenSource = null;
 
                 buttonModelTrain.Enabled = true;
+                buttonRunSpectrumGeneration.Enabled = true;
                 buttonCancel.Enabled = false;
             }
         }

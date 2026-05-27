@@ -176,7 +176,7 @@ namespace MineraScope
                     .Where(shortage => shortage.MissingCount > 0)
                     .Select(shortage => $"{shortage.MineralName} は {shortage.MissingCount} 件不足しています。"));
 
-        // 260507Codex: manifest を読み、Completed でも実体がないものは Missing に更新して保存します。
+        // 260527Codex: manifest を正本にし、Completed の中身は読まず実ファイルの存在だけを高速確認します。
         private PoolState LoadState(ModelCreationRequest request, SolidSolution solution)
         {
             var handle = _repository.ResolvePool(
@@ -185,19 +185,20 @@ namespace MineraScope
                 request.Simulation.ResolutionStep,
                 request.SemEdxCondition);
             var manifest = _repository.LoadOrCreate(handle);
-            bool changed = _repository.RefreshCompletedStatuses(handle, manifest);
+            bool changed = EnsureNextSimulationIdAfterManifest(manifest);
 
             if (changed)
                 _repository.Save(handle, manifest);
 
             var completedEntries = manifest.Spectra
                 .Where(entry => entry.Status == SpectrumManifestStatus.Completed)
+                .Where(entry => File.Exists(Path.Combine(handle.PoolFolder, entry.FileName)))
                 .ToArray();
 
             return new PoolState(handle, manifest, completedEntries);
         }
 
-        // 260513Codex: Pending/Failed/Missing を先に再利用し、不足分だけ新しい simulationId を発行します。
+        // 260527Codex: 既存 Pending/Failed/Missing entry を先に再利用し、まだ足りない分だけ新規発行します。
         private IReadOnlyList<SpectrumSimulationReservation> ReserveMissingSpectra(
             SolidSolution solution,
             PoolState state,
@@ -250,6 +251,19 @@ namespace MineraScope
             return reservations;
         }
 
+        // 260527Codex: 古い manifest でも末尾から追加できるよう、NextSimulationId を既存最大値の次へそろえます。
+        private static bool EnsureNextSimulationIdAfterManifest(SpectrumPoolManifest manifest)
+        {
+            int nextSimulationId = manifest.Spectra.Count == 0
+                ? 0
+                : manifest.Spectra.Max(entry => entry.SimulationId) + 1;
+            if (manifest.NextSimulationId >= nextSimulationId)
+                return false;
+
+            manifest.NextSimulationId = nextSimulationId;
+            return true;
+        }
+
         // 260513Codex: manifest の endmemberFractions を鉱物定義順の配列へ戻して DTSA-II 入力を再構築します。
         private static SpectrumSimulationReservation CreateReservation(
             SolidSolution solution,
@@ -274,7 +288,7 @@ namespace MineraScope
                 solution.CalculateCompositionWeights(fractions));
         }
 
-        // 260513Codex: キャンセルは失敗扱いにせず、同じ entry を次回再生成できる Pending に戻します。
+        // 260527Codex: 実行結果は中身を読まず、終了コードと出力ファイルの存在で manifest に反映します。
         private static void ApplyResultToEntry(
             SimulationExecutionResult result,
             SpectrumSimulationReservation reservation,
@@ -295,10 +309,10 @@ namespace MineraScope
             }
 
             string outputPath = Path.Combine(reservation.PoolFolder, reservation.FileName);
-            if (SpectrumDataLoader.LoadNormalizedSpectrum(outputPath) is null)
+            if (!File.Exists(outputPath))
             {
                 entry.Status = SpectrumManifestStatus.Missing;
-                entry.FailureReason = "DTSA-II は正常終了しましたが、出力 spectrum を学習用に読み込めません。";
+                entry.FailureReason = "DTSA-II は正常終了しましたが、出力 spectrum ファイルが見つかりません。";
                 return;
             }
 
