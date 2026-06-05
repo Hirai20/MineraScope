@@ -176,7 +176,7 @@ namespace MineraScope
                     .Where(shortage => shortage.MissingCount > 0)
                     .Select(shortage => $"{shortage.MineralName} は {shortage.MissingCount} 件不足しています。"));
 
-        // 260527Codex: manifest を正本にし、Completed の中身は読まず実ファイルの存在だけを高速確認します。
+        // 260528Claude: Completed でも実体ファイルが消えている entry は Missing に格下げして manifest に書き戻し、次回再利用ループで同じ組成・simulationId が補充されるようにします。
         private PoolState LoadState(ModelCreationRequest request, SolidSolution solution)
         {
             var handle = _repository.ResolvePool(
@@ -187,18 +187,27 @@ namespace MineraScope
             var manifest = _repository.LoadOrCreate(handle);
             bool changed = EnsureNextSimulationIdAfterManifest(manifest);
 
+            foreach (var entry in manifest.Spectra.Where(e => e.Status == SpectrumManifestStatus.Completed))
+            {
+                if (File.Exists(Path.Combine(handle.PoolFolder, entry.FileName)))
+                    continue;
+
+                entry.Status = SpectrumManifestStatus.Missing;
+                entry.FailureReason = "出力ファイルが見つかりませんでした。";
+                changed = true;
+            }
+
             if (changed)
                 _repository.Save(handle, manifest);
 
             var completedEntries = manifest.Spectra
                 .Where(entry => entry.Status == SpectrumManifestStatus.Completed)
-                .Where(entry => File.Exists(Path.Combine(handle.PoolFolder, entry.FileName)))
                 .ToArray();
 
             return new PoolState(handle, manifest, completedEntries);
         }
 
-        // 260527Codex: 既存 Pending/Failed/Missing entry を先に再利用し、まだ足りない分だけ新規発行します。
+        // 260528Claude: 既存 Pending/Failed/Missing entry を先に再利用し、不足分は二分岐で発行します。N' (constraint 適用後の有効候補数) と totalAfter (合計目標件数) の大小で、全列挙ベースか直接サンプリングかを自動で切り替えます。
         private IReadOnlyList<SpectrumSimulationReservation> ReserveMissingSpectra(
             SolidSolution solution,
             PoolState state,
@@ -227,13 +236,31 @@ namespace MineraScope
             if (newReservationCount <= 0)
                 return reservations;
 
-            var candidates = solution.EnumerateCandidateFractions(resolutionStep);
+            // 260528Claude: 既存組成の出現回数を端成分順キーで集計します。Completed だけでなく再利用予約済みの Pending/Failed/Missing も含めて、manifest 全体の現状を反映させます。
+            var existingCounts = new Dictionary<string, int>();
+            foreach (var entry in state.Manifest.Spectra)
+            {
+                string key = solution.ComposeFractionKey(entry.EndmemberFractions);
+                existingCounts[key] = existingCounts.GetValueOrDefault(key) + 1;
+            }
+
+            // 260528Claude: totalAfter は「最終的に manifest に並ぶ entry 数」。既存 entry すべて + 新規発行予定で算出します。
+            int totalAfter = state.Manifest.Spectra.Count + newReservationCount;
+
+            // 260528Claude: 巨大候補空間 (例: 6 端成分 1% で N=96M) でも Take で必ず打ち切るため、配列長で N' との大小を判定します。
+            var candidates = solution.EnumerateCandidateFractionsLazy(resolutionStep)
+                .Take(totalAfter + 1)
+                .ToArray();
+
             if (candidates.Length == 0)
                 return reservations;
 
-            for (int i = 0; i < newReservationCount; i++)
+            double[][] fractionsToReserve = candidates.Length <= totalAfter
+                ? AssignByDeficit(solution, candidates, existingCounts, newReservationCount, _random)
+                : SampleUniqueFractions(solution, resolutionStep, existingCounts.Keys, newReservationCount, _random);
+
+            foreach (var fractions in fractionsToReserve)
             {
-                double[] fractions = candidates[_random.Next(candidates.Length)];
                 int simulationId = state.Manifest.NextSimulationId++;
                 string fileName = $"{SpectrumPoolRepository.SanitizeFileName(solution.Name)}_sim{simulationId:D6}.emsa";
                 var entry = new SpectrumManifestEntry
@@ -249,6 +276,86 @@ namespace MineraScope
             }
 
             return reservations;
+        }
+
+        // 260528Claude: 全列挙ベース。priority queue で (existing+assigned) が最小の候補に +1 を newReservationCount 回割り当て、出現回数を可能な限り均等化します。
+        private static double[][] AssignByDeficit(
+            SolidSolution solution,
+            double[][] candidates,
+            Dictionary<string, int> existingCounts,
+            int newReservationCount,
+            Random random)
+        {
+            var heap = new PriorityQueue<int, (int Count, int Shuffle)>();
+            var assigned = new int[candidates.Length];
+            var initialCounts = new int[candidates.Length];
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                initialCounts[i] = existingCounts.GetValueOrDefault(solution.ComposeFractionKey(candidates[i]));
+                heap.Enqueue(i, (initialCounts[i], random.Next()));
+            }
+
+            for (int k = 0; k < newReservationCount; k++)
+            {
+                int idx = heap.Dequeue();
+                assigned[idx]++;
+                heap.Enqueue(idx, (initialCounts[idx] + assigned[idx], random.Next()));
+            }
+
+            var result = new double[newReservationCount][];
+            int writeIndex = 0;
+            for (int i = 0; i < candidates.Length; i++)
+            {
+                for (int j = 0; j < assigned[i]; j++)
+                    result[writeIndex++] = candidates[i];
+            }
+
+            // 260528Claude: manifest 上の simulationId 順が組成順にならないよう、Fisher-Yates で全体をシャッフルします。
+            for (int i = result.Length - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (result[i], result[j]) = (result[j], result[i]);
+            }
+
+            return result;
+        }
+
+        // 260528Claude: 直接サンプリング。bars-and-stars 法で 1 セット乱択 → constraint チェック → 既存重複チェック を newReservationCount 件揃うまで繰り返します。試行上限到達は構成不能としてエラー扱いにします。
+        private const int MaxAttemptsPerSample = 10000;
+
+        private static double[][] SampleUniqueFractions(
+            SolidSolution solution,
+            double resolutionStep,
+            IEnumerable<string> initialExistingKeys,
+            int newReservationCount,
+            Random random)
+        {
+            var existingKeys = new HashSet<string>(initialExistingKeys);
+            var result = new double[newReservationCount][];
+
+            for (int k = 0; k < newReservationCount; k++)
+            {
+                bool found = false;
+                for (int attempt = 0; attempt < MaxAttemptsPerSample; attempt++)
+                {
+                    double[] fractions = solution.SampleRandomFraction(resolutionStep, random);
+                    if (!solution.CapableComposition(fractions))
+                        continue;
+                    string key = solution.ComposeFractionKey(fractions);
+                    if (!existingKeys.Add(key))
+                        continue;
+
+                    result[k] = fractions;
+                    found = true;
+                    break;
+                }
+
+                if (!found)
+                    throw new InvalidOperationException(
+                        $"組成のランダムサンプリングが {MaxAttemptsPerSample} 回連続で失敗しました。constraint が厳しすぎるか、候補空間が枯渇しています。");
+            }
+
+            return result;
         }
 
         // 260527Codex: 古い manifest でも末尾から追加できるよう、NextSimulationId を既存最大値の次へそろえます。

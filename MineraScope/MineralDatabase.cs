@@ -31,60 +31,84 @@ namespace MineraScope
 
         public override string ToString() => Name;
 
-        // 260416Codex: resolution == 0 で null を返す既存契約を維持したまま、重複した集計処理を整理します。
-        public (string FileName, (string ElementName, double Weight)[] Compositions)[] Divide(double resolution, int targetCount)
-        {
-            var results = new List<(string FileName, (string ElementName, double Weight)[])>();
-
-            if (Members.Length == 1)
-            {
-                var member = Members[0];
-                results.Add((Name, CalculateNormalizedWeights(member.Elements, 1.0)));
-                return results.ToArray();
-            }
-
-            if (resolution == 0)
-                return null!;
-
-            var validRatios = EnumerateCandidateFractions(resolution).Select(ratio => ratio.ToList()).ToList();
-
-            if (targetCount < validRatios.Count)
-            {
-                var random = new Random();
-                validRatios = validRatios.OrderBy(_ => random.Next()).Take(targetCount).ToList();
-            }
-
-            foreach (var ratio in validRatios) // totalMol は常に 1
-            {
-                var totalWeights = new Dictionary<string, double>();
-                var fileNameBuilder = new StringBuilder();
-
-                for (int i = 0; i < Members.Length; i++)
-                {
-                    AddWeights(totalWeights, Members[i].Elements, ratio[i]);
-                    fileNameBuilder.Append(Members[i].Name);
-                    fileNameBuilder.Append(ratio[i].ToString("F3", CultureInfo.InvariantCulture));
-                }
-
-                results.Add((fileNameBuilder.ToString(), NormalizeWeights(totalWeights)));
-            }
-
-            return results.ToArray();
-        }
-
-        // 260507Codex: 新方式の pool 予約用に、分解能と制約だけで全候補比率を列挙します。
-        public double[][] EnumerateCandidateFractions(double resolution)
+        // 260528Claude: 6 端成分 1% で 96M 件の全列挙を避けるため、yield ベースの遅延列挙を提供します。Take で打ち切れば内部の再帰も途中で停止します。
+        public IEnumerable<double[]> EnumerateCandidateFractionsLazy(double resolution)
         {
             if (Members.Length == 1)
-                return [[1.0]];
+            {
+                yield return [1.0];
+                yield break;
+            }
 
             if (resolution <= 0)
-                return [];
+                yield break;
 
-            return GetRatios(Members.Length, resolution, 1)
-                .Select(ratio => ratio.ToArray())
-                .Where(CapableComposition)
-                .ToArray();
+            foreach (var ratio in EnumerateRatios(Members.Length, resolution, 1.0))
+            {
+                if (CapableComposition(ratio))
+                    yield return ratio;
+            }
+        }
+
+        // 260528Claude: bars-and-stars 法で合計 1 になる端成分比率を 1 セット乱択します。constraint・重複チェックは呼び出し側で実施します。
+        public double[] SampleRandomFraction(double resolution, Random random)
+        {
+            if (Members.Length == 1)
+                return [1.0];
+
+            if (resolution <= 0)
+                throw new ArgumentOutOfRangeException(nameof(resolution), "resolution は 0 より大きい必要があります。");
+
+            int units = (int)Math.Round(1.0 / resolution);
+            int slots = units + Members.Length - 1;
+            int barCount = Members.Length - 1;
+
+            var positions = new int[barCount];
+            var taken = new HashSet<int>();
+            for (int i = 0; i < barCount; i++)
+            {
+                int p;
+                do { p = random.Next(slots); } while (!taken.Add(p));
+                positions[i] = p;
+            }
+            Array.Sort(positions);
+
+            var fractions = new double[Members.Length];
+            int prev = -1;
+            for (int i = 0; i < barCount; i++)
+            {
+                fractions[i] = (positions[i] - prev - 1) * resolution;
+                prev = positions[i];
+            }
+            fractions[Members.Length - 1] = (slots - prev - 1) * resolution;
+
+            // 260528Claude: 浮動小数誤差で合計が 1 から微妙にずれることがあるので、最後の成分で吸収します。
+            double sum = 0;
+            for (int i = 0; i < Members.Length - 1; i++)
+                sum += fractions[i];
+            fractions[Members.Length - 1] = 1.0 - sum;
+
+            return fractions;
+        }
+
+        // 260528Claude: 端成分定義順に並べた比率を文字列キーへ正規化します。Math.Round で浮動小数誤差を吸収し、manifest の EndmemberFractions と直接比較できる形にします。
+        public string ComposeFractionKey(double[] fractions) =>
+            ComposeFractionKey(i => i < fractions.Length ? fractions[i] : 0.0);
+
+        // 260528Claude: manifest 側の Dictionary<string, double> 形式から同じキーを作るオーバーロードです。
+        public string ComposeFractionKey(IReadOnlyDictionary<string, double> fractions) =>
+            ComposeFractionKey(i => fractions.TryGetValue(Members[i].Name, out double value) ? value : 0.0);
+
+        // 260604Claude: 端成分順の値取得だけを差し替え、キー整形 (Math.Round・F6・'|' 連結) を 1 箇所に集約します。
+        private string ComposeFractionKey(Func<int, double> valueAt)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < Members.Length; i++)
+            {
+                if (i > 0) sb.Append('|');
+                sb.Append(Math.Round(valueAt(i), 6).ToString("F6", CultureInfo.InvariantCulture));
+            }
+            return sb.ToString();
         }
 
         // 260507Codex: manifest の endmemberFractions へ保存する端成分比率を鉱物定義順で作ります。
@@ -138,36 +162,33 @@ namespace MineraScope
             return totalWeights.Select(entry => (entry.Key, entry.Value / totalWeight)).ToArray();
         }
 
-        // 260416Codex: 既存ロジックは維持しつつ、分岐を浅くして読みやすくします。
-        public static List<List<double>> GetRatios(int elementNum, double step, double totalMol)
+        // 260528Claude: 全候補を 1 件ずつ yield する遅延列挙です。Take で打ち切るとメモリ・CPU とも O(取得数) で停止し、巨大候補空間でも UI を固めません。
+        private static IEnumerable<double[]> EnumerateRatios(int elementNum, double step, double totalMol)
         {
             static double FixZero(double x) => Math.Abs(x) < 1e-10 ? 0.0 : x;
 
-            var result = new List<List<double>>();
-
             if (elementNum == 1)
             {
-                result.Add(new List<double> { 1.0 });
-                return result;
+                yield return [FixZero(totalMol)];
+                yield break;
             }
 
             for (double last = 0; last <= (totalMol + 1e-9); last += step)
             {
                 if (elementNum == 2)
                 {
-                    result.Add(new List<double>([FixZero(totalMol - last), FixZero(last)]));
+                    yield return [FixZero(totalMol - last), FixZero(last)];
                     continue;
                 }
 
-                var resultTmp = GetRatios(elementNum - 1, step, totalMol - last);
-                for (int i = 0; i < resultTmp.Count; i++)
+                foreach (var sub in EnumerateRatios(elementNum - 1, step, totalMol - last))
                 {
-                    resultTmp[i].Add(FixZero(last));
-                    result.Add(resultTmp[i]);
+                    var combined = new double[sub.Length + 1];
+                    Array.Copy(sub, combined, sub.Length);
+                    combined[sub.Length] = FixZero(last);
+                    yield return combined;
                 }
             }
-
-            return result;
         }
 
         // 260416Codex: 制約式の評価意図が見えやすいように、失敗条件を直接返します。

@@ -86,6 +86,8 @@ namespace MineraScope
         // 260514Codex: DTSA-II spectrum 生成とモデル作成は別々の CTS を持ち、同じ中止ボタンから現在の処理だけ止めます。
         private CancellationTokenSource _simulationCancellationTokenSource;
         private CancellationTokenSource _modelTrainingCancellationTokenSource;
+        // 260528Claude: 鉱物選択や分解能変更で再計算する組成リストを Task.Run に逃がすため、最新の計算だけを残せる CTS を持ちます。
+        private CancellationTokenSource _solutionUpdateCts;
 
         // 260507Codex: 下部ドロワーの標準高さを UI 初期化と開閉処理で共有します。
         private const float BottomDrawerDefaultHeight = 180F;
@@ -560,8 +562,16 @@ namespace MineraScope
         }
         #endregion
         #region 選択されている鉱物の条件式、化学組成リストを更新・表示
+        // 260528Claude: 組成リストの先頭表示件数。これ以上は UI で読まないので、Lazy 列挙はこの件数で打ち切ります。
+        private const int CompositionListPreviewCount = 200;
+
+        // 260528Claude: 軽い表示 (鉱物名・式・制約) は同期で即時反映し、重い組成リスト計算だけを Task.Run + CTS に逃がします。鉱物選択や分解能変更で前回計算をキャンセルできるよう、最新の計算だけを残します。
         private void UpdateSelectedSolution()
         {
+            _solutionUpdateCts?.Cancel();
+            _solutionUpdateCts?.Dispose();
+            _solutionUpdateCts = null;
+
             // 260511Codex: 未選択時は guard clause で詳細欄を空に戻します。
             if (checkedListBoxMinerals.SelectedItem is not SolidSolution selectedSolution)
             {
@@ -578,20 +588,47 @@ namespace MineraScope
             textBoxConstraints.Text = selectedSolution.Constraints.Length > 0
                 ? string.Join($",{Environment.NewLine}", selectedSolution.Constraints)
                 : string.Empty;
-            // 化学組成リストを表示
-            double resolution = (double)numericBoxResolution.Value / 100;
-            // 260507Codex: target は学習件数なので、組成リスト表示は分解能からの全候補を使います。
-            var compositions = selectedSolution.EnumerateCandidateFractions(resolution);
 
-            // 分割できなかった場合（resolution=0など）
-            if (compositions.Length == 0)
-                textBoxCompositionList.Text = "計算できません";
-            else
+            double resolution = (double)numericBoxResolution.Value / 100;
+            textBoxCompositionList.Text = "計算中…";
+
+            var cts = new CancellationTokenSource();
+            _solutionUpdateCts = cts;
+            var token = cts.Token;
+
+            Task.Run(() =>
             {
-                textBoxCompositionList.Text = string.Join(
-                    Environment.NewLine,
-                    compositions.Take(200).Select(ratio => FormatFractionMap(selectedSolution, ratio)));
-            }
+                // 260528Claude: Lazy 列挙を Take(プレビュー件数 + 1) で打ち切ることで、6 端成分 1% のような巨大候補空間でも O(プレビュー件数) で停止します。
+                var preview = new List<string>(CompositionListPreviewCount);
+                try
+                {
+                    foreach (var ratio in selectedSolution.EnumerateCandidateFractionsLazy(resolution))
+                    {
+                        token.ThrowIfCancellationRequested();
+                        preview.Add(FormatFractionMap(selectedSolution, ratio));
+                        if (preview.Count >= CompositionListPreviewCount)
+                            break;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                if (token.IsCancellationRequested)
+                    return;
+
+                string text = preview.Count == 0
+                    ? "計算できません"
+                    : string.Join(Environment.NewLine, preview);
+
+                BeginInvoke(new Action(() =>
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+                    textBoxCompositionList.Text = text;
+                }));
+            }, token);
         }
         #endregion
         // 260507Codex: 組成候補表示は端成分名と比率だけにし、ファイル名生成ルールから切り離します。
@@ -912,14 +949,17 @@ namespace MineraScope
             SaveUserSettings();
             // 260511Codex: 親を隠すときは子のキャリブレーション画面も破棄せず一緒に隠します。
             _edxCalibrationForm.Visible = false;
+            // 260528Claude: 非表示にする際は走行中の組成リスト計算もキャンセルし、再表示時に古い計算結果が UI へ流れ込まないようにします。
+            _solutionUpdateCts?.Cancel();
             // 260416Codex: 閉じる操作は破棄せず非表示にするだけなので未使用のローカルを削除します。
             e.Cancel = true;
             Visible = false;
         }
 
+        // 260528Claude: 分解能が変わると候補数が変わるので、組成リストを最新の値で再計算します。重い計算は UpdateSelectedSolution が Task.Run へ逃がし、前回の計算はキャンセルされます。
         private void numericBoxResolution_ValueChanged(object sender, EventArgs e)
         {
-
+            UpdateSelectedSolution();
         }
 
         private void buttonCancel_Click(object sender, EventArgs e)
