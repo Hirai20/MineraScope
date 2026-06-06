@@ -29,6 +29,12 @@ namespace MineraScope
             if (binSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(binSize));
 
+            // 260604Codex: Correlate map progress with TensorFlow batch logs across native process aborts.
+            long mapRunId = TensorFlowPredictionDebugLog.NextMapRunId();
+            TensorFlowPredictionDebugLog.Write(
+                "map-run-start",
+                $"mapRun={mapRunId} bin={binSize} model={TensorFlowPredictionDebugLog.Clean(modelName)} file={TensorFlowPredictionDebugLog.Clean(Path.GetFileName(filePath))}");
+
             var totalTimer = Stopwatch.StartNew();
             long modelPreparationTicks = 0;
             long readAndAggregateTicks = 0;
@@ -51,26 +57,41 @@ namespace MineraScope
             if (blockCountLong > int.MaxValue)
                 throw new InvalidOperationException("ビニング格子が大きすぎて確保できません。binを大きくしてください。");
 
+            TensorFlowPredictionDebugLog.Write(
+                "map-grid-ready",
+                $"mapRun={mapRunId} width={pts.Width} height={pts.Height} gridWidth={gridWidth} gridHeight={gridHeight} channelCount={channelCount} blocks={blockCountLong}");
+
             var stageTimer = Stopwatch.StartNew();
             string[] labelNames = service.GetLabelNames(modelPath);
             modelPreparationTicks += stageTimer.ElapsedTicks;
+            TensorFlowPredictionDebugLog.Write(
+                "map-labels-ready",
+                $"mapRun={mapRunId} labels={labelNames.Length} elapsedMs={ElapsedTime(modelPreparationTicks).TotalMilliseconds:F0}");
 
             int blockCount = (int)blockCountLong;
             var top1LabelId = new int[blockCount];
             int tileBlockRows = CalculateTileBlockRows(gridWidth, channelCount, gridHeight);
             int tileCount = (gridHeight + tileBlockRows - 1) / tileBlockRows;
+            TensorFlowPredictionDebugLog.Write(
+                "map-tiles-ready",
+                $"mapRun={mapRunId} tileBlockRows={tileBlockRows} tileCount={tileCount} batchSize={InferenceBatchSize}");
 
             // 260526Claude: チャンク batch を 1 つだけ確保して使い回す（全 float[] は保持しない）。
             var batch = new float[InferenceBatchSize, SpectrumDataLoader.SpectrumLength];
             var rowToBlock = new int[InferenceBatchSize];
             int rowsInChunk = 0;
             int processedBlocks = 0;
+            // 260604Codex: Number TensorFlow predict chunks within a map run for post-crash log correlation.
+            int chunkIndex = 0;
 
             for (int tileIndex = 0, startBlockY = 0; startBlockY < gridHeight; tileIndex++, startBlockY += tileBlockRows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 int rowsInTile = Math.Min(tileBlockRows, gridHeight - startBlockY);
+                TensorFlowPredictionDebugLog.Write(
+                    "map-tile-start",
+                    $"mapRun={mapRunId} tile={tileIndex} startBlockY={startBlockY} rowsInTile={rowsInTile}");
                 double tileOffset = (double)tileIndex / tileCount;
                 double tileScale = 1.0 / tileCount;
                 IProgress<double>? readProgress = progress is null ? null : new ScaledProgress(progress, tileScale * 0.6, tileOffset);
@@ -107,7 +128,7 @@ namespace MineraScope
                             rowsInChunk++;
                             if (rowsInChunk == InferenceBatchSize)
                             {
-                                inferenceTicks += ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken);
+                                inferenceTicks += ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken, mapRunId, ++chunkIndex, tileIndex);
                                 rowsInChunk = 0;
                             }
                         }
@@ -122,14 +143,22 @@ namespace MineraScope
                     }
                 }
 
-                inferenceTicks += ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken);
+                // 260604Codex: Do not spend a diagnostic chunk id on empty tile tails.
+                if (rowsInChunk > 0)
+                    inferenceTicks += ClassifyChunk(service, modelPath, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken, mapRunId, ++chunkIndex, tileIndex);
                 normalizeAndPackTicks += Math.Max(0, stageTimer.ElapsedTicks - (inferenceTicks - tileInferenceTicksStart));
                 rowsInChunk = 0;
+                TensorFlowPredictionDebugLog.Write(
+                    "map-tile-end",
+                    $"mapRun={mapRunId} tile={tileIndex} processedTileBlocks={processedTileBlocks} processedBlocks={processedBlocks}");
                 progress?.Report((double)(tileIndex + 1) / tileCount);
             }
 
             progress?.Report(1.0);
             totalTimer.Stop();
+            TensorFlowPredictionDebugLog.Write(
+                "map-run-end",
+                $"mapRun={mapRunId} chunks={chunkIndex} totalMs={totalTimer.Elapsed.TotalMilliseconds:F0}");
             var timings = new PtsClassificationMapTimings(
                 ElapsedTime(modelPreparationTicks),
                 ElapsedTime(readAndAggregateTicks),
@@ -169,18 +198,28 @@ namespace MineraScope
             int[] rowToBlock,
             int rowsInChunk,
             int[] top1LabelId,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            long mapRunId,
+            int chunkIndex,
+            int tileIndex)
         {
             if (rowsInChunk == 0)
                 return 0;
 
+            // 260604Codex: Mark the exact map chunk that enters TF.NET before the native runtime can abort.
+            TensorFlowPredictionDebugLog.Write(
+                "map-chunk-start",
+                $"mapRun={mapRunId} chunk={chunkIndex} tile={tileIndex} rows={rowsInChunk}");
             float[,] chunk = rowsInChunk == batch.GetLength(0) ? batch : SliceRows(batch, rowsInChunk);
             var inferenceTimer = Stopwatch.StartNew();
-            var predictions = service.PredictTop1Batch(modelPath, chunk, cancellationToken);
+            var predictions = service.PredictTop1Batch(modelPath, chunk, cancellationToken, $"mapRun={mapRunId};chunk={chunkIndex};tile={tileIndex}");
             long elapsedTicks = inferenceTimer.ElapsedTicks;
             for (int row = 0; row < rowsInChunk; row++)
                 top1LabelId[rowToBlock[row]] = predictions[row];
 
+            TensorFlowPredictionDebugLog.Write(
+                "map-chunk-end",
+                $"mapRun={mapRunId} chunk={chunkIndex} tile={tileIndex} rows={rowsInChunk} elapsedMs={ElapsedTime(elapsedTicks).TotalMilliseconds:F0}");
             return elapsedTicks;
         }
 

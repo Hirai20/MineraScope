@@ -22,42 +22,52 @@ namespace MineraScope
             if (normalizedSpectrum.Length != SpectrumDataLoader.SpectrumLength)
                 throw new InvalidOperationException($"{SpectrumDataLoader.SpectrumLength} 点のスペクトルだけを回帰できます。");
 
-            lock (TensorFlowRuntimeGate.SyncRoot)
+            // 260606Claude: 回帰も分類と同じ専用スレッドへ集約し、TF を 1 native thread 起点に固定する。lock は worker 内の非競合 tripwire として残す。
+            return TensorFlowExecutor.Run(() =>
             {
-                try
+                lock (TensorFlowRuntimeGate.SyncRoot)
                 {
-                    EnsureModelLoaded(regressionModelPath);
-                    string[] componentNames = _componentNames!;
-
-                    var spectrumReshaped = np.array(normalizedSpectrum).reshape(new Shape(1, SpectrumDataLoader.SpectrumLength));
-                    var prediction = _model!.predict(spectrumReshaped);
-                    float[] rawValues = prediction.numpy().ToArray<float>();
-
-                    float[] clipped = new float[componentNames.Length];
-                    float sum = 0f;
-                    for (int i = 0; i < componentNames.Length; i++)
-                    {
-                        clipped[i] = Math.Max(rawValues[i], 0f);
-                        sum += clipped[i];
-                    }
-
-                    var components = new List<MineralComponentRatio>(componentNames.Length);
-                    for (int i = 0; i < componentNames.Length; i++)
-                    {
-                        float ratio = sum > 0f ? clipped[i] / sum : 0f;
-                        components.Add(new MineralComponentRatio(componentNames[i], ratio));
-                    }
-
-                    return new MineralRegressionResult(components);
+                    return PredictCore(regressionModelPath, normalizedSpectrum);
                 }
-                catch
+            });
+        }
+
+        // 260606Claude: TF 本体(load/np.array/predict/numpy/ToArray)。必ず専用スレッド上で実行し、戻すのは managed な結果のみ。異常時はキャッシュを破棄して再throw。
+        private MineralRegressionResult PredictCore(string regressionModelPath, float[] normalizedSpectrum)
+        {
+            try
+            {
+                EnsureModelLoaded(regressionModelPath);
+                string[] componentNames = _componentNames!;
+
+                var spectrumReshaped = np.array(normalizedSpectrum).reshape(new Shape(1, SpectrumDataLoader.SpectrumLength));
+                var prediction = _model!.predict(spectrumReshaped);
+                float[] rawValues = prediction.numpy().ToArray<float>();
+
+                float[] clipped = new float[componentNames.Length];
+                float sum = 0f;
+                for (int i = 0; i < componentNames.Length; i++)
                 {
-                    // 260522Codex: Drop the cache so a session cleared elsewhere reloads on the next call.
-                    _loadedModelPath = null;
-                    _model = null;
-                    _componentNames = null;
-                    throw;
+                    clipped[i] = Math.Max(rawValues[i], 0f);
+                    sum += clipped[i];
                 }
+
+                var components = new List<MineralComponentRatio>(componentNames.Length);
+                for (int i = 0; i < componentNames.Length; i++)
+                {
+                    float ratio = sum > 0f ? clipped[i] / sum : 0f;
+                    components.Add(new MineralComponentRatio(componentNames[i], ratio));
+                }
+
+                return new MineralRegressionResult(components);
+            }
+            catch
+            {
+                // 260522Codex: Drop the cache so a session cleared elsewhere reloads on the next call.
+                _loadedModelPath = null;
+                _model = null;
+                _componentNames = null;
+                throw;
             }
         }
 

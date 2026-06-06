@@ -183,7 +183,21 @@ public partial class ScalablePictureBox : CaptureUserControlBase
     }
 
     private double minZoom = 0.1f;
-    private readonly double maxZoom = 128f;
+    // 260604Codex: Store the cap per instance so synchronized viewers can raise it without changing defaults globally.
+    private double maxZoom = 128f;
+
+    // 260604Codex: Let callers raise the zoom cap for synchronized views while preserving the current default.
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Visible)]
+    public double MaxZoom
+    {
+        get => maxZoom;
+        set
+        {
+            maxZoom = Math.Max(minZoom, value);
+            if (_Zoom > maxZoom)
+                Zoom = maxZoom;
+        }
+    }
 
     private double _Zoom = 1;
 

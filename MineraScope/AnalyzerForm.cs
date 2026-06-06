@@ -58,6 +58,7 @@ namespace MineraScope
         private int _spectrumReadVersion;
 
         // 260522Codex: One service instance keeps the loaded classification model warm across clicks.
+        // 260529Claude: マップ実行後もモデルを解放しない。clear_session() の繰り返しが TF の eager context/スレッドプールをリークさせ、stale なリソース変数で次の predict が abort するため、起動中は常駐させる。
         private readonly MineralClassificationPredictionService _classificationService = new();
 
         // 260526Claude: 鉱物マッピングの状態。result は Top-1 のみ軽量保持し、クリック再分類は作成時条件で再読みする。
@@ -69,6 +70,9 @@ namespace MineraScope
 
         // 260528Claude: 凡例ハイライト用に colorizer 出力を保持。palette だけ差し替えて bitmap を作り直すための源データ。
         private MineralMapImage? _mapImage;
+
+        // 260528Codex: Keep legend highlighting independent from ListBox.SelectedIndex timing.
+        private int _highlightLegendIndex = -1;
 
         // 260527Codex: Name the shared prediction-service gate used by click and full-map classification.
         private bool IsInteractiveClassificationBusy => _isMappingBusy || _isSpectrumClickBusy;
@@ -218,6 +222,7 @@ namespace MineraScope
             _classificationMap = null;
             // 260528Claude: Items.Clear が SelectedIndexChanged を発火して RebuildMapBitmapForSelection が走るので、源データを先に無効化する。
             _mapImage = null;
+            _highlightLegendIndex = -1;
             // 260526Claude: 凡例も合わせて破棄（PTS が変わったら色対応も無効）。
             listBoxLegend.Items.Clear();
             SetMapPseudoBitmap(null);
@@ -235,7 +240,33 @@ namespace MineraScope
         // 260523Claude: scalablePictureBoxSEM に表示する SEM 画像を差し替え、置き換え前の PseudoBitmap を破棄する。
         private void SetSemPseudoBitmap(PseudoBitmap? semImage)
         {
+            // 260605Claude: 新しい SEM 画像は明るさ・コントラストを初期状態(撮影したまま)へ戻す。
+            // viewer へ渡す前に表示窓を確定し、差し替え時の描画1回で正しく表示する(余分な再描画を避ける)。
+            if (semImage is not null)
+            {
+                trackBarBrightness.Value = 0;
+                trackBarContrast.Value = 0;
+                ApplyBrightnessContrastWindow(semImage);
+            }
             ReplacePseudoBitmap(scalablePictureBoxSEM, ref _semPseudoBitmap, semImage);
+        }
+
+        // 260605Claude: 明るさ・コントラストのスライダー値を SEM 表示へ反映して再描画する。
+        private void ApplySemBrightnessContrast()
+        {
+            if (_semPseudoBitmap is null)
+                return;
+            ApplyBrightnessContrastWindow(_semPseudoBitmap);
+            scalablePictureBoxSEM.drawPictureBox();
+        }
+
+        // 260605Claude: 実機SEMと同じ「表示 = コントラスト×raw + 明るさ」を、PseudoBitmap が扱う表示窓(Min/Max)へ逆算して設定する。
+        private void ApplyBrightnessContrastWindow(PseudoBitmap bitmap)
+        {
+            double contrast = Math.Pow(2.0, trackBarContrast.Value / 50.0); // ゲイン: 値0→1倍, ±50→2倍/0.5倍
+            double brightness = trackBarBrightness.Value;                   // オフセット(表示の明るさ)
+            bitmap.MinValue = -brightness / contrast;
+            bitmap.MaxValue = (255.0 - brightness) / contrast;
         }
 
         // 260526Codex: SEM と鉱物マップの PseudoBitmap 差し替え処理を共通化します。
@@ -454,7 +485,8 @@ namespace MineraScope
 
             try
             {
-                var result = await Task.Run(() => _classificationService.Predict(modelPath, normalizedSpectrum));
+                // 260606Claude: Task.Run はプールの別スレッドに乗り TF ワーカーを増殖させるため、専用スレッドへ集約する PredictAsync を直接 await する。
+                var result = await _classificationService.PredictAsync(modelPath, normalizedSpectrum);
 
                 if (readVersion != _spectrumReadVersion)
                     return;
@@ -603,8 +635,6 @@ namespace MineraScope
             }
             finally
             {
-                // 260527Codex: Full-map inference is long-running; reset Keras state so repeated maps do not reuse stale native resources.
-                _classificationService.ReleaseModel();
                 _isMappingBusy = false;
                 if (ReferenceEquals(_mapClassificationCancellation, cancellation))
                     _mapClassificationCancellation = null;
@@ -661,6 +691,31 @@ namespace MineraScope
         private void SetMapPseudoBitmap(PseudoBitmap? mapImage)
         {
             ReplacePseudoBitmap(scalablePictureBoxMap, ref _mapPseudoBitmap, mapImage);
+            // 260604Codex: Map bitmap rebuilds reset its own viewport, so restore the SEM-aligned view immediately.
+            SyncMapViewToSem(scalablePictureBoxSEM.Zoom, scalablePictureBoxSEM.Center);
+        }
+
+        // 260604Codex: Designer-connected SEM viewport changes drive the mineral map viewport.
+        private void scalablePictureBoxSEM_DrawingAreaChanged(object sender, double zoom, PointD center)
+            => SyncMapViewToSem(zoom, center);
+
+        // 260604Codex: Convert SEM image coordinates into mineral-map block coordinates for synchronized viewing.
+        private void SyncMapViewToSem(double semZoom, PointD semCenter)
+        {
+            if (_classificationMap is null || _semPseudoBitmap is null || _mapPseudoBitmap is null || semCenter.IsNaN)
+                return;
+
+            int binSize = _classificationMap.BinSize;
+            if (binSize <= 0 || semZoom <= 0)
+                return;
+
+            var mapCenter = new PointD(
+                (semCenter.X + 0.5) / binSize - 0.5,
+                (semCenter.Y + 0.5) / binSize - 0.5);
+            double mapZoom = semZoom * binSize;
+            // 260604Codex: SEM-aligned map zoom can exceed the viewer's default cap when binning is large.
+            scalablePictureBoxMap.MaxZoom = Math.Max(scalablePictureBoxMap.MaxZoom, mapZoom);
+            scalablePictureBoxMap.ZoomAndCenter = (mapZoom, mapCenter);
         }
 
         // 260528Claude: 凡例選択状態に合わせてマップ palette を作り直す。Values と CategoryCount は変えず palette だけ差し替える。
@@ -668,9 +723,9 @@ namespace MineraScope
         {
             if (_mapImage is null) return;
 
-            int selectedIndex = listBoxLegend.SelectedIndex;
-            (byte R, byte G, byte B)[]? palette = selectedIndex >= 0
-                ? MineralMapColorizer.BuildHighlightedPalette(_mapImage.Palette, selectedIndex)
+            int highlightedIndex = _highlightLegendIndex;
+            (byte R, byte G, byte B)[]? palette = highlightedIndex >= 0 && highlightedIndex < _mapImage.Palette.Length
+                ? MineralMapColorizer.BuildHighlightedPalette(_mapImage.Palette, highlightedIndex)
                 : null;
 
             SetMapPseudoBitmap(CreateMapPseudoBitmap(_mapImage, palette));
@@ -680,6 +735,7 @@ namespace MineraScope
         // 260527Codex: textBox1 is limited to map summary and timing diagnostics; the persistent legend stays in listBoxLegend.
         private void ShowMapLegend(MineralMapImage image, PtsClassificationMapResult result)
         {
+            _highlightLegendIndex = -1;
             listBoxLegend.BeginUpdate();
             try
             {
@@ -790,23 +846,37 @@ namespace MineraScope
 
         // 260528Claude: 凡例で同じ項目を再クリックしたら選択解除。MouseDown は ListBox 既定の選択処理より先に発火し、
         // ここで SelectedIndex=-1 を直接代入しても直後の基底処理で再選択される。BeginInvoke で基底処理後に解除する。
+        // 260528Codex: SelectedIndex can already be updated here, so the highlight state must not depend on it.
         private void listBoxLegend_MouseDown(object sender, MouseEventArgs e)
         {
+            if (e.Button != MouseButtons.Left)
+                return;
+
             int idx = listBoxLegend.IndexFromPoint(e.Location);
-            if (idx >= 0 && idx == listBoxLegend.SelectedIndex)
-                listBoxLegend.BeginInvoke(() => listBoxLegend.SelectedIndex = -1);
+            if (idx < 0)
+                return;
+
+            // 260528Codex: Toggle our own highlight state instead of racing ListBox native selection.
+            _highlightLegendIndex = _highlightLegendIndex == idx ? -1 : idx;
+            listBoxLegend.Invalidate();
+            RebuildMapBitmapForSelection();
         }
 
         // 260528Claude: 凡例選択が変わったらマップのハイライト表示を作り直す。マウス・キーボード・プログラム更新の全経路がここに集約される。
+        // 260528Codex: Native selection is visual noise only now; the MouseDown handler owns map highlight changes.
         private void listBoxLegend_SelectedIndexChanged(object sender, EventArgs e)
-            => RebuildMapBitmapForSelection();
+            => listBoxLegend.Invalidate();
 
         private void listBoxLegend_DrawItem(object sender, DrawItemEventArgs e)
         {
             if (e.Index < 0)
                 return;
 
-            e.DrawBackground();
+            bool highlighted = e.Index == _highlightLegendIndex;
+            Color backgroundColor = highlighted ? SystemColors.Highlight : listBoxLegend.BackColor;
+            Color textColor = highlighted ? SystemColors.HighlightText : listBoxLegend.ForeColor;
+            using (var backgroundBrush = new SolidBrush(backgroundColor))
+                e.Graphics.FillRectangle(backgroundBrush, e.Bounds);
 
             if (listBoxLegend.Items[e.Index] is MineralMapLegendEntry entry)
             {
@@ -814,18 +884,23 @@ namespace MineraScope
                 var swatchRect = new Rectangle(e.Bounds.Left + LegendPadding, e.Bounds.Top + LegendPadding, swatchSize, swatchSize);
                 using (var brush = new SolidBrush(entry.Color))
                     e.Graphics.FillRectangle(brush, swatchRect);
-                e.Graphics.DrawRectangle(Pens.Gray, swatchRect);
+                using (var borderPen = new Pen(highlighted ? Color.Yellow : Color.Gray))
+                    e.Graphics.DrawRectangle(borderPen, swatchRect);
 
                 var textRect = new Rectangle(
                     swatchRect.Right + LegendTextGap,
                     e.Bounds.Top,
                     e.Bounds.Right - swatchRect.Right - LegendTextGap,
                     e.Bounds.Height);
-                TextRenderer.DrawText(e.Graphics, $"{entry.MineralName}: {entry.BlockCount}", e.Font ?? listBoxLegend.Font, textRect, e.ForeColor,
+                TextRenderer.DrawText(e.Graphics, $"{entry.MineralName}: {entry.BlockCount}", e.Font ?? listBoxLegend.Font, textRect, textColor,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             }
-
-            e.DrawFocusRectangle();
         }
+
+        // 260605Claude: コントラストスライダー操作時に SEM 表示へ反映する。
+        private void trackBarContrast_Scroll(object sender, EventArgs e) => ApplySemBrightnessContrast();
+
+        // 260605Claude: 明るさスライダー操作時に SEM 表示へ反映する。
+        private void trackBarBrightness_Scroll(object sender, EventArgs e) => ApplySemBrightnessContrast();
     }
 }
