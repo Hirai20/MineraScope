@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -9,6 +11,7 @@ namespace MineraScope
     internal sealed class SpectrumPoolRepository
     {
         private const string ManifestFileName = "manifest.json";
+        private const double ConditionTolerance = 1e-9;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -31,16 +34,12 @@ namespace MineraScope
         {
             var snapshot = _conditionKeyBuilder.CreateSnapshot(solution, resolutionStep, semEdxCondition);
             string conditionKey = _conditionKeyBuilder.BuildKey(snapshot);
-            string poolFolder = Path.Combine(
+            string mineralFolder = Path.Combine(
                 spectrumOutputFolder,
-                SanitizeFileName(solution.Name),
-                conditionKey);
+                SanitizeFileName(solution.Name));
+            var exactHandle = CreateHandle(mineralFolder, conditionKey, snapshot);
 
-            return new SpectrumPoolHandle(
-                poolFolder,
-                Path.Combine(poolFolder, ManifestFileName),
-                conditionKey,
-                snapshot);
+            return ResolveReusableHandle(mineralFolder, exactHandle, snapshot);
         }
 
         // 260513Codex: 既存 manifest があれば読み込み、なければ新規の空 manifest を作ります。
@@ -91,6 +90,166 @@ namespace MineraScope
             string sanitized = new(value.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray());
             return string.IsNullOrWhiteSpace(sanitized) ? "Mineral" : sanitized.Trim();
         }
+
+        // 260606Codex: Reuse legacy pools when formula text changed but the DTSA-II inputs are chemically identical.
+        // 260606Claude: 互換 pool のうち完了スペクトル最多のものを再利用する。完了0(=再利用価値なし)なら新規 handle へフォールバック。
+        private SpectrumPoolHandle ResolveReusableHandle(
+            string mineralFolder,
+            SpectrumPoolHandle exactHandle,
+            SpectrumGenerationConditionSnapshot requestedCondition)
+        {
+            if (!Directory.Exists(mineralFolder))
+                return exactHandle;
+
+            var bestCandidate = Directory.EnumerateDirectories(mineralFolder)
+                .Select(poolFolder => CreateReusableCandidate(poolFolder, requestedCondition))
+                .Where(candidate => candidate is { CompletedSpectrumCount: > 0 })
+                .MaxBy(candidate => candidate!.CompletedSpectrumCount);
+
+            return bestCandidate?.Handle ?? exactHandle;
+        }
+
+        private ReusablePoolCandidate? CreateReusableCandidate(
+            string poolFolder,
+            SpectrumGenerationConditionSnapshot requestedCondition)
+        {
+            string manifestPath = Path.Combine(poolFolder, ManifestFileName);
+            var manifest = TryLoadForReuse(manifestPath);
+            if (manifest?.Condition is null
+                || manifest.Spectra is null
+                || !IsGenerationCompatible(requestedCondition, manifest.Condition))
+                return null;
+
+            string conditionKey = string.IsNullOrWhiteSpace(manifest.ConditionKey)
+                ? new DirectoryInfo(poolFolder).Name
+                : manifest.ConditionKey;
+            var handle = new SpectrumPoolHandle(poolFolder, manifestPath, conditionKey, manifest.Condition);
+            // 260606Claude: 候補ランキング用の完了数は manifest ステータスのみで数える。実ファイル存在は下流 LoadState が再検証するため、ここで File.Exists を回さない。
+            int completedSpectrumCount = manifest.Spectra.Count(entry => entry.Status == SpectrumManifestStatus.Completed);
+
+            return new ReusablePoolCandidate(handle, completedSpectrumCount);
+        }
+
+        private SpectrumPoolManifest? TryLoadForReuse(string manifestPath)
+        {
+            try
+            {
+                return Load(manifestPath);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        private static SpectrumPoolHandle CreateHandle(
+            string mineralFolder,
+            string conditionKey,
+            SpectrumGenerationConditionSnapshot condition)
+        {
+            string poolFolder = Path.Combine(mineralFolder, conditionKey);
+            return new SpectrumPoolHandle(
+                poolFolder,
+                Path.Combine(poolFolder, ManifestFileName),
+                conditionKey,
+                condition);
+        }
+
+        private static bool IsGenerationCompatible(
+            SpectrumGenerationConditionSnapshot requestedCondition,
+            SpectrumGenerationConditionSnapshot manifestCondition) =>
+            SameText(requestedCondition.MineralName, manifestCondition.MineralName)
+            && SameText(requestedCondition.DtsaGenerationSchema, manifestCondition.DtsaGenerationSchema)
+            && SameDouble(requestedCondition.CompositionResolution, manifestCondition.CompositionResolution)
+            && SameSemEdxCondition(requestedCondition.SemEdxCondition, manifestCondition.SemEdxCondition)
+            && SameConstraints(requestedCondition.Constraints, manifestCondition.Constraints)
+            && SameEndmembers(requestedCondition.Endmembers, manifestCondition.Endmembers);
+
+        private static bool SameSemEdxCondition(SemEdxCondition? left, SemEdxCondition? right) =>
+            left is not null
+            && right is not null
+            && string.Equals(left.DetectorName, right.DetectorName, StringComparison.Ordinal)
+            && SameDouble(left.CarbonCoatThickness, right.CarbonCoatThickness)
+            && SameDouble(left.BeamEnergy, right.BeamEnergy)
+            && SameDouble(left.LiveTime, right.LiveTime)
+            && SameDouble(left.ProbeCurrent, right.ProbeCurrent);
+
+        private static bool SameConstraints(List<string>? left, List<string>? right)
+        {
+            string[] leftValues = NormalizeConstraints(left);
+            string[] rightValues = NormalizeConstraints(right);
+            return leftValues.SequenceEqual(rightValues, StringComparer.Ordinal);
+        }
+
+        private static string[] NormalizeConstraints(List<string>? values) =>
+            values?
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToArray()
+            ?? [];
+
+        private static bool SameEndmembers(
+            List<EndmemberConditionSnapshot>? left,
+            List<EndmemberConditionSnapshot>? right)
+        {
+            var leftValues = NormalizeEndmembers(left);
+            var rightValues = NormalizeEndmembers(right);
+            if (leftValues.Length != rightValues.Length)
+                return false;
+
+            for (int i = 0; i < leftValues.Length; i++)
+            {
+                if (!SameText(leftValues[i].Name, rightValues[i].Name)
+                    || leftValues[i].CompositionKey != rightValues[i].CompositionKey)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static EndmemberCompatibilityKey[] NormalizeEndmembers(List<EndmemberConditionSnapshot>? values) =>
+            values?
+                .OrderBy(value => value.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(value => new EndmemberCompatibilityKey(
+                    value.Name,
+                    BuildCompositionKey(value.Formula)))
+                .ToArray()
+            ?? [];
+
+        private static string BuildCompositionKey(string? formula)
+        {
+            var totals = new Dictionary<string, double>(StringComparer.Ordinal);
+            foreach (var (name, mol) in CompositionParser.ParseComposition(formula ?? string.Empty))
+                totals[name] = totals.GetValueOrDefault(name) + mol;
+
+            return string.Join(
+                "|",
+                totals
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => $"{pair.Key}:{Math.Round(pair.Value, 6).ToString("F6", CultureInfo.InvariantCulture)}"));
+        }
+
+        private static bool SameText(string? left, string? right) =>
+            string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        private static bool SameDouble(double left, double right) =>
+            Math.Abs(left - right) <= ConditionTolerance;
+
+        private sealed record ReusablePoolCandidate(
+            SpectrumPoolHandle Handle,
+            int CompletedSpectrumCount);
+
+        private sealed record EndmemberCompatibilityKey(
+            string Name,
+            string CompositionKey);
     }
 
     // 260513Codex: pool の場所と生成条件 snapshot を一緒に運ぶ軽量ハンドルです。
