@@ -743,7 +743,8 @@ namespace MineraScope
                 foreach (var entry in image.Legend)
                     listBoxLegend.Items.Add(entry);
                 // 260526Claude: owner-draw では ListBox が項目幅を測れないため、最長行を実測して HorizontalExtent に渡す。
-                listBoxLegend.HorizontalExtent = MeasureLegendMaxWidth(image.Legend);
+                // 260607Codex: Size the owner-drawn legend from the same percentage text that will be rendered.
+                listBoxLegend.HorizontalExtent = MeasureLegendMaxWidth(image.Legend, result.BlockCount);
             }
             finally
             {
@@ -829,19 +830,28 @@ namespace MineraScope
         private const int LegendTextGap = 6;
         private const int LegendTrailingPadding = 4;
 
-        private int MeasureLegendMaxWidth(IReadOnlyList<MineralMapLegendEntry> entries)
+        // 260607Codex: Legend rows show each classified map category as a share of the whole map.
+        private int MeasureLegendMaxWidth(IReadOnlyList<MineralMapLegendEntry> entries, int totalBlockCount)
         {
             int swatchSize = listBoxLegend.ItemHeight - LegendPadding * 2;
             int swatchAndGap = LegendPadding + swatchSize + LegendTextGap;
             int max = 0;
             foreach (var entry in entries)
             {
-                Size textSize = TextRenderer.MeasureText($"{entry.MineralName}: {entry.BlockCount}", listBoxLegend.Font);
-                int total = swatchAndGap + textSize.Width + LegendTrailingPadding;
-                if (total > max)
-                    max = total;
+                Size textSize = TextRenderer.MeasureText(FormatLegendText(entry, totalBlockCount), listBoxLegend.Font);
+                // 260607Codex: Keep the width update local instead of carrying a pass-through variable.
+                max = Math.Max(max, swatchAndGap + textSize.Width + LegendTrailingPadding);
             }
             return max;
+        }
+
+        // 260607Codex: Keep map legend percentages consistent between measuring and drawing.
+        private static string FormatLegendText(MineralMapLegendEntry entry, int totalBlockCount)
+        {
+            double percent = totalBlockCount > 0
+                ? entry.BlockCount * 100.0 / totalBlockCount
+                : 0;
+            return string.Format(CultureInfo.InvariantCulture, "{0}: {1:F2}%", entry.MineralName, percent);
         }
 
         // 260528Claude: 凡例で同じ項目を再クリックしたら選択解除。MouseDown は ListBox 既定の選択処理より先に発火し、
@@ -892,7 +902,13 @@ namespace MineraScope
                     e.Bounds.Top,
                     e.Bounds.Right - swatchRect.Right - LegendTextGap,
                     e.Bounds.Height);
-                TextRenderer.DrawText(e.Graphics, $"{entry.MineralName}: {entry.BlockCount}", e.Font ?? listBoxLegend.Font, textRect, textColor,
+                // 260607Codex: Draw mineral ratios instead of raw category block counts.
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    FormatLegendText(entry, _classificationMap?.BlockCount ?? 0),
+                    e.Font ?? listBoxLegend.Font,
+                    textRect,
+                    textColor,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
             }
         }
