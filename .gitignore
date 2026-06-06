@@ -23,3 +23,7 @@ agents.md
 CLAUDE.md
 # 260526Codex: Claude Code local skill files should stay untracked.
 .claude/
+# 260606Claude: Codex MCP bridge config holds a machine-specific path; keep it untracked.
+.mcp.json
+# 260606Claude: launchSettings.json is environment-specific; keep it untracked.
+MineraScope/Properties/launchSettings.json
