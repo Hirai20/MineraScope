@@ -74,9 +74,9 @@
             buttonOpenAnalyzer.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonOpenAnalyzer.Location = new Point(201, 27);
             buttonOpenAnalyzer.Name = "buttonOpenAnalyzer";
-            buttonOpenAnalyzer.Size = new Size(102, 25);
+            buttonOpenAnalyzer.Size = new Size(67, 25);
             buttonOpenAnalyzer.TabIndex = 0;
-            buttonOpenAnalyzer.Text = "既存モデルを使用";
+            buttonOpenAnalyzer.Text = "マップ分析";
             buttonOpenAnalyzer.UseVisualStyleBackColor = true;
             buttonOpenAnalyzer.Click += buttonOpenAnalyzer_Click;
             // 
@@ -219,11 +219,12 @@
             // 
             panelPathEDX.AutoSize = true;
             panelPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            panelPathEDX.Controls.Add(buttonPathEDX);
             panelPathEDX.Controls.Add(labelPathEDX);
             panelPathEDX.Controls.Add(textBoxPathEDX);
             panelPathEDX.Location = new Point(171, 139);
             panelPathEDX.Name = "panelPathEDX";
-            panelPathEDX.Size = new Size(273, 31);
+            panelPathEDX.Size = new Size(304, 31);
             panelPathEDX.TabIndex = 110;
             // 
             // labelPathEDX
@@ -239,7 +240,7 @@
             // 
             buttonPathDTSA.AutoSize = true;
             buttonPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathDTSA.Location = new Point(447, 103);
+            buttonPathDTSA.Location = new Point(275, 3);
             buttonPathDTSA.Name = "buttonPathDTSA";
             buttonPathDTSA.Size = new Size(26, 25);
             buttonPathDTSA.TabIndex = 1;
@@ -253,9 +254,10 @@
             panelPathDTSA.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             panelPathDTSA.Controls.Add(textBoxPathDTSA);
             panelPathDTSA.Controls.Add(labelPathDTSA);
+            panelPathDTSA.Controls.Add(buttonPathDTSA);
             panelPathDTSA.Location = new Point(171, 100);
             panelPathDTSA.Name = "panelPathDTSA";
-            panelPathDTSA.Size = new Size(273, 31);
+            panelPathDTSA.Size = new Size(304, 31);
             panelPathDTSA.TabIndex = 109;
             // 
             // textBoxPathDTSA
@@ -279,7 +281,7 @@
             // 
             buttonPathEDX.AutoSize = true;
             buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathEDX.Location = new Point(449, 142);
+            buttonPathEDX.Location = new Point(275, 3);
             buttonPathEDX.Name = "buttonPathEDX";
             buttonPathEDX.Size = new Size(26, 25);
             buttonPathEDX.TabIndex = 1;
@@ -311,9 +313,7 @@
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(475, 465);
-            Controls.Add(buttonPathEDX);
             Controls.Add(textBoxSpectrumFile);
-            Controls.Add(buttonPathDTSA);
             Controls.Add(textBoxAnalysisResult);
             Controls.Add(panel2);
             Controls.Add(panelPathEDX);
