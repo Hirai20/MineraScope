@@ -28,13 +28,15 @@ namespace MineraScope
         IReadOnlyList<SimulationExecutionJob> Jobs);
 
     // 260513Codex: キャンセル結果も manifest 更新側へ返し、対象 entry を Pending に戻せるようにします。
+    // 260606Claude: SavedSpectrumFiles は DTSA-II が保存完了マーカーを出した spectrum ファイル名集合で、ジョブが途中失敗/キャンセルでも保存済み分だけ Completed として残すために使います。
     internal sealed record SimulationExecutionResult(
         IReadOnlyList<SpectrumSimulationReservation> Reservations,
         int ExitCode,
         string StandardOutput,
         string StandardError,
         string? ExceptionMessage,
-        bool IsCanceled = false);
+        bool IsCanceled = false,
+        IReadOnlySet<string>? SavedSpectrumFiles = null);
 
     // 260528Codex: DTSA-II 実行中の進捗を UI へ渡すため、外部実行 service から段階ごとに通知します。
     internal enum SimulationExecutionProgressKind

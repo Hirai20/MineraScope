@@ -157,7 +157,9 @@ namespace MineraScope
 
             process.Start();
             progress.ReportJobProgress(SimulationExecutionProgressKind.ProcessStarted, "DTSA-II process 起動");
-            var standardOutputTask = ReadStandardOutputAsync(process, progress);
+            // 260606Claude: 保存完了マーカーのファイル名をここに集め、ジョブ全体の成否とは別に「保存できた spectrum」を結果へ渡します。
+            var savedSpectrumFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var standardOutputTask = ReadStandardOutputAsync(process, progress, savedSpectrumFiles);
             var standardErrorTask = process.StandardError.ReadToEndAsync();
 
             try
@@ -170,7 +172,7 @@ namespace MineraScope
                 await WaitForProcessExitAfterKillAsync(process);
                 string canceledOutput = await ReadProcessOutputAsync(standardOutputTask);
                 string canceledError = await ReadProcessOutputAsync(standardErrorTask);
-                return CreateCanceledResult(job, canceledOutput, canceledError);
+                return CreateCanceledResult(job, canceledOutput, canceledError, savedSpectrumFiles);
             }
 
             string standardOutput = await ReadProcessOutputAsync(standardOutputTask);
@@ -181,34 +183,45 @@ namespace MineraScope
                 process.ExitCode,
                 standardOutput,
                 standardError,
-                ExceptionMessage: null);
+                ExceptionMessage: null,
+                SavedSpectrumFiles: savedSpectrumFiles);
         }
 
         // 260513Codex: キャンセル結果は Failed と区別し、manifest 側で Pending に戻せる印を付けます。
         private static SimulationExecutionResult CreateCanceledResult(
             SimulationExecutionJob job,
             string standardOutput,
-            string standardError) =>
+            string standardError,
+            IReadOnlySet<string>? savedSpectrumFiles = null) =>
             new(
                 job.Reservations,
                 ExitCode: -1,
                 StandardOutput: standardOutput,
                 StandardError: standardError,
                 ExceptionMessage: null,
-                IsCanceled: true);
+                IsCanceled: true,
+                SavedSpectrumFiles: savedSpectrumFiles);
 
         // 260528Codex: DTSA-II スクリプトの保存完了マーカーを逐次読み、生成ファイル数ベースで進捗を進めます。
+        // 260606Claude: 併せてマーカーのファイル名を savedSpectrumFiles へ記録し、ジョブ途中失敗でも保存済み spectrum を Completed と判定できるようにします。
         private static async Task<string> ReadStandardOutputAsync(
             Process process,
-            SimulationJobProgress progress)
+            SimulationJobProgress progress,
+            HashSet<string> savedSpectrumFiles)
         {
             var builder = new StringBuilder();
             string? line;
             while ((line = await process.StandardOutput.ReadLineAsync()) is not null)
             {
                 builder.AppendLine(line);
-                if (line.StartsWith(SavedSpectrumMarker, StringComparison.Ordinal))
-                    progress.ReportSpectrumSaved();
+                if (!line.StartsWith(SavedSpectrumMarker, StringComparison.Ordinal))
+                    continue;
+
+                // 260606Claude: マーカー末尾の保存パス (パスに '|' は現れない) からファイル名だけ取り出して記録します。
+                string savedFileName = Path.GetFileName(line.AsSpan(line.LastIndexOf('|') + 1)).ToString();
+                if (savedFileName.Length > 0)
+                    savedSpectrumFiles.Add(savedFileName);
+                progress.ReportSpectrumSaved();
             }
 
             return builder.ToString();

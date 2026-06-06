@@ -396,11 +396,24 @@ namespace MineraScope
         }
 
         // 260527Codex: 実行結果は中身を読まず、終了コードと出力ファイルの存在で manifest に反映します。
+        // 260606Claude: spectrum 1 件ごとに保存できたかで判定し、ジョブが途中失敗/キャンセルでも保存済み分は Completed として残します。
         private static void ApplyResultToEntry(
             SimulationExecutionResult result,
             SpectrumSimulationReservation reservation,
             SpectrumManifestEntry entry)
         {
+            // 260606Claude: 正常終了の全件保存に加え、保存完了マーカーが出た spectrum も「保存済み」とみなします。
+            bool cleanExit = !result.IsCanceled && result.ExitCode == 0 && result.ExceptionMessage is null;
+            bool saved = cleanExit || (result.SavedSpectrumFiles?.Contains(reservation.FileName) ?? false);
+
+            string outputPath = Path.Combine(reservation.PoolFolder, reservation.FileName);
+            if (saved && File.Exists(outputPath))
+            {
+                entry.Status = SpectrumManifestStatus.Completed;
+                entry.FailureReason = null;
+                return;
+            }
+
             if (result.IsCanceled)
             {
                 entry.Status = SpectrumManifestStatus.Pending;
@@ -408,23 +421,16 @@ namespace MineraScope
                 return;
             }
 
-            if (result.ExitCode != 0 || result.ExceptionMessage is not null)
+            if (!cleanExit)
             {
                 entry.Status = SpectrumManifestStatus.Failed;
                 entry.FailureReason = BuildFailureReason(result);
                 return;
             }
 
-            string outputPath = Path.Combine(reservation.PoolFolder, reservation.FileName);
-            if (!File.Exists(outputPath))
-            {
-                entry.Status = SpectrumManifestStatus.Missing;
-                entry.FailureReason = "DTSA-II は正常終了しましたが、出力 spectrum ファイルが見つかりません。";
-                return;
-            }
-
-            entry.Status = SpectrumManifestStatus.Completed;
-            entry.FailureReason = null;
+            // 260606Claude: 正常終了したのにファイルが無い場合だけ Missing に落とします。
+            entry.Status = SpectrumManifestStatus.Missing;
+            entry.FailureReason = "DTSA-II は正常終了しましたが、出力 spectrum ファイルが見つかりません。";
         }
 
         // 260507Codex: manifest に保存する失敗理由は長くなりすぎないよう要点だけにします。
