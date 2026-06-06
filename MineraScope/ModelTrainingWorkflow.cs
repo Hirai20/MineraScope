@@ -55,11 +55,15 @@ namespace MineraScope
         }
 
         // 260514Codex: 学習は tmp フォルダで完走させ、成功時だけ正式フォルダへ昇格します。
-        public Task RunAsync(ModelTrainingPlan plan, CancellationToken cancellationToken = default) =>
-            Task.Run(() => Run(plan, cancellationToken), cancellationToken);
+        // 260606Claude: 学習進捗 (モデル/エポック) を呼び出し元の UI へ渡すため progress を受け取ります。
+        public Task RunAsync(
+            ModelTrainingPlan plan,
+            IProgress<TrainingProgress>? progress = null,
+            CancellationToken cancellationToken = default) =>
+            Task.Run(() => Run(plan, progress, cancellationToken), cancellationToken);
 
         // 260514Codex: キャンセルや失敗では tmp だけを片付け、既存の正式フォルダは残します。
-        private void Run(ModelTrainingPlan plan, CancellationToken cancellationToken)
+        private void Run(ModelTrainingPlan plan, IProgress<TrainingProgress>? progress, CancellationToken cancellationToken)
         {
             string temporaryOutputFolder = $"{plan.ModelOutputFolder}.tmp";
             _logAction("モデル作成開始");
@@ -81,6 +85,7 @@ namespace MineraScope
                     plan.Settings.EarlyStoppingPatience,
                     plan.Settings.ValidationSplit,
                     temporaryOutputFolder,
+                    progress,
                     cancellationToken);
 
                 cancellationToken.ThrowIfCancellationRequested();

@@ -369,7 +369,7 @@ namespace MineraScope
                 string message = shortages.Count == 0
                     ? "不足している spectrum はありません。"
                     : SpectrumPoolWorkflow.FormatShortageMessage(shortages);
-                SetSimulationStatus(shortages.Count == 0 ? "spectrum 生成: 不足なし" : "spectrum 生成: 実行できる予約なし", 0, 1);
+                SetStatusStrip(shortages.Count == 0 ? "spectrum 生成: 不足なし" : "spectrum 生成: 実行できる予約なし", 0, 1);
                 MessageBox.Show(message, "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -387,7 +387,7 @@ namespace MineraScope
                 .Sum(job => job.Reservations.Count);
             // 260513Codex: spectrum 生成ログは既存の訓練ログ欄へ流し、開始とジョブ数を最低限残します。
             TrainLog($"spectrum 生成開始: ジョブ {jobCount} 件、spectrum {reservedSpectrumCount} 件");
-            SetSimulationStatus($"spectrum 生成開始: ジョブ {jobCount} 件 / spectrum {reservedSpectrumCount} 件", 0, reservedSpectrumCount);
+            SetStatusStrip($"spectrum 生成開始: ジョブ {jobCount} 件 / spectrum {reservedSpectrumCount} 件", 0, reservedSpectrumCount);
 
             try
             {
@@ -401,7 +401,7 @@ namespace MineraScope
                 if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
                 {
                     TrainLog("spectrum 生成をキャンセルしました。");
-                    SetSimulationStatus("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
+                    SetStatusStrip("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
                 }
             }
             finally
@@ -417,7 +417,7 @@ namespace MineraScope
             var statusCounts = _spectrumPoolWorkflow.GetStatusCounts(request);
             TrainLog(
                 $"manifest status: Completed {statusCounts.Completed} 件 / Failed {statusCounts.Failed} 件 / Missing {statusCounts.Missing} 件 / Pending {statusCounts.Pending} 件");
-            SetSimulationStatus(
+            SetStatusStrip(
                 $"manifest status: Completed {statusCounts.Completed} / Failed {statusCounts.Failed} / Missing {statusCounts.Missing} / Pending {statusCounts.Pending}",
                 toolStripProgressBar1.Value,
                 Math.Max(reservedSpectrumCount, 1));
@@ -425,7 +425,7 @@ namespace MineraScope
             var remainingShortages = _spectrumPoolWorkflow.GetShortages(request);
             if (remainingShortages.Count > 0)
             {
-                SetSimulationStatus(
+                SetStatusStrip(
                     $"spectrum 生成: 不足 {remainingShortages.Sum(shortage => shortage.MissingCount)} 件",
                     toolStripProgressBar1.Value,
                     Math.Max(reservedSpectrumCount, 1));
@@ -437,7 +437,7 @@ namespace MineraScope
             }
             else
             {
-                SetSimulationStatus("spectrum 生成完了: 必要な spectrum pool がそろいました", reservedSpectrumCount, reservedSpectrumCount);
+                SetStatusStrip("spectrum 生成完了: 必要な spectrum pool がそろいました", reservedSpectrumCount, reservedSpectrumCount);
                 MessageBox.Show("必要な spectrum pool がそろいました。", "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
@@ -761,17 +761,17 @@ namespace MineraScope
 
         // 260527Codex: statusStrip1 は Designer の部品をそのまま使い、待機中の初期表示だけを整えます。
         private void InitializeSimulationStatus() =>
-            SetSimulationStatus("待機中", 0, 1);
+            SetStatusStrip("待機中", 0, 1);
 
         // 260527Codex: status strip 更新を一か所に集め、並列 progress 通知でも UI スレッドへ安全に戻します。
-        private void SetSimulationStatus(string text, int value, int maximum)
+        private void SetStatusStrip(string text, int value, int maximum)
         {
             if (IsDisposed)
                 return;
 
             if (InvokeRequired)
             {
-                BeginInvoke(new Action(() => SetSimulationStatus(text, value, maximum)));
+                BeginInvoke(new Action(() => SetStatusStrip(text, value, maximum)));
                 return;
             }
 
@@ -781,6 +781,21 @@ namespace MineraScope
             toolStripProgressBar1.Maximum = safeMaximum;
             toolStripProgressBar1.Value = Math.Clamp(value, 0, safeMaximum);
             toolStripStatusLabel1.Text = text;
+        }
+
+        // 260606Claude: 学習は spectrum 数のような整数単位がないので、全体進捗 (0..1) を 0..ProgressScale に拡大して滑らかなバーにします。
+        private const int ProgressScale = 1000;
+
+        // 260606Claude: 学習進捗をステータスストリップへ反映します。バーは全体進捗、ラベルにモデル名・通し番号・エポック・経過時間を出します。
+        private void ReportTrainingProgress(TrainingProgress progress)
+        {
+            string epochText = progress.Epoch > 0
+                ? $"epoch {progress.Epoch}/{progress.RequestedEpochs}"
+                : "準備中";
+            SetStatusStrip(
+                $"学習中: {progress.ModelName} ({progress.ModelIndex}/{progress.TotalModels}) {epochText}, 経過 {progress.Elapsed:hh\\:mm\\:ss}",
+                (int)Math.Round(progress.OverallFraction * ProgressScale),
+                ProgressScale);
         }
 
         // 260528Codex: status strip は spectrum 数で毎回更新し、訓練ログは長くなりすぎない間隔に絞ります。
@@ -793,7 +808,7 @@ namespace MineraScope
                 ? progress.CompletedSpectrumCount
                 : progress.CompletedJobCount;
 
-            SetSimulationStatus(progress.Message, value, maximum);
+            SetStatusStrip(progress.Message, value, maximum);
             if (ShouldLogSimulationProgress(progress))
                 TrainLog(FormatSimulationProgressLog(progress));
         }
@@ -900,16 +915,21 @@ namespace MineraScope
             buttonRunSpectrumGeneration.Enabled = false;
             buttonCancel.Enabled = true;
             textBoxModelLog.Clear();
+            // 260606Claude: 学習はバー未対応だったので、ここで 0 にリセットしてから進捗通知を受け取ります。
+            SetStatusStrip("モデル作成開始", 0, ProgressScale);
+            var trainingProgress = new Progress<TrainingProgress>(ReportTrainingProgress);
 
             try
             {
                 // 260514Codex: 学習本体は workflow に任せ、成功時だけモデル一覧を更新します。
-                await _modelTrainingWorkflow.RunAsync(trainingPlan, cancellationTokenSource.Token);
+                await _modelTrainingWorkflow.RunAsync(trainingPlan, trainingProgress, cancellationTokenSource.Token);
                 FormMain?.RefreshModelPathList(request.ModelName);
+                SetStatusStrip("モデル作成完了", ProgressScale, ProgressScale);
             }
             catch (OperationCanceledException) when (cancellationTokenSource.IsCancellationRequested)
             {
                 TrainLog("モデル作成をキャンセルしました");
+                SetStatusStrip("モデル作成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
             }
             finally
             {

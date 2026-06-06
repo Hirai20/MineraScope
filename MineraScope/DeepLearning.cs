@@ -16,6 +16,16 @@ using static Tensorflow.KerasApi;
 
 namespace MineraScope
 {
+    // 260606Claude: 学習の進捗を UI へ運ぶ DTO。OverallFraction は分類1個+回帰N個を「モデル均等×エポック比」で 0..1 に正規化した全体進捗、Elapsed は学習開始からの経過時間。
+    internal sealed record TrainingProgress(
+        string ModelName,
+        int ModelIndex,
+        int TotalModels,
+        int Epoch,
+        int RequestedEpochs,
+        double OverallFraction,
+        TimeSpan Elapsed);
+
     public class DeepLearning
     {
         private readonly Action<string> _logAction;
@@ -105,6 +115,58 @@ namespace MineraScope
             );
         }
 
+        // 260606Claude: 分類1個+回帰N個を1本のバーで表すため、モデル境界とエポックを「モデル均等×エポック比」で 0..1 の全体進捗へ畳み込みます。
+        //              EarlyStopping で早期終了しても CompleteModel でその区間を 100% へスナップし、単調増加を保ちます。
+        private sealed class TrainingProgressReporter
+        {
+            private readonly IProgress<TrainingProgress>? _progress;
+            private readonly int _totalModels;
+            private readonly int _requestedEpochs;
+            private readonly Stopwatch _stopwatch;
+            private int _completedModels;
+            private string _currentModelName = "";
+
+            public TrainingProgressReporter(
+                IProgress<TrainingProgress>? progress,
+                int totalModels,
+                int requestedEpochs,
+                Stopwatch stopwatch)
+            {
+                _progress = progress;
+                _totalModels = Math.Max(1, totalModels);
+                _requestedEpochs = Math.Max(1, requestedEpochs);
+                _stopwatch = stopwatch;
+            }
+
+            public void BeginModel(string modelName)
+            {
+                _currentModelName = modelName;
+                Report(_completedModels + 1, epoch: 0, (double)_completedModels / _totalModels);
+            }
+
+            public void ReportEpoch(int epoch)
+            {
+                double epochFraction = Math.Min(epoch + 1, _requestedEpochs) / (double)_requestedEpochs;
+                Report(_completedModels + 1, epoch + 1, (_completedModels + epochFraction) / _totalModels);
+            }
+
+            public void CompleteModel()
+            {
+                _completedModels = Math.Min(_completedModels + 1, _totalModels);
+                Report(_completedModels, _requestedEpochs, (double)_completedModels / _totalModels);
+            }
+
+            private void Report(int modelIndex, int epoch, double fraction) =>
+                _progress?.Report(new TrainingProgress(
+                    _currentModelName,
+                    Math.Min(modelIndex, _totalModels),
+                    _totalModels,
+                    epoch,
+                    _requestedEpochs,
+                    Math.Clamp(fraction, 0d, 1d),
+                    _stopwatch.Elapsed));
+        }
+
         // 260430Codex: 端成分解析はスペクトルデータ loader に委譲し、DeepLearning は学習/予測入口だけを持ちます。
         // 260514Codex: Keras の epoch 境界で token を確認し、batch の途中では止めないキャンセル callback です。
         // 260605Claude: ボトルネック特定のため、エポック開始/終了で経過時間と loss を tf-train-debug.log に残す。
@@ -115,6 +177,8 @@ namespace MineraScope
             // 260606Codex: The visible training log needs requested epochs and a UI log sink for each epoch.
             private readonly int _requestedEpochs;
             private readonly Action<string> _logAction;
+            // 260606Claude: epoch 終了ごとに全体進捗レポーターへ epoch index を渡すためのフック。
+            private readonly Action<int>? _onEpochEnd;
             private readonly Stopwatch _epochStopwatch = new();
             private Dictionary<string, List<float>> _history = [];
 
@@ -123,12 +187,13 @@ namespace MineraScope
             public int LastEpoch { get; private set; } = -1;
             public string LastEpochMetrics { get; private set; } = "";
 
-            public CancellationTrainingCallback(CancellationToken cancellationToken, string operationName, int requestedEpochs, Action<string> logAction)
+            public CancellationTrainingCallback(CancellationToken cancellationToken, string operationName, int requestedEpochs, Action<string> logAction, Action<int>? onEpochEnd = null)
             {
                 _cancellationToken = cancellationToken;
                 _operationName = operationName;
                 _requestedEpochs = requestedEpochs;
                 _logAction = logAction;
+                _onEpochEnd = onEpochEnd;
             }
 
             public Dictionary<string, List<float>> history
@@ -168,6 +233,8 @@ namespace MineraScope
                     TensorFlowTrainingDebugLog.Write("early-stopping-monitor-missing", $"operation={TensorFlowTrainingDebugLog.Clean(_operationName)} monitor={EarlyStoppingMonitor} available={TensorFlowTrainingDebugLog.Clean(availableMetrics)}");
                 }
 
+                // 260606Claude: epoch 完了を全体進捗バーへ反映します（キャンセル確認より前に出して直近の進捗を残す）。
+                _onEpochEnd?.Invoke(epoch);
                 _cancellationToken.ThrowIfCancellationRequested();
             }
 
@@ -227,11 +294,12 @@ namespace MineraScope
             int patience,
             string operationName,
             Action<string> logAction,
+            Action<int>? reportEpoch,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ValidationDataPack validationData = (xValidation, yValidation);
-            var trainingCallback = new CancellationTrainingCallback(cancellationToken, operationName, epochs, logAction);
+            var trainingCallback = new CancellationTrainingCallback(cancellationToken, operationName, epochs, logAction, reportEpoch);
             model.fit(
                 xTrain,
                 yTrain,
@@ -259,6 +327,7 @@ namespace MineraScope
             int patience,
             float testSplit,
             string outputPath,
+            IProgress<TrainingProgress>? progress = null,
             CancellationToken cancellationToken = default)
         {
             if (!Directory.Exists(outputPath))
@@ -277,17 +346,24 @@ namespace MineraScope
             int regressionCount = orderedPools.Count(pool => pool.EndmemberNames.Count >= 2);
             TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience}");
 
+            // 260606Claude: 分類1個+回帰N個を1本のバーで表す。各モデルを BeginModel/CompleteModel で挟み、epoch 進捗は reporter.ReportEpoch で報告する。
+            var reporter = new TrainingProgressReporter(progress, 1 + regressionCount, epochs, runTimer);
+
             cancellationToken.ThrowIfCancellationRequested();
             string classificationOutputPath = Path.Combine(outputPath, "AllMinerals_Classification");
             Log("分類モデル学習開始");
-            TrainClassificationModel(orderedPools, epochs, batchSize, patience, testSplit, classificationOutputPath, cancellationToken);
+            reporter.BeginModel("AllMinerals_Classification");
+            TrainClassificationModel(orderedPools, epochs, batchSize, patience, testSplit, classificationOutputPath, reporter.ReportEpoch, cancellationToken);
+            reporter.CompleteModel();
 
             foreach (var pool in orderedPools.Where(pool => pool.EndmemberNames.Count >= 2))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 string regressionOutputPath = Path.Combine(outputPath, $"{pool.MineralName}_Regression");
                 Log($"回帰モデル学習開始: {pool.MineralName}");
-                TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, cancellationToken);
+                reporter.BeginModel($"{pool.MineralName}_Regression");
+                TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, reporter.ReportEpoch, cancellationToken);
+                reporter.CompleteModel();
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -305,6 +381,7 @@ namespace MineraScope
             int patience,
             float testSplit,
             string outputPath,
+            Action<int>? reportEpoch,
             CancellationToken cancellationToken)
         {
             string op = $"regression:{trainingPool.MineralName}";
@@ -362,7 +439,7 @@ namespace MineraScope
 
             var fitTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("fit-start", $"op={op}");
-            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, cancellationToken);
+            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken);
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
             // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
@@ -419,6 +496,7 @@ namespace MineraScope
             int patience,
             float testSplit,
             string outputPath,
+            Action<int>? reportEpoch,
             CancellationToken cancellationToken)
         {
             const string op = "classification:AllMinerals";
@@ -466,7 +544,7 @@ namespace MineraScope
             Log("訓練中...");
             var fitTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("fit-start", $"op={op}");
-            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, cancellationToken);
+            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken);
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
             // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
