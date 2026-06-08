@@ -212,7 +212,8 @@ namespace MineraScope
                 $"mapRun={mapRunId} chunk={chunkIndex} tile={tileIndex} rows={rowsInChunk}");
             float[,] chunk = rowsInChunk == batch.GetLength(0) ? batch : SliceRows(batch, rowsInChunk);
             var inferenceTimer = Stopwatch.StartNew();
-            var predictions = service.PredictTop1Batch(modelPath, chunk, cancellationToken, $"mapRun={mapRunId};chunk={chunkIndex};tile={tileIndex}");
+            // 260608Claude: PredictTop1Batch の未使用 debugScope 引数撤去に追従。
+            var predictions = service.PredictTop1Batch(modelPath, chunk, cancellationToken);
             long elapsedTicks = inferenceTimer.ElapsedTicks;
             for (int row = 0; row < rowsInChunk; row++)
                 top1LabelId[rowToBlock[row]] = predictions[row];

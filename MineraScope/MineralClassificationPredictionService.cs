@@ -7,13 +7,13 @@ using static Tensorflow.KerasApi;
 namespace MineraScope
 {
     // 260522Codex: Runs the saved AllMinerals classification model against an already normalized spectrum.
+    // 260608Claude: predict()→Apply 解決後の per-call 詳細トレース(predict-single/batch-*, labels-*, model-cache-hit)を撤去し、tf-lock/model-load 等の診断要所だけ残す。
     internal sealed class MineralClassificationPredictionService
     {
         private string? _loadedClassificationPath;
         private IModel? _classificationModel;
         private string[]? _labelNames;
         // 260604Codex: Track the thread that loaded the cached model so TF.NET ThreadLocal context moves are visible.
-        private long _predictionCallId;
         private int _modelLoadManagedThreadId;
         private uint _modelLoadNativeThreadId;
 
@@ -34,50 +34,38 @@ namespace MineraScope
         // 260606Claude: TF 本体(load/np.array/Apply/numpy/ToArray/dispose)。必ず専用スレッド上で実行し、戻すのは managed な結果のみ。
         private MineralClassificationPredictionResult PredictCore(string classificationPath, float[] normalizedSpectrum)
         {
-            // 260604Codex: Single-spectrum prediction uses the same TF runtime path, so log it with map batches.
-            long callId = ++_predictionCallId;
-            TensorFlowPredictionDebugLog.Write("predict-single-enter", $"call={callId} path={TensorFlowPredictionDebugLog.Clean(classificationPath)} {GetModelDebugInfo()}");
             EnsureModelLoaded(classificationPath);
-            TensorFlowPredictionDebugLog.Write("predict-single-after-load", $"call={callId} {GetModelDebugInfo()}");
 
-            TensorFlowPredictionDebugLog.Write("predict-single-np-before", $"call={callId}");
             var spectrumReshaped = np.array(normalizedSpectrum).reshape(new Shape(1, SpectrumDataLoader.SpectrumLength));
             try
             {
-                TensorFlowPredictionDebugLog.Write("predict-single-predict-before", $"call={callId} {GetModelDebugInfo()}");
                 // 260605Claude: predict() は DataAdapter/DataHandler/prefetch worker を毎回構築してスレッドと GC をリークさせる。素のフォワードパスである Apply() に切り替える。
                 var prediction = _classificationModel!.Apply(spectrumReshaped, training: false);
                 try
                 {
-                    TensorFlowPredictionDebugLog.Write("predict-single-numpy-before", $"call={callId}");
                     var predictionArray = prediction.numpy();
                     try
                     {
-                        TensorFlowPredictionDebugLog.Write("predict-single-toarray-before", $"call={callId}");
                         var probabilities = predictionArray.ToArray<float>();
-                        TensorFlowPredictionDebugLog.Write("predict-single-toarray-after", $"call={callId} probabilities={probabilities.Length}");
                         return BuildPredictionResult(probabilities);
                     }
                     finally
                     {
-                        TensorFlowPredictionDebugLog.Write("predict-single-dispose-array", $"call={callId}");
                         DisposeIfPossible(predictionArray);
                     }
                 }
                 finally
                 {
-                    TensorFlowPredictionDebugLog.Write("predict-single-dispose-prediction", $"call={callId}");
                     DisposeIfPossible(prediction);
                 }
             }
             finally
             {
-                TensorFlowPredictionDebugLog.Write("predict-single-dispose-input", $"call={callId}");
                 DisposeIfPossible(spectrumReshaped);
             }
         }
 
-        public int[] PredictTop1Batch(string modelPath, float[,] batch, CancellationToken cancellationToken, string debugScope = "")
+        public int[] PredictTop1Batch(string modelPath, float[,] batch, CancellationToken cancellationToken)
         {
             int rows = batch.GetLength(0);
             if (batch.GetLength(1) != SpectrumDataLoader.SpectrumLength)
@@ -88,53 +76,40 @@ namespace MineraScope
 
             string classificationPath = GetClassificationPath(modelPath);
             // 260606Claude: マップの chunk 推論も専用スレッドへ集約する。workflow スレッドはここでブロックし、合間の PTS 読み取り/正規化は並列のまま。
-            return TensorFlowExecutor.Run(() => RunLockedWithCacheReset(() => PredictTop1BatchCore(classificationPath, batch, rows, cancellationToken, debugScope), "batch"));
+            return TensorFlowExecutor.Run(() => RunLockedWithCacheReset(() => PredictTop1BatchCore(classificationPath, batch, rows, cancellationToken), "batch"));
         }
 
         // 260606Claude: バッチ TF 本体。必ず専用スレッド上で実行し、戻すのは top1 ラベル index の int[] のみ。
-        private int[] PredictTop1BatchCore(string classificationPath, float[,] batch, int rows, CancellationToken cancellationToken, string debugScope)
+        private int[] PredictTop1BatchCore(string classificationPath, float[,] batch, int rows, CancellationToken cancellationToken)
         {
-            // 260604Codex: Log every map batch boundary to identify thread moves and the last native call before abort.
-            long callId = ++_predictionCallId;
-            string scope = TensorFlowPredictionDebugLog.Clean(debugScope);
-            TensorFlowPredictionDebugLog.Write("predict-batch-enter", $"call={callId} scope={scope} rows={rows} path={TensorFlowPredictionDebugLog.Clean(classificationPath)} {GetModelDebugInfo()}");
             cancellationToken.ThrowIfCancellationRequested();
             EnsureModelLoaded(classificationPath);
-            TensorFlowPredictionDebugLog.Write("predict-batch-after-load", $"call={callId} scope={scope} {GetModelDebugInfo()}");
 
-            TensorFlowPredictionDebugLog.Write("predict-batch-np-before", $"call={callId} scope={scope} rows={rows}");
             var batchArray = np.array(batch);
             try
             {
-                TensorFlowPredictionDebugLog.Write("predict-batch-predict-before", $"call={callId} scope={scope} rows={rows} {GetModelDebugInfo()}");
                 // 260605Claude: predict() の臨時設備リークを避けるため、マップ側も Apply() で素のフォワードパスにする。
                 var prediction = _classificationModel!.Apply(batchArray, training: false);
                 try
                 {
-                    TensorFlowPredictionDebugLog.Write("predict-batch-numpy-before", $"call={callId} scope={scope}");
                     var predictionArray = prediction.numpy();
                     try
                     {
-                        TensorFlowPredictionDebugLog.Write("predict-batch-toarray-before", $"call={callId} scope={scope}");
                         var probabilities = predictionArray.ToArray<float>();
-                        TensorFlowPredictionDebugLog.Write("predict-batch-toarray-after", $"call={callId} scope={scope} probabilities={probabilities.Length}");
                         return BuildTop1BatchResult(probabilities, rows);
                     }
                     finally
                     {
-                        TensorFlowPredictionDebugLog.Write("predict-batch-dispose-array", $"call={callId} scope={scope}");
                         DisposeIfPossible(predictionArray);
                     }
                 }
                 finally
                 {
-                    TensorFlowPredictionDebugLog.Write("predict-batch-dispose-prediction", $"call={callId} scope={scope}");
                     DisposeIfPossible(prediction);
                 }
             }
             finally
             {
-                TensorFlowPredictionDebugLog.Write("predict-batch-dispose-input", $"call={callId} scope={scope}");
                 DisposeIfPossible(batchArray);
             }
         }
@@ -148,10 +123,7 @@ namespace MineraScope
 
         private string[] GetLabelNamesCore(string classificationPath)
         {
-            // 260604Codex: Label loading can initialize the model before map chunks, so record its thread too.
-            TensorFlowPredictionDebugLog.Write("labels-enter", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} {GetModelDebugInfo()}");
             EnsureModelLoaded(classificationPath);
-            TensorFlowPredictionDebugLog.Write("labels-after-load", $"{GetModelDebugInfo()} labels={_labelNames!.Length}");
             return (string[])_labelNames!.Clone();
         }
 
@@ -231,10 +203,7 @@ namespace MineraScope
         private void EnsureModelLoaded(string classificationPath)
         {
             if (_classificationModel is not null && _loadedClassificationPath == classificationPath)
-            {
-                TensorFlowPredictionDebugLog.Write("model-cache-hit", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} {GetModelDebugInfo()}");
                 return;
-            }
 
             if (!Directory.Exists(classificationPath))
                 throw new DirectoryNotFoundException("分類モデル AllMinerals_Classification が見つかりません。");
