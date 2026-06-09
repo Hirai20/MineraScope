@@ -9,6 +9,7 @@ using Tensorflow;
 using Tensorflow.Keras;
 using Tensorflow.Keras.Callbacks;
 using Tensorflow.Keras.Engine;
+using Tensorflow.Keras.Losses;
 using Tensorflow.NumPy;
 using Tensorflow.Util;
 using static Tensorflow.Binding;
@@ -16,15 +17,14 @@ using static Tensorflow.KerasApi;
 
 namespace MineraScope
 {
-    // 260606Claude: 学習の進捗を UI へ運ぶ DTO。OverallFraction は分類1個+回帰N個を「モデル均等×エポック比」で 0..1 に正規化した全体進捗、Elapsed は学習開始からの経過時間。
+    // 260606Claude: 学習の進捗を UI へ運ぶ DTO。OverallFraction は分類1個+回帰N個を「モデル均等×エポック比」で 0..1 に正規化した全体進捗。経過時間は UI 側の操作ストップウォッチで表示する。
     internal sealed record TrainingProgress(
         string ModelName,
         int ModelIndex,
         int TotalModels,
         int Epoch,
         int RequestedEpochs,
-        double OverallFraction,
-        TimeSpan Elapsed);
+        double OverallFraction);
 
     public class DeepLearning
     {
@@ -82,12 +82,32 @@ namespace MineraScope
         // 260605Codex: Keep debug metric formatting culture-stable for log parsing.
         private static string FormatMetric(double value) => value.ToString("G9", CultureInfo.InvariantCulture);
 
+        // 260606Codex: Cache counters are cumulative for the training run, so log them with each stage for before/after comparison.
+        private static string FormatSpectrumCacheStats(SpectrumDataLoader.NormalizedSpectrumCache? cache) =>
+            cache is null
+                ? string.Empty
+                : $" cacheableSpectra={cache.CacheablePathCount} cachedSpectra={cache.CachedCount} cacheHits={cache.HitCount} cacheMisses={cache.MissCount} cacheStores={cache.StoreCount}";
+
         // 260605Codex: Epoch logs can include validation metrics when validation_data is passed to fit.
         private static string FormatEpochLogs(IEnumerable<KeyValuePair<string, float>> logs) =>
             string.Join(",", logs.Select(kv => $"{kv.Key}={kv.Value.ToString("G9", CultureInfo.InvariantCulture)}"));
 
         // 260605Codex: Patience is intended to watch validation/test loss rather than training loss.
         private const string EarlyStoppingMonitor = "val_loss";
+
+        // 260609Claude: 等価性テスト前提の再現性確認用。env MINERASCOPE_DETERMINISTIC=1 のとき fit の毎epoch shuffle を切る(通常実行は従来どおり true)。
+        //              スレッド数/op決定論は launch 時の env (TF_NUM_INTRAOP_THREADS / TF_NUM_INTEROP_THREADS / OMP_NUM_THREADS / TF_DETERMINISTIC_OPS) で設定する。
+        private static readonly bool Deterministic =
+            Environment.GetEnvironmentVariable("MINERASCOPE_DETERMINISTIC") == "1";
+
+        // 260609Claude: env MINERASCOPE_CUSTOMLOOP=1 で分類学習を fit から自前 GradientTape ループへ切替(fit の毎batch強制 GC.Collect 撤去が目的。回帰は当面 fit)。
+        //              ★Dense-only 前提: Dropout/BatchNorm/regularizer/non-trainable が無いので Apply(training:true/false) は同一。層を足したらこの前提を見直す。
+        private static readonly bool CustomLoop =
+            Environment.GetEnvironmentVariable("MINERASCOPE_CUSTOMLOOP") == "1";
+
+        // 260609Claude: native handle を bound するため毎batchではなく N batch ごとにだけ GC する(fit の毎batch GC の代替)。env で sweep 可能、既定 32。
+        private static int CustomLoopGcInterval =>
+            int.TryParse(Environment.GetEnvironmentVariable("MINERASCOPE_CUSTOMLOOP_GC_N"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n > 0 ? n : 32;
 
         // 260605Codex: Return the observed fit result because TensorFlow.Keras History is not reliable enough here.
         private sealed record TrainingFitResult(int RequestedEpochs, int CompletedEpochs, int LastEpoch, string LastEpochMetrics);
@@ -122,20 +142,17 @@ namespace MineraScope
             private readonly IProgress<TrainingProgress>? _progress;
             private readonly int _totalModels;
             private readonly int _requestedEpochs;
-            private readonly Stopwatch _stopwatch;
             private int _completedModels;
             private string _currentModelName = "";
 
             public TrainingProgressReporter(
                 IProgress<TrainingProgress>? progress,
                 int totalModels,
-                int requestedEpochs,
-                Stopwatch stopwatch)
+                int requestedEpochs)
             {
                 _progress = progress;
                 _totalModels = Math.Max(1, totalModels);
                 _requestedEpochs = Math.Max(1, requestedEpochs);
-                _stopwatch = stopwatch;
             }
 
             public void BeginModel(string modelName)
@@ -163,8 +180,7 @@ namespace MineraScope
                     _totalModels,
                     epoch,
                     _requestedEpochs,
-                    Math.Clamp(fraction, 0d, 1d),
-                    _stopwatch.Elapsed));
+                    Math.Clamp(fraction, 0d, 1d)));
         }
 
         // 260430Codex: 端成分解析はスペクトルデータ loader に委譲し、DeepLearning は学習/予測入口だけを持ちます。
@@ -298,6 +314,10 @@ namespace MineraScope
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            // 260609Claude: 分類のみ custom loop に分岐(回帰は当面 fit)。同一構成で fit/custom を env で A/B するためのスイッチ。
+            if (CustomLoop && operationName.StartsWith("classification", StringComparison.Ordinal))
+                return RunCustomClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
+
             ValidationDataPack validationData = (xValidation, yValidation);
             var trainingCallback = new CancellationTrainingCallback(cancellationToken, operationName, epochs, logAction, reportEpoch);
             model.fit(
@@ -307,6 +327,8 @@ namespace MineraScope
                 epochs: epochs,
                 validation_split: 0f,
                 validation_data: validationData,
+                // 260609Claude: 決定論モードでは毎epoch shuffle を切り再現性を確保する。通常は true。
+                shuffle: !Deterministic,
                 callbacks: new List<ICallback>
                 {
                     trainingCallback,
@@ -315,6 +337,295 @@ namespace MineraScope
             );
             cancellationToken.ThrowIfCancellationRequested();
             return new TrainingFitResult(epochs, trainingCallback.CompletedEpochs, trainingCallback.LastEpoch, trainingCallback.LastEpochMetrics);
+        }
+
+        // 260609Claude: 分類用 custom training loop。fit の毎batch GC.Collect を撤去し、batch-local tensor を明示 Dispose + N batch ごと GC に置換。
+        //              GradientTape+Apply+Adam.apply_gradients で fit と同じ最適化を自前で回す。data は1回 tensor 化して tf.slice でバッチ化(NumSharp スライス回避)。
+        //              EarlyStopping(val_loss, restore_best_weights) は自前。validation は Apply(training:false) の一括 forward。★Dense-only 前提。
+        private static TrainingFitResult RunCustomClassificationLoop(
+            Model model,
+            NDArray xTrain,
+            NDArray yTrain,
+            NDArray xValidation,
+            NDArray yValidation,
+            int batchSize,
+            int epochs,
+            int patience,
+            string operationName,
+            Action<string> logAction,
+            Action<int>? reportEpoch,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string op = TensorFlowTrainingDebugLog.Clean(operationName);
+            int gcInterval = CustomLoopGcInterval;
+            TensorFlowTrainingDebugLog.Write("custom-loop-start", $"operation={op} gcInterval={gcInterval}");
+
+            var lossFn = keras.losses.SparseCategoricalCrossentropy();
+            var optimizer = keras.optimizers.Adam();
+
+            // 260609Claude: 毎batchの NumSharp スライスを避けるため、学習データと検証データを1回だけ native tensor 化する。
+            var xAll = tf.constant(xTrain);
+            var yAll = tf.constant(yTrain);
+            var xVal = tf.constant(xValidation);
+            var yVal = tf.constant(yValidation);
+            int sampleCount = (int)xTrain.shape[0];
+            int features = (int)xTrain.shape[1];
+            int valCount = (int)xValidation.shape[0];
+
+            List<NDArray>? bestWeights = null;
+            double bestValLoss = double.PositiveInfinity;
+            int wait = 0;
+            int completedEpochs = 0;
+            int lastEpoch = -1;
+            string lastEpochMetrics = "";
+            long globalStep = 0;
+            var epochStopwatch = new Stopwatch();
+
+            for (int epoch = 0; epoch < epochs; epoch++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                epochStopwatch.Restart();
+                TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} customLoop=1");
+
+                double lossWeightedSum = 0d;
+                double lossStepSum = 0d;
+                long correct = 0;
+                int steps = 0;
+
+                for (int start = 0; start < sampleCount; start += batchSize)
+                {
+                    int count = Math.Min(batchSize, sampleCount - start);
+                    var xb = tf.slice(xAll, new[] { start, 0 }, new[] { count, features });
+                    var yb = tf.slice(yAll, new[] { start }, new[] { count });
+
+                    Tensor predT;
+                    Tensor lossT;
+                    Tensor[] grads;
+                    using (var tape = tf.GradientTape())
+                    {
+                        predT = model.Apply(xb, training: true);
+                        lossT = lossFn.Call(yb, predT);
+                        grads = tape.gradient(lossT, model.TrainableVariables);
+                    }
+                    optimizer.apply_gradients(zip(grads, model.TrainableVariables.Select(v => (v as ResourceVariable)!)));
+
+                    float lossValue = lossT.numpy().ToArray<float>()[0];
+                    lossWeightedSum += (double)lossValue * count;
+                    lossStepSum += lossValue;
+                    steps++;
+
+                    // 260609Claude: 訓練 accuracy はネイティブ op で集計し、scalar だけ取り出す。
+                    var predIdx = tf.arg_max(predT, 1);
+                    var correctT = tf.reduce_sum(tf.cast(tf.equal(predIdx, tf.cast(yb, predIdx.dtype)), tf.int32));
+                    correct += correctT.numpy().ToArray<int>()[0];
+
+                    DisposeTensors(xb, yb, predT, lossT, predIdx, correctT);
+                    foreach (var g in grads)
+                        g?.Dispose();
+
+                    globalStep++;
+                    // 260609Claude: fit の毎batch GC.Collect の代わりに N batch ごとにだけ回収して native handle を bound する。
+                    if (gcInterval > 0 && globalStep % gcInterval == 0)
+                        GC.Collect();
+                }
+
+                var (valLoss, valAccuracy) = EvaluateClassification(model, xVal, yVal, valCount, lossFn);
+                double trainLoss = sampleCount > 0 ? lossWeightedSum / sampleCount : 0d;
+                double trainLossStepMean = steps > 0 ? lossStepSum / steps : 0d;
+                double trainAccuracy = sampleCount > 0 ? (double)correct / sampleCount : 0d;
+
+                // 260609Claude: epoch loss は sample-weighted mean を主に、step mean も併記して fit との平均化方式を後で突き合わせる。
+                string logs = $"loss={FormatMetric(trainLoss)},accuracy={FormatMetric(trainAccuracy)},val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},loss_step_mean={FormatMetric(trainLossStepMean)}";
+                completedEpochs++;
+                lastEpoch = epoch;
+                lastEpochMetrics = logs;
+                TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} durationMs={epochStopwatch.ElapsedMilliseconds} {TensorFlowTrainingDebugLog.Clean(logs)}");
+                logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
+
+                // 260609Claude: EarlyStopping(monitor=val_loss, min_delta=0, restore_best_weights) を自前で再現。
+                if (valLoss < bestValLoss)
+                {
+                    bestValLoss = valLoss;
+                    bestWeights = model.get_weights();
+                    wait = 0;
+                }
+                else if (++wait >= patience)
+                {
+                    reportEpoch?.Invoke(epoch);
+                    break;
+                }
+
+                reportEpoch?.Invoke(epoch);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (bestWeights != null)
+                model.set_weights(bestWeights);
+
+            DisposeTensors(xAll, yAll, xVal, yVal);
+            TensorFlowTrainingDebugLog.Write("custom-loop-end", $"operation={op} trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
+            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics);
+        }
+
+        // 260609Claude: validation を Keras evaluate(DataHandler 経路)に戻さず、Apply(training:false) の一括 forward で val_loss / val_accuracy を出す。検証 tensor は呼び出し側で使い回すのでここでは破棄しない。
+        private static (double ValLoss, double ValAccuracy) EvaluateClassification(
+            Model model, Tensor xValidation, Tensor yValidation, int total, ILossFunc lossFn)
+        {
+            Tensor preds = model.Apply(xValidation, training: false);
+            Tensor lossT = lossFn.Call(yValidation, preds);
+            double valLoss = lossT.numpy().ToArray<float>()[0];
+
+            var predIdx = tf.arg_max(preds, 1);
+            var correctT = tf.reduce_sum(tf.cast(tf.equal(predIdx, tf.cast(yValidation, predIdx.dtype)), tf.int32));
+            double valAccuracy = total > 0 ? (double)correctT.numpy().ToArray<int>()[0] / total : 0d;
+
+            DisposeTensors(preds, lossT, predIdx, correctT);
+            return (valLoss, valAccuracy);
+        }
+
+        // 260609Claude: batch-local tensor を明示破棄して native handle を即解放する(N batch GC と併用して leak を抑える)。
+        private static void DisposeTensors(params Tensor[] tensors)
+        {
+            foreach (var t in tensors)
+                t?.Dispose();
+        }
+
+        // 260609Claude: GUI なしで分類学習(custom loop / fit)を回す開発用ヘッドレス smoke test。env MINERASCOPE_HEADLESS_TRAIN=1 で Program から呼ぶ。
+        //              合成だが学習可能なデータ(クラス中心+小ノイズ)を実データ相当の形 [n,2048]/K クラスで作り、最適化が正しく回るか・速度・leak を実 pool 無しで検証する。
+        //              合成なので精度の意味は無い(実データの精度 A/B は GUI/実 pool で別途)。結果は tf-train-debug.log に出る。
+        internal static void RunHeadlessSmokeTest(Action<string> log)
+        {
+            int samples = ReadIntEnv("MINERASCOPE_SMOKE_SAMPLES", 6000);
+            int classes = ReadIntEnv("MINERASCOPE_SMOKE_CLASSES", 29);
+            int epochs = ReadIntEnv("MINERASCOPE_SMOKE_EPOCHS", 5);
+            int batchSize = ReadIntEnv("MINERASCOPE_SMOKE_BATCH", 128);
+            int valSamples = Math.Max(classes, samples / 5);
+
+            TensorFlowTrainingDebugLog.Write("smoke-start", $"customLoop={CustomLoop} samples={samples} classes={classes} epochs={epochs} batchSize={batchSize}");
+            log($"headless smoke test: customLoop={CustomLoop} samples={samples} classes={classes} epochs={epochs} batch={batchSize}");
+
+            tf.set_random_seed(42);
+            var rng = new Random(42);
+            float[,] centers = new float[classes, SpectrumLength];
+            for (int k = 0; k < classes; k++)
+                for (int j = 0; j < SpectrumLength; j++)
+                    centers[k, j] = (float)rng.NextDouble();
+
+            var (xTrain, yTrain) = MakeSyntheticClassificationData(samples, classes, centers, rng);
+            var (xTest, yTest) = MakeSyntheticClassificationData(valSamples, classes, centers, rng);
+
+            var model = CreateClassificationModel(classes);
+            model.compile(
+                optimizer: keras.optimizers.Adam(),
+                loss: keras.losses.SparseCategoricalCrossentropy(),
+                metrics: new[] { "accuracy" });
+
+            var sw = Stopwatch.StartNew();
+            var result = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, 10, "classification:Smoke", log, null, default);
+            sw.Stop();
+
+            TensorFlowTrainingDebugLog.Write("smoke-end", $"customLoop={CustomLoop} totalMs={sw.ElapsedMilliseconds} trainedEpochs={result.CompletedEpochs} finalMetrics={TensorFlowTrainingDebugLog.Clean(result.LastEpochMetrics)}");
+            log($"headless smoke done: totalMs={sw.ElapsedMilliseconds} epochs={result.CompletedEpochs} final={result.LastEpochMetrics}");
+        }
+
+        // 260609Claude: クラスごとに固有中心 + 小ノイズの学習可能な合成分類データを実データ相当の形で作る。
+        private static (NDArray X, NDArray Y) MakeSyntheticClassificationData(int n, int classes, float[,] centers, Random rng)
+        {
+            float[,] x = new float[n, SpectrumLength];
+            int[] y = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                int label = rng.Next(classes);
+                y[i] = label;
+                for (int j = 0; j < SpectrumLength; j++)
+                    x[i, j] = centers[label, j] + (float)(rng.NextDouble() * 0.1 - 0.05);
+            }
+
+            return (np.array(x), np.array(y));
+        }
+
+        private static int ReadIntEnv(string name, int fallback) =>
+            int.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) && value > 0
+                ? value
+                : fallback;
+
+        // 260609Claude: 等価性テスト。同一初期重み W0 を fit と custom loop の両方へ set_weights でコピーし、同じデータ・同じ順序(shuffle off)で回して更新後 weight を突き合わせる。
+        //              run間決定論は不要(W0 を明示コピーするため)。FP残ノイズを抑えるため単スレッド env (TF_NUM_INTRAOP/INTEROP_THREADS=1, OMP_NUM_THREADS=1) で起動推奨。
+        //              実装バグ(Adam slot/timestep, loss reduction, batch順, partial batch)があれば weight 差が FP ノイズ(~1e-5)を大きく超える。env MINERASCOPE_HEADLESS_PARITY=1 で Program から呼ぶ。
+        internal static void RunHeadlessParityTest(Action<string> log)
+        {
+            // 260609Claude: TF_DETERMINISTIC_OPS=1 では random init op に seed が要る。重み初期化前に graph seed を設定して落ちないようにする(W0 は両経路へコピーするので値自体は不問)。
+            tf.set_random_seed(42);
+            int classes = ReadIntEnv("MINERASCOPE_PARITY_CLASSES", 8);
+            var rng = new Random(42);
+            float[,] centers = new float[classes, SpectrumLength];
+            for (int k = 0; k < classes; k++)
+                for (int j = 0; j < SpectrumLength; j++)
+                    centers[k, j] = (float)rng.NextDouble();
+
+            TensorFlowTrainingDebugLog.Write("parity-start", $"classes={classes}");
+            log($"parity test: classes={classes}");
+            // T1: 1 batch / 1 epoch(restore は 1 epoch なので確実に no-op、最もクリーンな実装バグ検出)。
+            RunOneParityCase(log, "T1-1batch-1epoch", classes, centers, rng, samples: 64, batchSize: 64, epochs: 1);
+            // T2: 4 batch x 2 epoch(Adam slot 初期化 + timestep 継続 + epoch ループ)。
+            RunOneParityCase(log, "T2-4batch-2epoch", classes, centers, rng, samples: 256, batchSize: 64, epochs: 2);
+            // T3: partial batch を含む(2,2,1)。partial batch の勾配・平均化を検出。
+            RunOneParityCase(log, "T3-partialbatch", classes, centers, rng, samples: 5, batchSize: 2, epochs: 2);
+            TensorFlowTrainingDebugLog.Write("parity-end");
+            log("parity test done");
+        }
+
+        // 260609Claude: 1 ケース分の parity。W0 から fit と custom を回し、更新後 weight の最大絶対/相対差を出す。
+        //              ※この合成データは val_loss が単調減少するので custom の restore_best_weights は best=last=no-op。よって fit の last-epoch weight と直接比較できる。
+        private static void RunOneParityCase(Action<string> log, string name, int classes, float[,] centers, Random rng, int samples, int batchSize, int epochs)
+        {
+            var (x, y) = MakeSyntheticClassificationData(samples, classes, centers, rng);
+            int patience = epochs + 5;
+
+            var model = CreateClassificationModel(classes);
+            model.compile(
+                optimizer: keras.optimizers.Adam(),
+                loss: keras.losses.SparseCategoricalCrossentropy(),
+                metrics: new[] { "accuracy" });
+            var w0 = model.get_weights();
+
+            model.set_weights(w0);
+            model.fit(x, y, batch_size: batchSize, epochs: epochs, verbose: 0, shuffle: false);
+            var wFit = model.get_weights();
+
+            model.set_weights(w0);
+            RunCustomClassificationLoop(model, x, y, x, y, batchSize, epochs, patience, "classification:Parity", log, null, default);
+            var wCustom = model.get_weights();
+
+            var (maxAbs, maxRel) = MaxWeightDiff(wFit, wCustom);
+            TensorFlowTrainingDebugLog.Write("parity-case", $"case={name} samples={samples} batch={batchSize} epochs={epochs} weightTensors={wFit.Count} maxAbsDiff={FormatMetric(maxAbs)} maxRelDiff={FormatMetric(maxRel)}");
+            log($"parity {name}: weightTensors={wFit.Count} maxAbsDiff={maxAbs:G6} maxRelDiff={maxRel:G6}");
+        }
+
+        // 260609Claude: 2 つの重みセットの要素ごと最大絶対差と最大相対差(atol 1e-6 で小重みのゼロ割を回避)。
+        private static (double MaxAbs, double MaxRel) MaxWeightDiff(IReadOnlyList<NDArray> a, IReadOnlyList<NDArray> b)
+        {
+            double maxAbs = 0d;
+            double maxRel = 0d;
+            int tensorCount = Math.Min(a.Count, b.Count);
+            for (int i = 0; i < tensorCount; i++)
+            {
+                float[] fa = a[i].ToArray<float>();
+                float[] fb = b[i].ToArray<float>();
+                int m = Math.Min(fa.Length, fb.Length);
+                for (int j = 0; j < m; j++)
+                {
+                    double abs = Math.Abs((double)fa[j] - fb[j]);
+                    if (abs > maxAbs)
+                        maxAbs = abs;
+                    double rel = abs / (Math.Abs((double)fb[j]) + 1e-6);
+                    if (rel > maxRel)
+                        maxRel = rel;
+                }
+            }
+
+            return (maxAbs, maxRel);
         }
 
         #region モデル訓練
@@ -344,16 +655,24 @@ namespace MineraScope
             // 260605Claude: 全モデルを通した累計時間を測り、分類1個+回帰N個のうちどこに時間が偏るかを比較できるようにする。
             var runTimer = Stopwatch.StartNew();
             int regressionCount = orderedPools.Count(pool => pool.EndmemberNames.Count >= 2);
-            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience}");
+            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience} deterministic={Deterministic}");
 
             // 260606Claude: 分類1個+回帰N個を1本のバーで表す。各モデルを BeginModel/CompleteModel で挟み、epoch 進捗は reporter.ReportEpoch で報告する。
-            var reporter = new TrainingProgressReporter(progress, 1 + regressionCount, epochs, runTimer);
+            var reporter = new TrainingProgressReporter(progress, 1 + regressionCount, epochs);
+
+            // 260606Codex: 回帰モデルで再利用する spectrum だけを分類ロード時に保持し、重複ファイル読込を避けます。
+            var spectrumCache = new SpectrumDataLoader.NormalizedSpectrumCache(
+                orderedPools
+                    .Where(pool => pool.EndmemberNames.Count >= 2)
+                    .SelectMany(pool => pool.Samples)
+                    .Select(sample => sample.FilePath));
+            TensorFlowTrainingDebugLog.Write("spectrum-cache-created", $"cacheableSpectra={spectrumCache.CacheablePathCount}");
 
             cancellationToken.ThrowIfCancellationRequested();
             string classificationOutputPath = Path.Combine(outputPath, "AllMinerals_Classification");
             Log("分類モデル学習開始");
             reporter.BeginModel("AllMinerals_Classification");
-            TrainClassificationModel(orderedPools, epochs, batchSize, patience, testSplit, classificationOutputPath, reporter.ReportEpoch, cancellationToken);
+            TrainClassificationModel(orderedPools, epochs, batchSize, patience, testSplit, classificationOutputPath, spectrumCache, reporter.ReportEpoch, cancellationToken);
             reporter.CompleteModel();
 
             foreach (var pool in orderedPools.Where(pool => pool.EndmemberNames.Count >= 2))
@@ -362,7 +681,7 @@ namespace MineraScope
                 string regressionOutputPath = Path.Combine(outputPath, $"{pool.MineralName}_Regression");
                 Log($"回帰モデル学習開始: {pool.MineralName}");
                 reporter.BeginModel($"{pool.MineralName}_Regression");
-                TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, reporter.ReportEpoch, cancellationToken);
+                TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, spectrumCache, reporter.ReportEpoch, cancellationToken);
                 reporter.CompleteModel();
             }
 
@@ -381,6 +700,7 @@ namespace MineraScope
             int patience,
             float testSplit,
             string outputPath,
+            SpectrumDataLoader.NormalizedSpectrumCache? spectrumCache,
             Action<int>? reportEpoch,
             CancellationToken cancellationToken)
         {
@@ -398,8 +718,8 @@ namespace MineraScope
             Log("manifest からスペクトルデータを読み込み中...");
             var dataTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("data-load-start", $"op={op}");
-            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(trainingPool, cancellationToken);
-            TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds}");
+            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(trainingPool, cancellationToken, spectrumCache);
+            TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds}{FormatSpectrumCacheStats(spectrumCache)}");
             ComponentIndex = componentIdx;
 
             if (allSpectra.shape[0] == 0 || ComponentIndex == null)
@@ -496,6 +816,7 @@ namespace MineraScope
             int patience,
             float testSplit,
             string outputPath,
+            SpectrumDataLoader.NormalizedSpectrumCache? spectrumCache,
             Action<int>? reportEpoch,
             CancellationToken cancellationToken)
         {
@@ -512,8 +833,9 @@ namespace MineraScope
 
             var dataTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("data-load-start", $"op={op}");
-            var (allSpectra, allLabelsList) = SpectrumDataLoader.LoadClassificationData(trainingPools, cancellationToken);
-            TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds}");
+            var (allSpectra, allLabelsList, loadStats) = SpectrumDataLoader.LoadClassificationData(trainingPools, cancellationToken, spectrumCache);
+            // 260607Codex: Log bounded parallel classification load stats so data-load speedups can be compared safely.
+            TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds} inputSamples={loadStats.InputSamples} loadedSamples={loadStats.LoadedSamples} skippedSamples={loadStats.SkippedSamples} parallelDegree={loadStats.ParallelDegree}{FormatSpectrumCacheStats(spectrumCache)}");
             Log($"\n 読み込み完了 (合計 {allSpectra.shape[0]} 件)\n");
             var (labelsEncoded, encoder) = DeepLearningDataSplitter.EncodeLabels(allLabelsList);
             if (encoder.Count > 0)
