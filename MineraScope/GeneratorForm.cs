@@ -387,7 +387,9 @@ namespace MineraScope
                 .Sum(job => job.Reservations.Count);
             // 260513Codex: spectrum 生成ログは既存の訓練ログ欄へ流し、開始とジョブ数を最低限残します。
             TrainLog($"spectrum 生成開始: ジョブ {jobCount} 件、spectrum {reservedSpectrumCount} 件");
-            SetStatusStrip($"spectrum 生成開始: ジョブ {jobCount} 件 / spectrum {reservedSpectrumCount} 件", 0, reservedSpectrumCount);
+            // 260606Claude: 生成にかかった時間をバーへ出すため、開始時に計測を始めます。
+            _operationStopwatch.Restart();
+            SetStatusWithElapsed($"spectrum 生成開始: ジョブ {jobCount} 件 / spectrum {reservedSpectrumCount} 件", 0, reservedSpectrumCount);
 
             try
             {
@@ -401,7 +403,7 @@ namespace MineraScope
                 if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
                 {
                     TrainLog("spectrum 生成をキャンセルしました。");
-                    SetStatusStrip("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
+                    SetStatusWithElapsed("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
                 }
             }
             finally
@@ -417,7 +419,7 @@ namespace MineraScope
             var statusCounts = _spectrumPoolWorkflow.GetStatusCounts(request);
             TrainLog(
                 $"manifest status: Completed {statusCounts.Completed} 件 / Failed {statusCounts.Failed} 件 / Missing {statusCounts.Missing} 件 / Pending {statusCounts.Pending} 件");
-            SetStatusStrip(
+            SetStatusWithElapsed(
                 $"manifest status: Completed {statusCounts.Completed} / Failed {statusCounts.Failed} / Missing {statusCounts.Missing} / Pending {statusCounts.Pending}",
                 toolStripProgressBar1.Value,
                 Math.Max(reservedSpectrumCount, 1));
@@ -425,7 +427,7 @@ namespace MineraScope
             var remainingShortages = _spectrumPoolWorkflow.GetShortages(request);
             if (remainingShortages.Count > 0)
             {
-                SetStatusStrip(
+                SetStatusWithElapsed(
                     $"spectrum 生成: 不足 {remainingShortages.Sum(shortage => shortage.MissingCount)} 件",
                     toolStripProgressBar1.Value,
                     Math.Max(reservedSpectrumCount, 1));
@@ -437,7 +439,7 @@ namespace MineraScope
             }
             else
             {
-                SetStatusStrip("spectrum 生成完了: 必要な spectrum pool がそろいました", reservedSpectrumCount, reservedSpectrumCount);
+                SetStatusWithElapsed("spectrum 生成完了: 必要な spectrum pool がそろいました", reservedSpectrumCount, reservedSpectrumCount);
                 MessageBox.Show("必要な spectrum pool がそろいました。", "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
@@ -786,14 +788,21 @@ namespace MineraScope
         // 260606Claude: 学習は spectrum 数のような整数単位がないので、全体進捗 (0..1) を 0..ProgressScale に拡大して滑らかなバーにします。
         private const int ProgressScale = 1000;
 
-        // 260606Claude: 学習進捗をステータスストリップへ反映します。バーは全体進捗、ラベルにモデル名・通し番号・エポック・経過時間を出します。
+        // 260606Claude: spectrum 生成・モデル学習の経過時間表示用。各操作の開始時に Restart し、状態表示へ付与します。
+        private readonly Stopwatch _operationStopwatch = new();
+
+        // 260606Claude: 状態表示に操作開始からの経過時間を付けます。生成・学習の両方で共通に使います。
+        private void SetStatusWithElapsed(string text, int value, int maximum) =>
+            SetStatusStrip($"{text} (経過 {_operationStopwatch.Elapsed:hh\\:mm\\:ss})", value, maximum);
+
+        // 260606Claude: 学習進捗をステータスストリップへ反映します。バーは全体進捗、ラベルにモデル名・通し番号・エポックを出します（経過時間は helper が付与）。
         private void ReportTrainingProgress(TrainingProgress progress)
         {
             string epochText = progress.Epoch > 0
                 ? $"epoch {progress.Epoch}/{progress.RequestedEpochs}"
                 : "準備中";
-            SetStatusStrip(
-                $"学習中: {progress.ModelName} ({progress.ModelIndex}/{progress.TotalModels}) {epochText}, 経過 {progress.Elapsed:hh\\:mm\\:ss}",
+            SetStatusWithElapsed(
+                $"学習中: {progress.ModelName} ({progress.ModelIndex}/{progress.TotalModels}) {epochText}",
                 (int)Math.Round(progress.OverallFraction * ProgressScale),
                 ProgressScale);
         }
@@ -808,7 +817,7 @@ namespace MineraScope
                 ? progress.CompletedSpectrumCount
                 : progress.CompletedJobCount;
 
-            SetStatusStrip(progress.Message, value, maximum);
+            SetStatusWithElapsed(progress.Message, value, maximum);
             if (ShouldLogSimulationProgress(progress))
                 TrainLog(FormatSimulationProgressLog(progress));
         }
@@ -915,8 +924,9 @@ namespace MineraScope
             buttonRunSpectrumGeneration.Enabled = false;
             buttonCancel.Enabled = true;
             textBoxModelLog.Clear();
-            // 260606Claude: 学習はバー未対応だったので、ここで 0 にリセットしてから進捗通知を受け取ります。
-            SetStatusStrip("モデル作成開始", 0, ProgressScale);
+            // 260606Claude: 学習はバー未対応だったので、計測を開始しバーを 0 にリセットしてから進捗通知を受け取ります。
+            _operationStopwatch.Restart();
+            SetStatusWithElapsed("モデル作成開始", 0, ProgressScale);
             var trainingProgress = new Progress<TrainingProgress>(ReportTrainingProgress);
 
             try
@@ -924,12 +934,12 @@ namespace MineraScope
                 // 260514Codex: 学習本体は workflow に任せ、成功時だけモデル一覧を更新します。
                 await _modelTrainingWorkflow.RunAsync(trainingPlan, trainingProgress, cancellationTokenSource.Token);
                 FormMain?.RefreshModelPathList(request.ModelName);
-                SetStatusStrip("モデル作成完了", ProgressScale, ProgressScale);
+                SetStatusWithElapsed("モデル作成完了", ProgressScale, ProgressScale);
             }
             catch (OperationCanceledException) when (cancellationTokenSource.IsCancellationRequested)
             {
                 TrainLog("モデル作成をキャンセルしました");
-                SetStatusStrip("モデル作成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
+                SetStatusWithElapsed("モデル作成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
             }
             finally
             {
