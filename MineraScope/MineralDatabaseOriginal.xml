@@ -1474,7 +1474,7 @@
 		<Members>
 			<Mineral>
 				<Name>Zircon</Name>
-				<FormulaText>ZrSiO2</FormulaText>
+				<FormulaText>ZrSiO4</FormulaText>
 				<density>0</density>
 				<Elements>
 					<ValueTupleOfStringDouble>
@@ -1487,7 +1487,7 @@
 					</ValueTupleOfStringDouble>
 					<ValueTupleOfStringDouble>
 						<Item1>O</Item1>
-						<Item2>2</Item2>
+						<Item2>4</Item2>
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
@@ -1533,59 +1533,6 @@
 					<ValueTupleOfStringDouble>
 						<Item1>O</Item1>
 						<Item2>4</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-		</Members>
-		<Constraints />
-	</SolidSolution>
-	<SolidSolution>
-		<Name>Apatite</Name>
-		<Formula />
-		<Members>
-			<Mineral>
-				<Name>Fluorapatite</Name>
-				<FormulaText>Ca5P3O12F</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Ca</Item1>
-						<Item2>5</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>P</Item1>
-						<Item2>3</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>12</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>F</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-			<Mineral>
-				<Name>Chlorapatite</Name>
-				<FormulaText>Ca5P3O12Cl</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Ca</Item1>
-						<Item2>5</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>P</Item1>
-						<Item2>3</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>12</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Cl</Item1>
-						<Item2>1</Item2>
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
@@ -1724,6 +1671,43 @@
 					<ValueTupleOfStringDouble>
 						<Item1>O</Item1>
 						<Item2>3</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+		</Members>
+		<Constraints />
+	</SolidSolution>
+	<SolidSolution>
+		<Name>Pyrrhotite</Name>
+		<Formula>Fe(8-x)S8</Formula>
+		<Members>
+			<Mineral>
+				<Name>Troilite</Name>
+				<FormulaText>Fe8S8</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>Fe</Item1>
+						<Item2>8</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>S</Item1>
+						<Item2>8</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+			<Mineral>
+				<Name>Pyrrhotite</Name>
+				<FormulaText>Fe7S8</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>Fe</Item1>
+						<Item2>7</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>S</Item1>
+						<Item2>8</Item2>
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
