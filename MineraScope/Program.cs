@@ -12,11 +12,6 @@
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
             // 260609Claude: 開発用ヘッドレス。env で GUI を出さず学習系を回して終了する。結果は tf-train-debug.log。例外は debug log へ残す。
-            if (Environment.GetEnvironmentVariable("MINERASCOPE_HEADLESS_PARITY") == "1")
-            {
-                RunHeadless("parity", () => DeepLearning.RunHeadlessParityTest(Console.WriteLine));
-                return;
-            }
             if (Environment.GetEnvironmentVariable("MINERASCOPE_HEADLESS_TRAIN") == "1")
             {
                 RunHeadless("train", () => DeepLearning.RunHeadlessSmokeTest(Console.WriteLine));
