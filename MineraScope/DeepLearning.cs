@@ -851,9 +851,14 @@ namespace MineraScope
                     Log($"{classification.PredictedMineral} ({topPercent}%)");
                     Log("");
                     Log("[詳細確率]");
-                    // 260611Claude: 確率行整形は共有 helper へ集約 (0.00% 非表示ルールを AnalyzerForm 表示と統一)。
-                    foreach (var line in MineralClassificationProbabilityFormatter.VisibleLines(classification.Probabilities))
-                        Log(line);
+                    // 260613Claude: 0.00% (F2 で丸めて 0) の候補は隠す。AnalyzerForm は別形式 (ランク表示) で自前整形のため helper 共有はやめインライン化。
+                    foreach (var probability in classification.Probabilities)
+                    {
+                        string percentText = (probability.Confidence * 100).ToString("F2", CultureInfo.InvariantCulture);
+                        if (percentText == "0.00")
+                            continue;
+                        Log($"  {probability.MineralName}: {percentText}%");
+                    }
 
                     // 260522Codex: 予測鉱物名に対応する回帰モデルだけを成分比率予測の候補にします。
                     string[] candidates = Directory.GetDirectories(modelPath, $"{classification.PredictedMineral}*_Regression");
