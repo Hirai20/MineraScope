@@ -185,25 +185,23 @@ namespace MineraScope
         }
 
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
-        {
-            if (GeneratorForm.Visible)
-                GeneratorForm.BringToFront();
-            else
-            {
-                GeneratorForm.Visible = true;
-            }
-        }
+            => ShowChildForm(GeneratorForm);
 
         private void buttonOpenAnalyzer_Click(object sender, EventArgs e)
         {
             // 260522Codex: 開く直前にカタログを再走査し、ディスク上で増えたモデルフォルダを両コンボへ反映します。
             _modelCatalog.Update(ModelPath);
-
             // 260416Codex: modeless 表示では using を外し、呼び出し元をブロックせずに AnalyzerForm を残します。
-            if (AnalyzerForm.Visible)
-                AnalyzerForm.BringToFront();
-            else
-                AnalyzerForm.Visible = true;
+            ShowChildForm(AnalyzerForm);
+        }
+
+        // 260612Claude: 一度閉じた(非表示にした)後でも確実に再表示できるよう、表示・最小化解除・最前面化をまとめて行う。
+        private static void ShowChildForm(Form form)
+        {
+            form.Visible = true;
+            if (form.WindowState == FormWindowState.Minimized)
+                form.WindowState = FormWindowState.Normal;
+            form.Activate();
         }
 
         // 260430Codex: 判定中は追加ドロップを受け付けず、単一スペクトルだけをコピー可能にします。

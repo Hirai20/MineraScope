@@ -975,15 +975,17 @@ namespace MineraScope
 
         private void GeneratorForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            // 260507Codex: 非表示にする前に、明示リストの設定値だけを保存します。
+            // 260612Claude: 閉じる操作は破棄せず非表示にするだけなので、後続のクリーンアップが例外を投げても
+            // フォームが破棄されず再度開けるよう、先に Cancel と非表示を確定させる。
+            e.Cancel = true;
+            Visible = false;
+
+            // 260507Codex: 明示リストの設定値だけを保存します。
             SaveUserSettings();
             // 260511Codex: 親を隠すときは子のキャリブレーション画面も破棄せず一緒に隠します。
             _edxCalibrationForm.Visible = false;
             // 260528Claude: 非表示にする際は走行中の組成リスト計算もキャンセルし、再表示時に古い計算結果が UI へ流れ込まないようにします。
             _solutionUpdateCts?.Cancel();
-            // 260416Codex: 閉じる操作は破棄せず非表示にするだけなので未使用のローカルを削除します。
-            e.Cancel = true;
-            Visible = false;
         }
 
         // 260528Claude: 分解能が変わると候補数が変わるので、組成リストを最新の値で再計算します。重い計算は UpdateSelectedSolution が Task.Run へ逃がし、前回の計算はキャンセルされます。
