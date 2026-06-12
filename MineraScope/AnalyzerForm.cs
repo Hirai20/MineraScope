@@ -426,7 +426,7 @@ namespace MineraScope
 
             ShowBinningArea(pixelSpectrum);
             (string modelPath, string modelName) = GetSelectedMappingModel();
-            await DisplaySpectrumAndClassifyAsync(pixelSpectrum, modelPath, modelName, Path.GetFileName(filePath), readVersion);
+            await DisplaySpectrumAndClassifyAsync(pixelSpectrum, modelPath, modelName, Path.GetFileName(filePath), readVersion, null);
         }
 
         // 260523Codex: Draw the actual clamped binning rectangle on the SEM image after a pixel is selected.
@@ -452,7 +452,8 @@ namespace MineraScope
         }
 
         // 260526Claude: 取得済みスペクトルのグラフ表示と分類を SEM クリック/マップクリックで共通化する。確率一覧は 0.1% 未満を非表示。
-        private async Task DisplaySpectrumAndClassifyAsync(PtsPixelSpectrum spectrum, string modelPath, string modelName, string fileName, int readVersion)
+        // 260612Codex: Map clicks pass their block coordinate so the result text can show a result-first location summary.
+        private async Task DisplaySpectrumAndClassifyAsync(PtsPixelSpectrum spectrum, string modelPath, string modelName, string fileName, int readVersion, Point? mapBlock)
         {
             string binningLabel = $"{spectrum.RequestedBinSize}×{spectrum.RequestedBinSize}";
             string rangeLabel = $"X {spectrum.BinLeft}-{spectrum.BinRight}, Y {spectrum.BinTop}-{spectrum.BinBottom}";
@@ -491,27 +492,7 @@ namespace MineraScope
                 if (readVersion != _spectrumReadVersion)
                     return;
 
-                var lines = new List<string>
-                {
-                    $"モデル: {modelName}",
-                    $"加算範囲: {rangeLabel}",
-                    $"加算ピクセル数: {spectrum.BinnedPixelCount}",
-                    $"ビニング: {binningLabel}",
-                    $"予測鉱物: {result.PredictedMineral} ({result.Confidence * 100:F2}%)",
-                    "",
-                    "分類確率 (0.00%は非表示):"
-                };
-
-                // 260526Claude: 表示は小数第2位。丸めて 0.00% になるものだけ隠し、0.01% 以上は表示する。
-                foreach (var probability in result.Probabilities)
-                {
-                    string percentText = (probability.Confidence * 100).ToString("F2", CultureInfo.InvariantCulture);
-                    if (percentText == "0.00")
-                        continue;
-                    lines.Add($"  {probability.MineralName}: {percentText}%");
-                }
-
-                textBox1.Lines = lines.ToArray();
+                textBox1.Lines = BuildClickAnalysisLines(result, spectrum, modelName, mapBlock).ToArray();
             }
             catch (Exception ex)
             {
@@ -814,8 +795,52 @@ namespace MineraScope
                 return;
 
             ShowMapBlockArea(block);
-            await DisplaySpectrumAndClassifyAsync(spectrum, map.ModelPath, map.ModelName, Path.GetFileName(filePath), readVersion);
+            await DisplaySpectrumAndClassifyAsync(spectrum, map.ModelPath, map.ModelName, Path.GetFileName(filePath), readVersion, block);
         }
+
+        // 260612Codex: Keep the clicked-point analysis focused on the answer first, with 0.00% candidates hidden as before.
+        private static List<string> BuildClickAnalysisLines(
+            MineralClassificationPredictionResult result,
+            PtsPixelSpectrum spectrum,
+            string modelName,
+            Point? mapBlock)
+        {
+            string confidenceText = FormatPercent(result.Confidence);
+            string positionText = mapBlock is { } block
+                ? $"位置: マップ ({block.X}, {block.Y}) / SEM X {spectrum.BinLeft}-{spectrum.BinRight}, Y {spectrum.BinTop}-{spectrum.BinBottom}"
+                : $"位置: SEM X {spectrum.BinLeft}-{spectrum.BinRight}, Y {spectrum.BinTop}-{spectrum.BinBottom}";
+
+            var lines = new List<string>
+            {
+                "クリック地点の分析結果",
+                "",
+                $"判定鉱物: {result.PredictedMineral}",
+                $"信頼度: {confidenceText}%",
+                positionText,
+                $"ビニング: {spectrum.RequestedBinSize} x {spectrum.RequestedBinSize}",
+                "",
+                "上位候補:",
+            };
+
+            int rank = 1;
+            foreach (var probability in result.Probabilities)
+            {
+                string percentText = FormatPercent(probability.Confidence);
+                if (percentText == "0.00")
+                    continue;
+
+                lines.Add($"{rank}. {probability.MineralName} {percentText}%");
+                rank++;
+            }
+
+            lines.Add("");
+            lines.Add($"使用モデル: {modelName}");
+            return lines;
+        }
+
+        // 260612Codex: Keep confidence formatting identical for the headline and candidate rows.
+        private static string FormatPercent(float confidence)
+            => (confidence * 100).ToString("F2", CultureInfo.InvariantCulture);
 
         // 260526Claude: クリックしたブロックをマップ側 (scalablePictureBox1) に枠表示する（案2 なので格子座標で 1×1）。
         private void ShowMapBlockArea(Point block)
