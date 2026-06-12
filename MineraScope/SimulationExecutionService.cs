@@ -14,6 +14,8 @@ namespace MineraScope
     {
         // 260528Codex: DTSA-II script からの保存完了通知を識別し、生成ファイル数ベースの進捗へ変換します。
         private const string SavedSpectrumMarker = "MINERASCOPE_SPECTRUM_SAVED|";
+        // 260611Codex: Poll generated spectrum files because DTSA-II stdout can be delayed until process exit.
+        private static readonly TimeSpan OutputFilePollInterval = TimeSpan.FromMilliseconds(500);
 
         private readonly SimulationScriptGenerator _scriptGenerator;
 
@@ -159,6 +161,9 @@ namespace MineraScope
             progress.ReportJobProgress(SimulationExecutionProgressKind.ProcessStarted, "DTSA-II process 起動");
             // 260606Claude: 保存完了マーカーのファイル名をここに集め、ジョブ全体の成否とは別に「保存できた spectrum」を結果へ渡します。
             var savedSpectrumFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // 260611Codex: File polling drives live progress even when the process buffers stdout.
+            using var outputMonitorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var outputMonitorTask = MonitorOutputFilesAsync(job, progress, outputMonitorCts.Token);
             var standardOutputTask = ReadStandardOutputAsync(process, progress, savedSpectrumFiles);
             var standardErrorTask = process.StandardError.ReadToEndAsync();
 
@@ -170,11 +175,13 @@ namespace MineraScope
             {
                 KillProcessTree(process);
                 await WaitForProcessExitAfterKillAsync(process);
+                await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
                 string canceledOutput = await ReadProcessOutputAsync(standardOutputTask);
                 string canceledError = await ReadProcessOutputAsync(standardErrorTask);
                 return CreateCanceledResult(job, canceledOutput, canceledError, savedSpectrumFiles);
             }
 
+            await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
             string standardOutput = await ReadProcessOutputAsync(standardOutputTask);
             string standardError = await ReadProcessOutputAsync(standardErrorTask);
 
@@ -219,12 +226,62 @@ namespace MineraScope
 
                 // 260606Claude: マーカー末尾の保存パス (パスに '|' は現れない) からファイル名だけ取り出して記録します。
                 string savedFileName = Path.GetFileName(line.AsSpan(line.LastIndexOf('|') + 1)).ToString();
-                if (savedFileName.Length > 0)
-                    savedSpectrumFiles.Add(savedFileName);
-                progress.ReportSpectrumSaved();
+                if (savedFileName.Length == 0)
+                    continue;
+
+                savedSpectrumFiles.Add(savedFileName);
+                progress.ReportSpectrumSaved(savedFileName);
             }
 
             return builder.ToString();
+        }
+
+        // 260611Codex: Count files that appear on disk so the progress bar advances while DTSA-II is still running.
+        private static async Task MonitorOutputFilesAsync(
+            SimulationExecutionJob job,
+            SimulationJobProgress progress,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    ReportExistingOutputFiles(job, progress);
+                    await Task.Delay(OutputFilePollInterval, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            finally
+            {
+                ReportExistingOutputFiles(job, progress);
+            }
+        }
+
+        // 260611Codex: Keep the polling task shutdown quiet; final file detection happens in its finally block.
+        private static async Task StopOutputMonitorAsync(CancellationTokenSource monitorCancellation, Task monitorTask)
+        {
+            monitorCancellation.Cancel();
+
+            try
+            {
+                await monitorTask;
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+            {
+            }
+        }
+
+        // 260611Codex: Report each reserved output file at most once through SimulationJobProgress.
+        private static void ReportExistingOutputFiles(SimulationExecutionJob job, SimulationJobProgress progress)
+        {
+            foreach (var reservation in job.Reservations)
+            {
+                string outputPath = Path.Combine(reservation.PoolFolder, reservation.FileName);
+                if (File.Exists(outputPath))
+                    progress.ReportSpectrumSaved(reservation.FileName);
+            }
         }
 
         // 260513Codex: キャンセル要求後に残った子プロセスも含めて DTSA-II を止めます。
@@ -324,7 +381,8 @@ namespace MineraScope
         {
             private readonly SimulationProgressScope _scope;
             private readonly SimulationExecutionJob _job;
-            private int _reportedSpectrumCount;
+            private readonly object _reportedSpectrumLock = new();
+            private readonly HashSet<string> _reportedSpectrumFiles = new(StringComparer.OrdinalIgnoreCase);
 
             public SimulationJobProgress(
                 SimulationProgressScope scope,
@@ -352,9 +410,9 @@ namespace MineraScope
                     _job.Reservations.Count,
                     $"{message}: {SolutionName}, job {JobIndex}/{_scope.TotalJobCount}, spectra {_job.Reservations.Count}");
 
-            public void ReportSpectrumSaved()
+            public void ReportSpectrumSaved(string fileName)
             {
-                if (!TryMarkSpectrumSaved())
+                if (!TryMarkSpectrumSaved(fileName))
                     return;
 
                 _scope.Report(
@@ -371,8 +429,8 @@ namespace MineraScope
                 if (result.IsCanceled || result.ExitCode != 0 || result.ExceptionMessage is not null)
                     return;
 
-                while (Volatile.Read(ref _reportedSpectrumCount) < _job.Reservations.Count)
-                    ReportSpectrumSaved();
+                foreach (var reservation in _job.Reservations)
+                    ReportSpectrumSaved(reservation.FileName);
             }
 
             public void ReportJobFinished(SimulationExecutionResult result, TimeSpan elapsed)
@@ -401,17 +459,16 @@ namespace MineraScope
                     elapsed);
             }
 
-            private bool TryMarkSpectrumSaved()
+            private bool TryMarkSpectrumSaved(string fileName)
             {
-                int reportedCount = Interlocked.Increment(ref _reportedSpectrumCount);
-                if (reportedCount <= _job.Reservations.Count)
+                lock (_reportedSpectrumLock)
                 {
+                    if (!_reportedSpectrumFiles.Add(fileName))
+                        return false;
+
                     _scope.MarkSpectrumCompleted();
                     return true;
                 }
-
-                Interlocked.Decrement(ref _reportedSpectrumCount);
-                return false;
             }
         }
     }
