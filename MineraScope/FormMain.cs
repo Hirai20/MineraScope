@@ -256,8 +256,8 @@ namespace MineraScope
                 return;
 
             _isPredictionRunning = true;
+            // 260611Claude: 判定は短時間で終わるため「判定中...」表示は出さず、前回結果のクリアだけ行う。
             textBoxAnalysisResult.Clear();
-            AnalysisLog("判定中...");
 
             try
             {
@@ -272,6 +272,11 @@ namespace MineraScope
                 await new MineralPredictionWorkflow(AppContext.BaseDirectory, AnalysisLog)
                     // 260507Codex: 選択中のモデルフォルダを予測ワークフローへ渡します。
                     .RunAsync(selectedModelPath, new[] { filePath });
+
+                // 260611Claude: 判定成功時のみ結果欄を先頭へ戻し、末尾までスクロールした表示の先頭 (鉱物名) を見せる。
+                textBoxAnalysisResult.SelectionStart = 0;
+                textBoxAnalysisResult.SelectionLength = 0;
+                textBoxAnalysisResult.ScrollToCaret();
             }
             catch (Exception ex)
             {
