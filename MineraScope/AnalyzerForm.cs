@@ -30,13 +30,16 @@ namespace MineraScope
         private string? _currentPtsFilePath;
 
         // 260522Codex: Cache clicked spectra by pixel and binning size so experiments do not reuse another bin.
-        private readonly Dictionary<(Point Pixel, int BinSize), PtsPixelSpectrum> _pixelSpectrumCache = [];
+        private readonly Dictionary<(Point Pixel, int BinSize, int? LeadingSweepCount), PtsPixelSpectrum> _pixelSpectrumCache = [];
 
         // 260522Codex: Keep the first binning candidates small enough for experiments while covering low-count spectra.
         private static readonly int[] BinningSizes = [3, 5, 7, 10, 20];
 
         // 260522Codex: Default to 10x10 as the first low-count classification baseline.
         private const int DefaultBinningSize = 10;
+
+        // 260612Codex: The loaded PTS sweep count drives the research-only leading-sweep selector.
+        private int _loadedSweepCount;
 
         // 260523Codex: Treat tiny mouse movement as a click so ScalablePictureBox drag panning stays separate.
         private const int ScalableSemClickMoveTolerance = 4;
@@ -82,6 +85,7 @@ namespace MineraScope
         {
             InitializeComponent();
             InitializeBinningOptions();
+            InitializeSweepOptions(0);
             // 260526Claude: 待機状態（マッピング有効・中止無効）を初期化する。
             UpdateMappingButtons();
             // 260523Claude: .pts ドロップを復活。フォーム本体は Designer で DragEnter/DragDrop 済みなので AllowDrop だけ立て、
@@ -96,6 +100,15 @@ namespace MineraScope
         {
             public override string ToString() => $"{Size}×{Size}";
         }
+
+        // 260612Codex: Keep combo box items typed so the displayed text and sweep value cannot diverge.
+        private sealed record SweepOption(int Count)
+        {
+            public override string ToString() => Count.ToString(CultureInfo.InvariantCulture);
+        }
+
+        // 260612Codex: Pair the SEM image with the PTS acquisition sweep count discovered during load.
+        private sealed record LoadedPtsData(PseudoBitmap SemImage, int TotalFrames);
 
         // 260522Codex: Populate the binning selector once, defaulting to the low-count experimental baseline.
         private void InitializeBinningOptions()
@@ -125,6 +138,35 @@ namespace MineraScope
             comboBoxBinning.SelectedItem is BinningOption option
                 ? option.Size
                 : DefaultBinningSize;
+
+        // 260612Codex: Populate one candidate per available PTS sweep and default to the full acquisition.
+        private void InitializeSweepOptions(int totalFrames)
+        {
+            _loadedSweepCount = Math.Max(0, totalFrames);
+            comboBox1.BeginUpdate();
+            try
+            {
+                comboBox1.Items.Clear();
+                for (int sweep = 1; sweep <= _loadedSweepCount; sweep++)
+                    comboBox1.Items.Add(new SweepOption(sweep));
+
+                comboBox1.Enabled = _loadedSweepCount > 0;
+                comboBox1.SelectedIndex = comboBox1.Items.Count > 0 ? comboBox1.Items.Count - 1 : -1;
+            }
+            finally
+            {
+                comboBox1.EndUpdate();
+            }
+        }
+
+        // 260612Codex: Return the selected leading sweep count exactly; PTSFile normalizes the max value to full-read.
+        private int? GetSelectedLeadingSweepCount()
+        {
+            if (_loadedSweepCount <= 0 || comboBox1.SelectedItem is not SweepOption option)
+                return null;
+
+            return option.Count;
+        }
 
         // 260522Codex: カタログ更新時にマッピングモデル選択コンボを再描画します。
         private void OnModelCatalogChanged(object? sender, ModelCatalogChangedEventArgs e)
@@ -158,10 +200,10 @@ namespace MineraScope
             UseWaitCursor = true;
             try
             {
-                // 260523Codex: Load the real SEM image into the scalable viewer's native PseudoBitmap format.
-                PseudoBitmap? semImage = await Task.Run(() => LoadPtsSemImage(filePath));
+                // 260612Codex: Load the SEM image and sweep count together so the selector matches the active PTS file.
+                LoadedPtsData? loadedPts = await Task.Run(() => LoadPtsData(filePath));
 
-                if (semImage is null)
+                if (loadedPts is null)
                 {
                     MessageBox.Show(
                         "このPTSファイルからSEM画像を読み取れませんでした。",
@@ -172,7 +214,8 @@ namespace MineraScope
                 }
 
                 _currentPtsFilePath = filePath;
-                SetSemPseudoBitmap(semImage);
+                InitializeSweepOptions(loadedPts.TotalFrames);
+                SetSemPseudoBitmap(loadedPts.SemImage);
                 graphControl1.GraphTitle = Path.GetFileName(filePath);
             }
             catch (Exception ex)
@@ -192,7 +235,8 @@ namespace MineraScope
 
         // 260519Codex: PTS の SEM画像だけをバックグラウンド側で読み込みます。
         // 260523Codex: Read the PTS SEM byte image and flatten it into ScalablePictureBox's row-major source data.
-        private static PseudoBitmap? LoadPtsSemImage(string filePath)
+        // 260612Codex: Return the SEM image with the acquisition sweep count used by the research selector.
+        private static LoadedPtsData? LoadPtsData(string filePath)
         {
             using var pts = new PTSFile(filePath);
             byte[,]? image = pts.TryReadSemImage();
@@ -207,7 +251,7 @@ namespace MineraScope
                 for (int x = 0; x < width; x++)
                     values[x + y * width] = image[x, y];
 
-            return new PseudoBitmap(values, width);
+            return new LoadedPtsData(new PseudoBitmap(values, width), pts.TotalFrames);
         }
 
         // 260519Codex: 新しい PTS を読み込む前に古い画像・キャッシュ・グラフ表示を破棄します。
@@ -216,6 +260,7 @@ namespace MineraScope
         {
             _currentPtsFilePath = null;
             _pixelSpectrumCache.Clear();
+            InitializeSweepOptions(0);
             _spectrumReadVersion++;
             _mapBuildVersion++;
             _mapClassificationCancellation?.Cancel();
@@ -419,8 +464,9 @@ namespace MineraScope
 
             string filePath = _currentPtsFilePath;
             int binSize = GetSelectedBinningSize();
+            int? leadingSweepCount = GetSelectedLeadingSweepCount();
             int readVersion = ++_spectrumReadVersion;
-            PtsPixelSpectrum? pixelSpectrum = await GetPixelSpectrumAsync(filePath, pixel, binSize);
+            PtsPixelSpectrum? pixelSpectrum = await GetPixelSpectrumAsync(filePath, pixel, binSize, leadingSweepCount);
             if (readVersion != _spectrumReadVersion || pixelSpectrum is null)
                 return;
 
@@ -507,9 +553,9 @@ namespace MineraScope
         }
 
         // 260522Codex: Read or reuse the clicked spectrum for the selected binning size.
-        private async Task<PtsPixelSpectrum?> GetPixelSpectrumAsync(string filePath, Point pixel, int binSize)
+        private async Task<PtsPixelSpectrum?> GetPixelSpectrumAsync(string filePath, Point pixel, int binSize, int? leadingSweepCount)
         {
-            var cacheKey = (Pixel: pixel, BinSize: binSize);
+            var cacheKey = (Pixel: pixel, BinSize: binSize, LeadingSweepCount: leadingSweepCount);
             if (_pixelSpectrumCache.TryGetValue(cacheKey, out var cachedSpectrum))
                 return cachedSpectrum;
 
@@ -519,7 +565,7 @@ namespace MineraScope
                 PtsPixelSpectrum? spectrum = await Task.Run(() =>
                 {
                     using var pts = new PTSFile(filePath);
-                    return pts.TryReadBinnedPixelSpectrum(pixel.X, pixel.Y, binSize);
+                    return pts.TryReadBinnedPixelSpectrum(pixel.X, pixel.Y, binSize, leadingSweepCount);
                 });
                 if (spectrum is null)
                 {
@@ -580,6 +626,7 @@ namespace MineraScope
 
             string filePath = _currentPtsFilePath;
             int binSize = GetSelectedBinningSize();
+            int? leadingSweepCount = GetSelectedLeadingSweepCount();
             int buildVersion = ++_mapBuildVersion;
             using var cancellation = new CancellationTokenSource();
             _mapClassificationCancellation = cancellation;
@@ -590,7 +637,7 @@ namespace MineraScope
             try
             {
                 PtsClassificationMapResult result = await Task.Run(() => PtsClassificationMapWorkflow.Run(
-                    filePath, binSize, modelPath, modelName, _classificationService, progress, cancellation.Token));
+                    filePath, binSize, modelPath, modelName, leadingSweepCount, _classificationService, progress, cancellation.Token));
 
                 // 260526Claude: 計算中に PTS や条件が変わっていたら反映しない。
                 if (buildVersion != _mapBuildVersion || !string.Equals(_currentPtsFilePath, filePath, StringComparison.Ordinal))
@@ -781,7 +828,7 @@ namespace MineraScope
                 spectrum = await Task.Run(() =>
                 {
                     using var pts = new PTSFile(filePath);
-                    return pts.TryReadBinnedBlockSpectrum(block.X, block.Y, binSize);
+                    return pts.TryReadBinnedBlockSpectrum(block.X, block.Y, binSize, map.LeadingSweepCount);
                 });
             }
             catch (Exception ex)

@@ -18,6 +18,7 @@ namespace MineraScope
             int binSize,
             string modelPath,
             string modelName,
+            int? leadingSweepCount,
             MineralClassificationPredictionService service,
             IProgress<double>? progress,
             CancellationToken cancellationToken)
@@ -29,11 +30,15 @@ namespace MineraScope
             if (binSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(binSize));
 
+            // 260612Codex: Keep the workflow contract aligned with PTSFile sweep-limit semantics.
+            if (leadingSweepCount is <= 0)
+                throw new ArgumentOutOfRangeException(nameof(leadingSweepCount));
+
             // 260604Codex: Correlate map progress with TensorFlow batch logs across native process aborts.
             long mapRunId = TensorFlowPredictionDebugLog.NextMapRunId();
             TensorFlowPredictionDebugLog.Write(
                 "map-run-start",
-                $"mapRun={mapRunId} bin={binSize} model={TensorFlowPredictionDebugLog.Clean(modelName)} file={TensorFlowPredictionDebugLog.Clean(Path.GetFileName(filePath))}");
+                $"mapRun={mapRunId} bin={binSize} sweeps={FormatSweepLimit(leadingSweepCount)} model={TensorFlowPredictionDebugLog.Clean(modelName)} file={TensorFlowPredictionDebugLog.Clean(Path.GetFileName(filePath))}");
 
             var totalTimer = Stopwatch.StartNew();
             long modelPreparationTicks = 0;
@@ -100,6 +105,7 @@ namespace MineraScope
                     binSize,
                     startBlockY,
                     rowsInTile,
+                    leadingSweepCount,
                     readProgress,
                     cancellationToken);
                 readAndAggregateTicks += stageTimer.ElapsedTicks;
@@ -174,6 +180,7 @@ namespace MineraScope
                 modelPath,
                 modelName,
                 binSize,
+                leadingSweepCount,
                 gridWidth,
                 gridHeight,
                 top1LabelId,
@@ -227,6 +234,12 @@ namespace MineraScope
         // 260527Codex: Convert Stopwatch ticks to TimeSpan without assuming Stopwatch frequency equals TimeSpan ticks.
         private static TimeSpan ElapsedTime(long stopwatchTicks)
             => TimeSpan.FromSeconds((double)stopwatchTicks / Stopwatch.Frequency);
+
+        // 260612Codex: Keep map diagnostics explicit about whether the read used all sweeps or a leading subset.
+        private static string FormatSweepLimit(int? leadingSweepCount)
+            => leadingSweepCount.HasValue
+                ? leadingSweepCount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : "all";
 
         // 260526Claude: batch の先頭 rows 行だけを取り出す（最終チャンク用）。float[,] は行優先連続なので線形コピーでよい。
         private static float[,] SliceRows(float[,] batch, int rows)

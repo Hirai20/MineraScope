@@ -393,8 +393,10 @@ namespace MineraScope
         }
 
         // 260522Codex: Sum all PTTD X-ray events inside the selected clamped bin window in one stream pass.
-        internal PtsPixelSpectrum? TryReadBinnedPixelSpectrum(int targetX, int targetY, int binSize)
+        internal PtsPixelSpectrum? TryReadBinnedPixelSpectrum(int targetX, int targetY, int binSize, int? leadingSweepCount = null)
         {
+            leadingSweepCount = NormalizeLeadingSweepCountForRead(leadingSweepCount);
+
             if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096 || binSize <= 0)
                 return null;
 
@@ -433,9 +435,10 @@ namespace MineraScope
             if (header.Id != null && header.PttdSize > 0)
                 endOffset = Math.Min((long)header.PttdOffset + header.PttdSize, stream.Length);
 
+            bool stopAfterCurrentRecord = false;
             try
             {
-                while (stream.Position + sizeof(ushort) <= endOffset)
+                while (!stopAfterCurrentRecord && stream.Position + sizeof(ushort) <= endOffset)
                 {
                     ushort record = reader.ReadUInt16();
                     int value = record & 0xFFF;
@@ -462,6 +465,7 @@ namespace MineraScope
                             {
                                 y = 0;
                                 completedFrames++;
+                                stopAfterCurrentRecord = ShouldStopAfterCompletedSweep(completedFrames, leadingSweepCount);
                             }
                             else
                                 y = value / coordinateUnit;
@@ -509,6 +513,20 @@ namespace MineraScope
         // 260526Claude: グリッド集計を1回チェックする間隔（レコード数）。進捗報告とキャンセル確認をまとめて行う。
         private const int GridReadCheckInterval = 1 << 20;
 
+        // 260612Codex: Null means full acquisition; values at or above the declared sweep count keep the historical full read.
+        private int? NormalizeLeadingSweepCountForRead(int? leadingSweepCount)
+        {
+            if (leadingSweepCount is <= 0)
+                throw new ArgumentOutOfRangeException(nameof(leadingSweepCount));
+
+            return leadingSweepCount.HasValue && sweepCount > 0 && leadingSweepCount.Value < sweepCount
+                ? leadingSweepCount
+                : null;
+        }
+
+        private static bool ShouldStopAfterCompletedSweep(int completedFrames, int? leadingSweepCount)
+            => leadingSweepCount.HasValue && completedFrames >= leadingSweepCount.Value;
+
         // 260526Claude: 0xB000 レコード値を採用チャンネルへ変換し LLD/範囲で採否を判定する（クリック/グリッド/ブロックで共有）。
         private bool TryAcceptChannel(int value, int usableChannelCount, out int channel)
         {
@@ -533,9 +551,12 @@ namespace MineraScope
             int binSize,
             int startBlockY,
             int blockRowCount,
+            int? leadingSweepCount,
             IProgress<double>? progress,
             CancellationToken cancellationToken)
         {
+            leadingSweepCount = NormalizeLeadingSweepCountForRead(leadingSweepCount);
+
             if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096 || binSize <= 0)
                 return null;
 
@@ -579,10 +600,11 @@ namespace MineraScope
             long startPosition = stream.Position;
             long span = Math.Max(1, endOffset - startPosition);
             int sinceCheck = 0;
+            bool stopAfterCurrentRecord = false;
 
             try
             {
-                while (stream.Position + sizeof(ushort) <= endOffset)
+                while (!stopAfterCurrentRecord && stream.Position + sizeof(ushort) <= endOffset)
                 {
                     if (++sinceCheck >= GridReadCheckInterval)
                     {
@@ -616,6 +638,7 @@ namespace MineraScope
                             {
                                 y = 0;
                                 completedFrames++;
+                                stopAfterCurrentRecord = ShouldStopAfterCompletedSweep(completedFrames, leadingSweepCount);
                             }
                             else
                                 y = value / coordinateUnit;
@@ -661,8 +684,10 @@ namespace MineraScope
         }
 
         // 260526Claude: マップクリック詳細用に、指定ブロックだけをグリッドと同一の原点基準で1パス再読みする。
-        internal PtsPixelSpectrum? TryReadBinnedBlockSpectrum(int blockX, int blockY, int binSize)
+        internal PtsPixelSpectrum? TryReadBinnedBlockSpectrum(int blockX, int blockY, int binSize, int? leadingSweepCount = null)
         {
+            leadingSweepCount = NormalizeLeadingSweepCountForRead(leadingSweepCount);
+
             if (!HasHeader || Width <= 0 || Height <= 0 || ChannelCount <= 0 || Width > 4096 || binSize <= 0)
                 return null;
 
@@ -696,9 +721,10 @@ namespace MineraScope
             if (header.Id != null && header.PttdSize > 0)
                 endOffset = Math.Min((long)header.PttdOffset + header.PttdSize, stream.Length);
 
+            bool stopAfterCurrentRecord = false;
             try
             {
-                while (stream.Position + sizeof(ushort) <= endOffset)
+                while (!stopAfterCurrentRecord && stream.Position + sizeof(ushort) <= endOffset)
                 {
                     ushort record = reader.ReadUInt16();
                     int value = record & 0xFFF;
@@ -725,6 +751,7 @@ namespace MineraScope
                             {
                                 y = 0;
                                 completedFrames++;
+                                stopAfterCurrentRecord = ShouldStopAfterCompletedSweep(completedFrames, leadingSweepCount);
                             }
                             else
                                 y = value / coordinateUnit;

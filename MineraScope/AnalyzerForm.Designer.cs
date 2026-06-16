@@ -49,12 +49,14 @@
             tableLayoutPanel1 = new TableLayoutPanel();
             panel1 = new Panel();
             panel2 = new Panel();
+            panelContrast = new Panel();
             trackBarContrast = new TrackBar();
+            labelContrast = new Label();
+            panelBrightness = new Panel();
             trackBarBrightness = new TrackBar();
             labelBrightness = new Label();
-            labelContrast = new Label();
-            panel3 = new Panel();
-            panel4 = new Panel();
+            comboBox1 = new ComboBox();
+            label1 = new Label();
             flowLayoutPanelBinning.SuspendLayout();
             flowLayoutPanelModellFolder.SuspendLayout();
             menuStrip1.SuspendLayout();
@@ -62,10 +64,10 @@
             tableLayoutPanel1.SuspendLayout();
             panel1.SuspendLayout();
             panel2.SuspendLayout();
+            panelContrast.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackBarContrast).BeginInit();
+            panelBrightness.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)trackBarBrightness).BeginInit();
-            panel3.SuspendLayout();
-            panel4.SuspendLayout();
             SuspendLayout();
             // 
             // listBoxLegend
@@ -326,6 +328,8 @@
             // 
             // panel1
             // 
+            panel1.Controls.Add(label1);
+            panel1.Controls.Add(comboBox1);
             panel1.Controls.Add(flowLayoutPanelModellFolder);
             panel1.Controls.Add(flowLayoutPanelBinning);
             panel1.Controls.Add(buttonClassifyMap);
@@ -338,8 +342,8 @@
             // 
             // panel2
             // 
-            panel2.Controls.Add(panel4);
-            panel2.Controls.Add(panel3);
+            panel2.Controls.Add(panelContrast);
+            panel2.Controls.Add(panelBrightness);
             panel2.Controls.Add(graphControl1);
             panel2.Controls.Add(textBox1);
             panel2.Controls.Add(listBoxLegend);
@@ -348,7 +352,16 @@
             panel2.Name = "panel2";
             panel2.Size = new Size(363, 676);
             panel2.TabIndex = 92;
-            // 
+            //
+            // panelContrast
+            //
+            panelContrast.Controls.Add(trackBarContrast);
+            panelContrast.Controls.Add(labelContrast);
+            panelContrast.Location = new Point(132, 231);
+            panelContrast.Name = "panelContrast";
+            panelContrast.Size = new Size(118, 79);
+            panelContrast.TabIndex = 37;
+            //
             // trackBarContrast
             // 
             trackBarContrast.Location = new Point(3, 34);
@@ -359,7 +372,25 @@
             trackBarContrast.TabIndex = 35;
             trackBarContrast.TickFrequency = 25;
             trackBarContrast.Scroll += trackBarContrast_Scroll;
-            // 
+            //
+            // labelContrast
+            //
+            labelContrast.AutoSize = true;
+            labelContrast.Location = new Point(21, 0);
+            labelContrast.Name = "labelContrast";
+            labelContrast.Size = new Size(57, 15);
+            labelContrast.TabIndex = 36;
+            labelContrast.Text = "コントラスト";
+            //
+            // panelBrightness
+            //
+            panelBrightness.Controls.Add(trackBarBrightness);
+            panelBrightness.Controls.Add(labelBrightness);
+            panelBrightness.Location = new Point(9, 234);
+            panelBrightness.Name = "panelBrightness";
+            panelBrightness.Size = new Size(117, 79);
+            panelBrightness.TabIndex = 37;
+            //
             // trackBarBrightness
             // 
             trackBarBrightness.Location = new Point(10, 31);
@@ -379,36 +410,27 @@
             labelBrightness.Size = new Size(60, 15);
             labelBrightness.TabIndex = 36;
             labelBrightness.Text = "ブライトネス";
-            // 
-            // labelContrast
-            // 
-            labelContrast.AutoSize = true;
-            labelContrast.Location = new Point(21, 0);
-            labelContrast.Name = "labelContrast";
-            labelContrast.Size = new Size(57, 15);
-            labelContrast.TabIndex = 36;
-            labelContrast.Text = "コントラスト";
-            // 
-            // panel3
-            // 
-            panel3.Controls.Add(trackBarBrightness);
-            panel3.Controls.Add(labelBrightness);
-            panel3.Location = new Point(9, 234);
-            panel3.Name = "panel3";
-            panel3.Size = new Size(117, 79);
-            panel3.TabIndex = 37;
-            // 
-            // panel4
-            // 
-            panel4.Controls.Add(trackBarContrast);
-            panel4.Controls.Add(labelContrast);
-            panel4.Location = new Point(132, 231);
-            panel4.Name = "panel4";
-            panel4.Size = new Size(118, 79);
-            panel4.TabIndex = 37;
-            // 
+            //
+            // comboBox1
+            //
+            comboBox1.DropDownStyle = ComboBoxStyle.DropDownList;
+            comboBox1.FormattingEnabled = true;
+            comboBox1.Location = new Point(704, 8);
+            comboBox1.Name = "comboBox1";
+            comboBox1.Size = new Size(95, 23);
+            comboBox1.TabIndex = 34;
+            //
+            // label1
+            //
+            label1.AutoSize = true;
+            label1.Location = new Point(640, 11);
+            label1.Name = "label1";
+            label1.Size = new Size(43, 15);
+            label1.TabIndex = 35;
+            label1.Text = "スイープ";
+            //
             // AnalyzerForm
-            // 
+            //
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoScroll = true;
@@ -437,12 +459,12 @@
             panel1.PerformLayout();
             panel2.ResumeLayout(false);
             panel2.PerformLayout();
+            panelContrast.ResumeLayout(false);
+            panelContrast.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackBarContrast).EndInit();
+            panelBrightness.ResumeLayout(false);
+            panelBrightness.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)trackBarBrightness).EndInit();
-            panel3.ResumeLayout(false);
-            panel3.PerformLayout();
-            panel4.ResumeLayout(false);
-            panel4.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -473,7 +495,9 @@
         private TrackBar trackBarBrightness;
         private Label labelContrast;
         private Label labelBrightness;
-        private Panel panel4;
-        private Panel panel3;
+        private Panel panelContrast;
+        private Panel panelBrightness;
+        private Label label1;
+        private ComboBox comboBox1;
     }
 }

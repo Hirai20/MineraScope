@@ -17,6 +17,7 @@ namespace MineraScope
             string modelPath,
             string modelName,
             int binSize,
+            int? leadingSweepCount,
             int gridWidth,
             int gridHeight,
             int[] top1LabelId,
@@ -32,6 +33,10 @@ namespace MineraScope
             if (binSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(binSize));
 
+            // 260612Codex: The map stores its sweep limit so later detail clicks replay the same read condition.
+            if (leadingSweepCount is <= 0)
+                throw new ArgumentOutOfRangeException(nameof(leadingSweepCount));
+
             if (gridWidth <= 0)
                 throw new ArgumentOutOfRangeException(nameof(gridWidth));
 
@@ -45,6 +50,7 @@ namespace MineraScope
             ModelPath = modelPath;
             ModelName = modelName ?? string.Empty;
             BinSize = binSize;
+            LeadingSweepCount = leadingSweepCount;
             GridWidth = gridWidth;
             GridHeight = gridHeight;
             Timings = timings;
@@ -59,6 +65,9 @@ namespace MineraScope
         public string ModelName { get; }
 
         public int BinSize { get; }
+
+        // 260612Codex: Null represents all sweeps, while a value represents the first N completed sweeps.
+        public int? LeadingSweepCount { get; }
 
         public int GridWidth { get; }
 
