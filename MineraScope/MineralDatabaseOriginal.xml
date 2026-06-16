@@ -920,7 +920,7 @@
 		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
-		<Name>Spinelseries</Name>
+		<Name>Spinel Series</Name>
 		<Formula />
 		<Members>
 			<Mineral>
@@ -965,7 +965,7 @@
 		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
-		<Name>Magnetiteseries</Name>
+		<Name>Magnetite Series</Name>
 		<Formula />
 		<Members>
 			<Mineral>
@@ -1495,7 +1495,7 @@
 		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
-		<Name>Chromiteseries</Name>
+		<Name>Chromite Series</Name>
 		<Formula />
 		<Members>
 			<Mineral>
@@ -1708,6 +1708,96 @@
 					<ValueTupleOfStringDouble>
 						<Item1>S</Item1>
 						<Item2>8</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+		</Members>
+		<Constraints />
+	</SolidSolution>
+	<SolidSolution>
+		<Name>Magnesite-Siderite Series</Name>
+		<Formula>(Mg,Fe)CO3</Formula>
+		<Members>
+			<Mineral>
+				<Name>Magnesite</Name>
+				<FormulaText>MgCO3</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>Mg</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>C</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>3</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+			<Mineral>
+				<Name>Siderite</Name>
+				<FormulaText>FeCO3</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>Fe</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>C</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>3</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+		</Members>
+		<Constraints />
+	</SolidSolution>
+	<SolidSolution>
+		<Name>Rhodochrosite-Siderite Series</Name>
+		<Formula>(Mn,Fe)CO3</Formula>
+		<Members>
+			<Mineral>
+				<Name>Rhodochrosite</Name>
+				<FormulaText>MnCO3</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>Mn</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>C</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>3</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+			<Mineral>
+				<Name>Siderite</Name>
+				<FormulaText>FeCO3</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>Fe</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>C</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>3</Item2>
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
