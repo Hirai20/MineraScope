@@ -42,12 +42,12 @@
             buttonPathSaveMode = new Button();
             textBoxPathEDX = new TextBox();
             panelPathEDX = new Panel();
+            buttonPathEDX = new Button();
             labelPathEDX = new Label();
             buttonPathDTSA = new Button();
             panelPathDTSA = new Panel();
             textBoxPathDTSA = new TextBox();
             labelPathDTSA = new Label();
-            buttonPathEDX = new Button();
             textBoxAnalysisResult = new TextBox();
             textBoxSpectrumFile = new TextBox();
             menuStrip1.SuspendLayout();
@@ -141,7 +141,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(171, 178);
+            graphControl1.Location = new Point(12, 178);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -154,7 +154,7 @@
             graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
             graphControl1.OriginPosition = new Point(40, 20);
-            graphControl1.Size = new Size(292, 163);
+            graphControl1.Size = new Size(451, 163);
             graphControl1.TabIndex = 108;
             graphControl1.UnitX = "";
             graphControl1.UnitY = "";
@@ -226,7 +226,19 @@
             panelPathEDX.Name = "panelPathEDX";
             panelPathEDX.Size = new Size(304, 31);
             panelPathEDX.TabIndex = 110;
+            //
+            // buttonPathEDX
             // 
+            buttonPathEDX.AutoSize = true;
+            buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            buttonPathEDX.Location = new Point(275, 3);
+            buttonPathEDX.Name = "buttonPathEDX";
+            buttonPathEDX.Size = new Size(26, 25);
+            buttonPathEDX.TabIndex = 1;
+            buttonPathEDX.Text = "...";
+            buttonPathEDX.UseVisualStyleBackColor = true;
+            buttonPathEDX.Click += buttonFilePathBrowse_Click;
+            //
             // labelPathEDX
             // 
             labelPathEDX.AutoSize = true;
@@ -277,28 +289,16 @@
             labelPathDTSA.TabIndex = 15;
             labelPathDTSA.Text = "DTSA-Ⅱファイルパス";
             // 
-            // buttonPathEDX
-            // 
-            buttonPathEDX.AutoSize = true;
-            buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonPathEDX.Location = new Point(275, 3);
-            buttonPathEDX.Name = "buttonPathEDX";
-            buttonPathEDX.Size = new Size(26, 25);
-            buttonPathEDX.TabIndex = 1;
-            buttonPathEDX.Text = "...";
-            buttonPathEDX.UseVisualStyleBackColor = true;
-            buttonPathEDX.Click += buttonFilePathBrowse_Click;
-            // 
             // textBoxAnalysisResult
             // 
             textBoxAnalysisResult.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            textBoxAnalysisResult.Location = new Point(26, 347);
+            textBoxAnalysisResult.Location = new Point(12, 347);
             textBoxAnalysisResult.Multiline = true;
             textBoxAnalysisResult.Name = "textBoxAnalysisResult";
             textBoxAnalysisResult.ScrollBars = ScrollBars.Both;
-            textBoxAnalysisResult.Size = new Size(426, 106);
+            textBoxAnalysisResult.Size = new Size(451, 106);
             textBoxAnalysisResult.TabIndex = 112;
-            textBoxAnalysisResult.Text = ".msa または .emsa ファイルをファイルドラッグ＆ドロップしてください。";
+            textBoxAnalysisResult.Text = ".msa / .emsa / .eds ファイルをファイルドラッグ＆ドロップしてください。";
             // 
             // textBoxSpectrumFile
             // 

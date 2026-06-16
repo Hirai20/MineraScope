@@ -311,11 +311,13 @@ namespace MineraScope
         }
 
         // 260427Codex: 現時点の FormMain 判定入力は msa/emsa の単一スペクトルに限定します。
+        // 260613Claude: バイナリ .eds も単一スペクトルのドロップ判定対象に含める。
         private static bool IsSpectrumFile(string path)
         {
             string extension = Path.GetExtension(path);
             return extension.Equals(".msa", StringComparison.OrdinalIgnoreCase)
-                || extension.Equals(".emsa", StringComparison.OrdinalIgnoreCase);
+                || extension.Equals(".emsa", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".eds", StringComparison.OrdinalIgnoreCase);
         }
 
         // 260427Codex: 読み込んだスペクトルをファイル名表示とグラフ表示へ反映します。
@@ -332,8 +334,12 @@ namespace MineraScope
         }
 
         // 260427Codex: EMSA/MSA の Y データを読み、ヘッダーがあればエネルギー軸へ変換します。
+        // 260613Claude: バイナリ .eds はテキストとして読めないため専用パーサで Profile を組み立てる。
         private static Profile ReadSpectrumProfile(string filePath)
         {
+            if (EdsSpectrumReader.IsEdsFile(filePath))
+                return ReadEdsSpectrumProfile(filePath);
+
             double xPerChannel = 1.0;
             double offset = 0.0;
             var points = new List<PointD>();
@@ -356,6 +362,20 @@ namespace MineraScope
 
                 points.Add(point);
             }
+
+            return new Profile { Pt = points };
+        }
+
+        // 260613Claude: .eds の 2048ch カウント列を 10 eV/ch の energy 軸でグラフ点へ変換する (.msa の eV 表示と同じスケール)。
+        private static Profile ReadEdsSpectrumProfile(string filePath)
+        {
+            int[]? counts = EdsSpectrumReader.TryReadCounts(filePath);
+            if (counts is null)
+                throw new InvalidDataException(".eds スペクトルを読み込めませんでした。");
+
+            var points = new List<PointD>(counts.Length);
+            for (int channel = 0; channel < counts.Length; channel++)
+                points.Add(new PointD(channel * EdsSpectrumReader.EnergyPerChannelEv, counts[channel]));
 
             return new Profile { Pt = points };
         }

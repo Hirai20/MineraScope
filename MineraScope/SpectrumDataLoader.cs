@@ -93,13 +93,36 @@ namespace MineraScope
             if (!File.Exists(filePath))
                 return null;
 
-            var data = LoadMsaFile(filePath);
-            if (data.shape[0] != SpectrumLength)
+            // 260613Claude: バイナリ .eds は専用リーダーで int カウント列を取り、テキスト .msa と同じ正規化に合流させる。
+            float[]? values = EdsSpectrumReader.IsEdsFile(filePath)
+                ? LoadEdsValues(filePath)
+                : LoadMsaValues(filePath);
+            if (values is null)
                 return null;
 
-            var values = data.ToArray<float>();
             NormalizeSpectrum(values);
             return values;
+        }
+
+        // 260613Claude: .eds の 2048ch int カウントを float 配列へ写し、欠損時は null で判定をスキップする。
+        private static float[]? LoadEdsValues(string filePath)
+        {
+            int[]? counts = EdsSpectrumReader.TryReadCounts(filePath);
+            if (counts is null)
+                return null;
+
+            var values = new float[SpectrumLength];
+            for (int i = 0; i < SpectrumLength; i++)
+                values[i] = counts[i];
+
+            return values;
+        }
+
+        // 260613Claude: .msa の数値行を読み、点数が一致しない場合は null を返す。
+        private static float[]? LoadMsaValues(string filePath)
+        {
+            var data = LoadMsaFile(filePath);
+            return data.shape[0] != SpectrumLength ? null : data.ToArray<float>();
         }
 
         // 260521Codex: Converts one PTS pixel spectrum into the same normalized 2048 point input used by trained models.

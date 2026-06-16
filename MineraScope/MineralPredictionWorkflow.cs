@@ -55,8 +55,10 @@ namespace MineraScope
         }
 
         // 260416Codex: 判定対象に使う拡張子判定をワークフロー内へ集約します。
+        // 260613Claude: バイナリ .eds も判定対象に含める。
         private static bool IsSpectrumFile(string path) =>
             path.EndsWith(".msa", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith(".emsa", StringComparison.OrdinalIgnoreCase);
+            || path.EndsWith(".emsa", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".eds", StringComparison.OrdinalIgnoreCase);
     }
 }
