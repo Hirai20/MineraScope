@@ -1715,8 +1715,8 @@
 		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
-		<Name>Magnesite-Siderite Series</Name>
-		<Formula>(Mg,Fe)CO3</Formula>
+		<Name>Mg-Fe-Mn Carbonate Series</Name>
+		<Formula>(Mg,Fe,Mn)CO3</Formula>
 		<Members>
 			<Mineral>
 				<Name>Magnesite</Name>
@@ -1756,13 +1756,6 @@
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
-		</Members>
-		<Constraints />
-	</SolidSolution>
-	<SolidSolution>
-		<Name>Rhodochrosite-Siderite Series</Name>
-		<Formula>(Mn,Fe)CO3</Formula>
-		<Members>
 			<Mineral>
 				<Name>Rhodochrosite</Name>
 				<FormulaText>MnCO3</FormulaText>
@@ -1782,27 +1775,10 @@
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
-			<Mineral>
-				<Name>Siderite</Name>
-				<FormulaText>FeCO3</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Fe</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>C</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>3</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
 		</Members>
-		<Constraints />
+		<Constraints>
+			<string>Siderite &gt; 0 or Magnesite == 1 or Rhodochrosite == 1</string>
+		</Constraints>
 	</SolidSolution>
 	<SolidSolution>
 		<Name>Dolomite Group</Name>
