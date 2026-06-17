@@ -1805,9 +1805,32 @@
 		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
-		<Name>Ankerite-Dolomite Series</Name>
-		<Formula>Ca(Mg,Fe)(CO3)2</Formula>
+		<Name>Dolomite Group</Name>
+		<Formula>Ca(Mg,Fe,Mn)(CO3)2</Formula>
 		<Members>
+			<Mineral>
+				<Name>Dolomite</Name>
+				<FormulaText>CaMgC2O6</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>Ca</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Mg</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>C</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>6</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
 			<Mineral>
 				<Name>Ankerite</Name>
 				<FormulaText>CaFeC2O6</FormulaText>
@@ -1832,8 +1855,8 @@
 				</Elements>
 			</Mineral>
 			<Mineral>
-				<Name>Dolomite</Name>
-				<FormulaText>CaMgC2O6</FormulaText>
+				<Name>Kutnohorite</Name>
+				<FormulaText>CaMnC2O6</FormulaText>
 				<density>0</density>
 				<Elements>
 					<ValueTupleOfStringDouble>
@@ -1841,7 +1864,7 @@
 						<Item2>1</Item2>
 					</ValueTupleOfStringDouble>
 					<ValueTupleOfStringDouble>
-						<Item1>Mg</Item1>
+						<Item1>Mn</Item1>
 						<Item2>1</Item2>
 					</ValueTupleOfStringDouble>
 					<ValueTupleOfStringDouble>
