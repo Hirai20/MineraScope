@@ -458,7 +458,7 @@
 	</SolidSolution>
 	<SolidSolution>
 		<Name>Biotite</Name>
-		<Formula>K(Mg,Fe)3AlSi3O10(OH)2</Formula>
+		<Formula>K(Mg,Fe,Al)3(Si,Al)4O10(OH)2</Formula>
 		<Members>
 			<Mineral>
 				<Name>Phlogopite</Name>
@@ -515,6 +515,84 @@
 					<ValueTupleOfStringDouble>
 						<Item1>Si</Item1>
 						<Item2>3</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>10</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>H</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+			<Mineral>
+				<Name>Eastonite</Name>
+				<FormulaText>KMg2AlAl2Si2O10O2H2</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>K</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Mg</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Al</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Al</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Si</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>10</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>O</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>H</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+				</Elements>
+			</Mineral>
+			<Mineral>
+				<Name>Siderophyllite</Name>
+				<FormulaText>KFe2AlAl2Si2O10O2H2</FormulaText>
+				<density>0</density>
+				<Elements>
+					<ValueTupleOfStringDouble>
+						<Item1>K</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Fe</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Al</Item1>
+						<Item2>1</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Al</Item1>
+						<Item2>2</Item2>
+					</ValueTupleOfStringDouble>
+					<ValueTupleOfStringDouble>
+						<Item1>Si</Item1>
+						<Item2>2</Item2>
 					</ValueTupleOfStringDouble>
 					<ValueTupleOfStringDouble>
 						<Item1>O</Item1>
