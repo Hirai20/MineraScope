@@ -1189,7 +1189,7 @@
 				</Elements>
 			</Mineral>
 			<Mineral>
-				<Name>Tschermakite </Name>
+				<Name>Tschermakite</Name>
 				<FormulaText>Ca2Mg3Al2Si6Al2O22O2H2</FormulaText>
 				<density>0</density>
 				<Elements>
@@ -1335,7 +1335,7 @@
 	</SolidSolution>
 	<SolidSolution>
 		<Name>Calcite</Name>
-		<Formula />
+		<Formula>CaCO3</Formula>
 		<Members>
 			<Mineral>
 				<Name>Calcite</Name>
