@@ -1932,9 +1932,7 @@
 				</Elements>
 			</Mineral>
 		</Members>
-		<Constraints>
-			<string>Ankerite &lt;= 0.7</string>
-		</Constraints>
+		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
 		<Name>Smithsonite</Name>
