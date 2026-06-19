@@ -1855,7 +1855,7 @@
 			</Mineral>
 		</Members>
 		<Constraints>
-			<string>Siderite &gt; 0 or Magnesite == 1 or Rhodochrosite == 1</string>
+			<string>Siderite &gt;= 0.1 or Magnesite &lt;= 0.1 or Rhodochrosite &lt;= 0.1</string>
 		</Constraints>
 	</SolidSolution>
 	<SolidSolution>
@@ -1987,8 +1987,8 @@
 		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
-		<Name>Strontianite</Name>
-		<Formula>SrCO3</Formula>
+		<Name>Sr-Ba Carbonate</Name>
+		<Formula>(Sr,Ba)CO3</Formula>
 		<Members>
 			<Mineral>
 				<Name>Strontianite</Name>
@@ -2009,13 +2009,6 @@
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
-		</Members>
-		<Constraints />
-	</SolidSolution>
-	<SolidSolution>
-		<Name>Witherite</Name>
-		<Formula>BaCO3</Formula>
-		<Members>
 			<Mineral>
 				<Name>Witherite</Name>
 				<FormulaText>BaCO3</FormulaText>
