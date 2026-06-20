@@ -48,6 +48,8 @@
             toolStripStatusLabelMapping = new ToolStripStatusLabel();
             tableLayoutPanel1 = new TableLayoutPanel();
             panel1 = new Panel();
+            label1 = new Label();
+            comboBox1 = new ComboBox();
             panel2 = new Panel();
             panelContrast = new Panel();
             trackBarContrast = new TrackBar();
@@ -55,8 +57,6 @@
             panelBrightness = new Panel();
             trackBarBrightness = new TrackBar();
             labelBrightness = new Label();
-            comboBox1 = new ComboBox();
-            label1 = new Label();
             flowLayoutPanelBinning.SuspendLayout();
             flowLayoutPanelModellFolder.SuspendLayout();
             menuStrip1.SuspendLayout();
@@ -212,6 +212,7 @@
             graphControl1.DivisionLineColor = Color.LightGray;
             graphControl1.DivisionLineXVisible = true;
             graphControl1.DivisionLineYVisible = true;
+            graphControl1.Dock = DockStyle.Top;
             graphControl1.FixRangeHorizontal = false;
             graphControl1.FixRangeVertical = false;
             graphControl1.Font = new Font("Segoe UI Symbol", 9F);
@@ -222,7 +223,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(16, 3);
+            graphControl1.Location = new Point(0, 0);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -235,7 +236,7 @@
             graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
             graphControl1.OriginPosition = new Point(40, 20);
-            graphControl1.Size = new Size(320, 225);
+            graphControl1.Size = new Size(363, 248);
             graphControl1.TabIndex = 26;
             graphControl1.UnitX = "";
             graphControl1.UnitY = "";
@@ -339,9 +340,27 @@
             panel1.Name = "panel1";
             panel1.Size = new Size(811, 47);
             panel1.TabIndex = 91;
-            // 
+            //
+            // label1
+            //
+            label1.AutoSize = true;
+            label1.Location = new Point(640, 11);
+            label1.Name = "label1";
+            label1.Size = new Size(42, 15);
+            label1.TabIndex = 35;
+            label1.Text = "スイープ";
+            //
+            // comboBox1
+            //
+            comboBox1.DropDownStyle = ComboBoxStyle.DropDownList;
+            comboBox1.FormattingEnabled = true;
+            comboBox1.Location = new Point(704, 8);
+            comboBox1.Name = "comboBox1";
+            comboBox1.Size = new Size(95, 23);
+            comboBox1.TabIndex = 34;
+            //
             // panel2
-            // 
+            //
             panel2.Controls.Add(panelContrast);
             panel2.Controls.Add(panelBrightness);
             panel2.Controls.Add(graphControl1);
@@ -357,13 +376,13 @@
             //
             panelContrast.Controls.Add(trackBarContrast);
             panelContrast.Controls.Add(labelContrast);
-            panelContrast.Location = new Point(132, 231);
+            panelContrast.Location = new Point(132, 254);
             panelContrast.Name = "panelContrast";
             panelContrast.Size = new Size(118, 79);
             panelContrast.TabIndex = 37;
             //
             // trackBarContrast
-            // 
+            //
             trackBarContrast.Location = new Point(3, 34);
             trackBarContrast.Maximum = 100;
             trackBarContrast.Minimum = -100;
@@ -386,13 +405,13 @@
             //
             panelBrightness.Controls.Add(trackBarBrightness);
             panelBrightness.Controls.Add(labelBrightness);
-            panelBrightness.Location = new Point(9, 234);
+            panelBrightness.Location = new Point(9, 257);
             panelBrightness.Name = "panelBrightness";
             panelBrightness.Size = new Size(117, 79);
             panelBrightness.TabIndex = 37;
             //
             // trackBarBrightness
-            // 
+            //
             trackBarBrightness.Location = new Point(10, 31);
             trackBarBrightness.Maximum = 255;
             trackBarBrightness.Minimum = -255;
@@ -401,33 +420,15 @@
             trackBarBrightness.TabIndex = 35;
             trackBarBrightness.TickFrequency = 51;
             trackBarBrightness.Scroll += trackBarBrightness_Scroll;
-            // 
+            //
             // labelBrightness
-            // 
+            //
             labelBrightness.AutoSize = true;
             labelBrightness.Location = new Point(26, 0);
             labelBrightness.Name = "labelBrightness";
             labelBrightness.Size = new Size(60, 15);
             labelBrightness.TabIndex = 36;
             labelBrightness.Text = "ブライトネス";
-            //
-            // comboBox1
-            //
-            comboBox1.DropDownStyle = ComboBoxStyle.DropDownList;
-            comboBox1.FormattingEnabled = true;
-            comboBox1.Location = new Point(704, 8);
-            comboBox1.Name = "comboBox1";
-            comboBox1.Size = new Size(95, 23);
-            comboBox1.TabIndex = 34;
-            //
-            // label1
-            //
-            label1.AutoSize = true;
-            label1.Location = new Point(640, 11);
-            label1.Name = "label1";
-            label1.Size = new Size(43, 15);
-            label1.TabIndex = 35;
-            label1.Text = "スイープ";
             //
             // AnalyzerForm
             //

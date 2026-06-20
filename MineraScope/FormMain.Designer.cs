@@ -50,17 +50,21 @@
             labelPathDTSA = new Label();
             textBoxAnalysisResult = new TextBox();
             textBoxSpectrumFile = new TextBox();
+            panel1 = new Panel();
+            panel3 = new Panel();
             menuStrip1.SuspendLayout();
             panel2.SuspendLayout();
             panelPathEDX.SuspendLayout();
             panelPathDTSA.SuspendLayout();
+            panel1.SuspendLayout();
+            panel3.SuspendLayout();
             SuspendLayout();
             // 
             // buttonOpenGenerator
             // 
             buttonOpenGenerator.AutoSize = true;
             buttonOpenGenerator.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonOpenGenerator.Location = new Point(111, 27);
+            buttonOpenGenerator.Location = new Point(118, 3);
             buttonOpenGenerator.Name = "buttonOpenGenerator";
             buttonOpenGenerator.Size = new Size(93, 25);
             buttonOpenGenerator.TabIndex = 0;
@@ -72,7 +76,7 @@
             // 
             buttonOpenAnalyzer.AutoSize = true;
             buttonOpenAnalyzer.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonOpenAnalyzer.Location = new Point(201, 27);
+            buttonOpenAnalyzer.Location = new Point(230, 3);
             buttonOpenAnalyzer.Name = "buttonOpenAnalyzer";
             buttonOpenAnalyzer.Size = new Size(67, 25);
             buttonOpenAnalyzer.TabIndex = 0;
@@ -85,7 +89,7 @@
             menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
-            menuStrip1.Size = new Size(475, 24);
+            menuStrip1.Size = new Size(481, 24);
             menuStrip1.TabIndex = 1;
             menuStrip1.Text = "menuStrip1";
             // 
@@ -113,7 +117,7 @@
             // 
             comboBoxModelPath.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxModelPath.FormattingEnabled = true;
-            comboBoxModelPath.Location = new Point(12, 68);
+            comboBoxModelPath.Location = new Point(3, 42);
             comboBoxModelPath.Name = "comboBoxModelPath";
             comboBoxModelPath.Size = new Size(148, 23);
             comboBoxModelPath.TabIndex = 26;
@@ -131,6 +135,7 @@
             graphControl1.DivisionLineColor = Color.LightGray;
             graphControl1.DivisionLineXVisible = true;
             graphControl1.DivisionLineYVisible = true;
+            graphControl1.Dock = DockStyle.Fill;
             graphControl1.FixRangeHorizontal = false;
             graphControl1.FixRangeVertical = false;
             graphControl1.Font = new Font("Segoe UI Symbol", 9F);
@@ -141,7 +146,7 @@
             graphControl1.LabelY = "Y:";
             graphControl1.LeftMargin = 0F;
             graphControl1.LineWidth = 1F;
-            graphControl1.Location = new Point(12, 178);
+            graphControl1.Location = new Point(0, 0);
             graphControl1.LowerX = 0D;
             graphControl1.LowerY = 0D;
             graphControl1.MaximalX = 1D;
@@ -154,7 +159,7 @@
             graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
             graphControl1.OriginPosition = new Point(40, 20);
-            graphControl1.Size = new Size(451, 163);
+            graphControl1.Size = new Size(481, 171);
             graphControl1.TabIndex = 108;
             graphControl1.UnitX = "";
             graphControl1.UnitY = "";
@@ -174,7 +179,7 @@
             panel2.Controls.Add(label7);
             panel2.Controls.Add(textBoxlPathSaveModel);
             panel2.Controls.Add(buttonPathSaveMode);
-            panel2.Location = new Point(171, 58);
+            panel2.Location = new Point(171, 34);
             panel2.Name = "panel2";
             panel2.Size = new Size(304, 36);
             panel2.TabIndex = 111;
@@ -222,13 +227,13 @@
             panelPathEDX.Controls.Add(buttonPathEDX);
             panelPathEDX.Controls.Add(labelPathEDX);
             panelPathEDX.Controls.Add(textBoxPathEDX);
-            panelPathEDX.Location = new Point(171, 139);
+            panelPathEDX.Location = new Point(171, 117);
             panelPathEDX.Name = "panelPathEDX";
             panelPathEDX.Size = new Size(304, 31);
             panelPathEDX.TabIndex = 110;
             //
             // buttonPathEDX
-            // 
+            //
             buttonPathEDX.AutoSize = true;
             buttonPathEDX.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonPathEDX.Location = new Point(275, 3);
@@ -267,7 +272,7 @@
             panelPathDTSA.Controls.Add(textBoxPathDTSA);
             panelPathDTSA.Controls.Add(labelPathDTSA);
             panelPathDTSA.Controls.Add(buttonPathDTSA);
-            panelPathDTSA.Location = new Point(171, 100);
+            panelPathDTSA.Location = new Point(171, 80);
             panelPathDTSA.Name = "panelPathDTSA";
             panelPathDTSA.Size = new Size(304, 31);
             panelPathDTSA.TabIndex = 109;
@@ -291,37 +296,55 @@
             // 
             // textBoxAnalysisResult
             // 
-            textBoxAnalysisResult.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            textBoxAnalysisResult.Location = new Point(12, 347);
+            textBoxAnalysisResult.Dock = DockStyle.Bottom;
+            textBoxAnalysisResult.Location = new Point(0, 354);
             textBoxAnalysisResult.Multiline = true;
             textBoxAnalysisResult.Name = "textBoxAnalysisResult";
             textBoxAnalysisResult.ScrollBars = ScrollBars.Both;
-            textBoxAnalysisResult.Size = new Size(451, 106);
+            textBoxAnalysisResult.Size = new Size(481, 106);
             textBoxAnalysisResult.TabIndex = 112;
             textBoxAnalysisResult.Text = ".msa / .emsa / .eds ファイルをファイルドラッグ＆ドロップしてください。";
             // 
             // textBoxSpectrumFile
             // 
-            textBoxSpectrumFile.Location = new Point(12, 110);
+            textBoxSpectrumFile.Location = new Point(8, 100);
             textBoxSpectrumFile.Name = "textBoxSpectrumFile";
             textBoxSpectrumFile.Size = new Size(148, 23);
             textBoxSpectrumFile.TabIndex = 113;
-            // 
+            //
+            // panel1
+            //
+            panel1.Controls.Add(buttonOpenGenerator);
+            panel1.Controls.Add(textBoxSpectrumFile);
+            panel1.Controls.Add(panelPathEDX);
+            panel1.Controls.Add(panel2);
+            panel1.Controls.Add(panelPathDTSA);
+            panel1.Controls.Add(comboBoxModelPath);
+            panel1.Controls.Add(buttonOpenAnalyzer);
+            panel1.Dock = DockStyle.Top;
+            panel1.Location = new Point(0, 24);
+            panel1.Name = "panel1";
+            panel1.Size = new Size(481, 159);
+            panel1.TabIndex = 114;
+            //
+            // panel3
+            //
+            panel3.Controls.Add(graphControl1);
+            panel3.Dock = DockStyle.Fill;
+            panel3.Location = new Point(0, 183);
+            panel3.Name = "panel3";
+            panel3.Size = new Size(481, 171);
+            panel3.TabIndex = 115;
+            //
             // FormMain
-            // 
+            //
             AllowDrop = true;
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(475, 465);
-            Controls.Add(textBoxSpectrumFile);
+            ClientSize = new Size(481, 460);
+            Controls.Add(panel3);
+            Controls.Add(panel1);
             Controls.Add(textBoxAnalysisResult);
-            Controls.Add(panel2);
-            Controls.Add(panelPathEDX);
-            Controls.Add(panelPathDTSA);
-            Controls.Add(graphControl1);
-            Controls.Add(comboBoxModelPath);
-            Controls.Add(buttonOpenAnalyzer);
-            Controls.Add(buttonOpenGenerator);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
             Name = "FormMain";
@@ -337,6 +360,9 @@
             panelPathEDX.PerformLayout();
             panelPathDTSA.ResumeLayout(false);
             panelPathDTSA.PerformLayout();
+            panel1.ResumeLayout(false);
+            panel1.PerformLayout();
+            panel3.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
         }
@@ -365,5 +391,7 @@
         private ToolStripMenuItem dTSAIIFileToolStripMenuItem;
         private TextBox textBoxAnalysisResult;
         private TextBox textBoxSpectrumFile;
+        private Panel panel1;
+        private Panel panel3;
     }
 }
