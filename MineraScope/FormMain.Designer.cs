@@ -34,6 +34,7 @@
             fileToolStripMenuItem = new ToolStripMenuItem();
             folderSettingToolStripMenuItem = new ToolStripMenuItem();
             dTSAIIFileToolStripMenuItem = new ToolStripMenuItem();
+            exportToolStripMenuItem = new ToolStripMenuItem();
             comboBoxModelPath = new ComboBox();
             graphControl1 = new Crystallography.Controls.GraphControl();
             panel2 = new Panel();
@@ -49,8 +50,8 @@
             textBoxPathDTSA = new TextBox();
             labelPathDTSA = new Label();
             textBoxAnalysisResult = new TextBox();
-            textBoxSpectrumFile = new TextBox();
             panel1 = new Panel();
+            comboBoxSpectrumFile = new ComboBox();
             panel3 = new Panel();
             menuStrip1.SuspendLayout();
             panel2.SuspendLayout();
@@ -59,9 +60,9 @@
             panel1.SuspendLayout();
             panel3.SuspendLayout();
             SuspendLayout();
-            // 
+            //
             // buttonOpenGenerator
-            // 
+            //
             buttonOpenGenerator.AutoSize = true;
             buttonOpenGenerator.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonOpenGenerator.Location = new Point(118, 3);
@@ -71,9 +72,9 @@
             buttonOpenGenerator.Text = "新規モデル作成";
             buttonOpenGenerator.UseVisualStyleBackColor = true;
             buttonOpenGenerator.Click += buttonOpenGenerator_Click;
-            // 
+            //
             // buttonOpenAnalyzer
-            // 
+            //
             buttonOpenAnalyzer.AutoSize = true;
             buttonOpenAnalyzer.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             buttonOpenAnalyzer.Location = new Point(230, 3);
@@ -83,44 +84,52 @@
             buttonOpenAnalyzer.Text = "マップ分析";
             buttonOpenAnalyzer.UseVisualStyleBackColor = true;
             buttonOpenAnalyzer.Click += buttonOpenAnalyzer_Click;
-            // 
+            //
             // menuStrip1
-            // 
+            //
             menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem });
             menuStrip1.Location = new Point(0, 0);
             menuStrip1.Name = "menuStrip1";
             menuStrip1.Size = new Size(481, 24);
             menuStrip1.TabIndex = 1;
             menuStrip1.Text = "menuStrip1";
-            // 
+            //
             // fileToolStripMenuItem
-            // 
-            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { folderSettingToolStripMenuItem });
+            //
+            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { folderSettingToolStripMenuItem, exportToolStripMenuItem });
             fileToolStripMenuItem.Name = "fileToolStripMenuItem";
-            fileToolStripMenuItem.Size = new Size(37, 20);
-            fileToolStripMenuItem.Text = "File";
-            // 
+            fileToolStripMenuItem.Size = new Size(50, 20);
+            fileToolStripMenuItem.Text = "Menu";
+            //
             // folderSettingToolStripMenuItem
-            // 
+            //
             folderSettingToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { dTSAIIFileToolStripMenuItem });
             folderSettingToolStripMenuItem.Name = "folderSettingToolStripMenuItem";
-            folderSettingToolStripMenuItem.Size = new Size(146, 22);
+            folderSettingToolStripMenuItem.Size = new Size(180, 22);
             folderSettingToolStripMenuItem.Text = "Folder setting";
-            // 
+            //
             // dTSAIIFileToolStripMenuItem
-            // 
+            //
             dTSAIIFileToolStripMenuItem.Name = "dTSAIIFileToolStripMenuItem";
             dTSAIIFileToolStripMenuItem.Size = new Size(155, 22);
             dTSAIIFileToolStripMenuItem.Text = "DTSA-IIFilePath";
-            // 
+            //
+            // exportToolStripMenuItem
+            //
+            exportToolStripMenuItem.Name = "exportToolStripMenuItem";
+            exportToolStripMenuItem.Size = new Size(180, 22);
+            exportToolStripMenuItem.Text = "Export";
+            exportToolStripMenuItem.Click += exportToolStripMenuItem_Click;
+            //
             // comboBoxModelPath
-            // 
+            //
             comboBoxModelPath.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxModelPath.FormattingEnabled = true;
             comboBoxModelPath.Location = new Point(3, 42);
             comboBoxModelPath.Name = "comboBoxModelPath";
             comboBoxModelPath.Size = new Size(148, 23);
             comboBoxModelPath.TabIndex = 26;
+            comboBoxModelPath.SelectedIndexChanged += comboBoxModelPath_SelectedIndexChanged;
             // 
             // graphControl1
             // 
@@ -159,6 +168,7 @@
             graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
             graphControl1.OriginPosition = new Point(40, 20);
+            graphControl1.Padding = new Padding(0, 3, 0, 3);
             graphControl1.Size = new Size(481, 171);
             graphControl1.TabIndex = 108;
             graphControl1.UnitX = "";
@@ -245,7 +255,7 @@
             buttonPathEDX.Click += buttonFilePathBrowse_Click;
             //
             // labelPathEDX
-            // 
+            //
             labelPathEDX.AutoSize = true;
             labelPathEDX.Location = new Point(5, 10);
             labelPathEDX.Name = "labelPathEDX";
@@ -304,18 +314,11 @@
             textBoxAnalysisResult.Size = new Size(481, 106);
             textBoxAnalysisResult.TabIndex = 112;
             textBoxAnalysisResult.Text = ".msa / .emsa / .eds ファイルをファイルドラッグ＆ドロップしてください。";
-            // 
-            // textBoxSpectrumFile
-            // 
-            textBoxSpectrumFile.Location = new Point(8, 100);
-            textBoxSpectrumFile.Name = "textBoxSpectrumFile";
-            textBoxSpectrumFile.Size = new Size(148, 23);
-            textBoxSpectrumFile.TabIndex = 113;
             //
             // panel1
             //
+            panel1.Controls.Add(comboBoxSpectrumFile);
             panel1.Controls.Add(buttonOpenGenerator);
-            panel1.Controls.Add(textBoxSpectrumFile);
             panel1.Controls.Add(panelPathEDX);
             panel1.Controls.Add(panel2);
             panel1.Controls.Add(panelPathDTSA);
@@ -326,6 +329,16 @@
             panel1.Name = "panel1";
             panel1.Size = new Size(481, 159);
             panel1.TabIndex = 114;
+            //
+            // comboBoxSpectrumFile
+            //
+            comboBoxSpectrumFile.DropDownStyle = ComboBoxStyle.DropDownList;
+            comboBoxSpectrumFile.FormattingEnabled = true;
+            comboBoxSpectrumFile.Location = new Point(3, 80);
+            comboBoxSpectrumFile.Name = "comboBoxSpectrumFile";
+            comboBoxSpectrumFile.Size = new Size(148, 23);
+            comboBoxSpectrumFile.TabIndex = 114;
+            comboBoxSpectrumFile.SelectedIndexChanged += comboBoxSpectrumFile_SelectedIndexChanged;
             //
             // panel3
             //
@@ -390,8 +403,9 @@
         private Label labelPathDTSA;
         private ToolStripMenuItem dTSAIIFileToolStripMenuItem;
         private TextBox textBoxAnalysisResult;
-        private TextBox textBoxSpectrumFile;
         private Panel panel1;
         private Panel panel3;
+        private ComboBox comboBoxSpectrumFile;
+        private ToolStripMenuItem exportToolStripMenuItem;
     }
 }

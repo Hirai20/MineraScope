@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Globalization;
 // 260424Codex: FormMain 側で共通パスの既定値を組み立てるために IO helper を使います。
 using System.IO;
 using System.Text;
@@ -23,6 +24,16 @@ namespace MineraScope
 
         // 260430Codex: FormMain での自動鉱物判定が重ならないようにします。
         private bool _isPredictionRunning;
+
+        // 260620Codex: Keep the dropped input set so changing the selected model can rerun the same batch.
+        private string[] _droppedSpectrumFiles = [];
+        private bool _isModelComboRefreshing;
+
+        // 260620Claude: ドロップ済みスペクトルの分類結果（真実源）。combo 選択表示・エクスポートはここから作る。
+        private SpectrumPredictionBatch? _currentBatch;
+
+        // 260620Claude: グラフ用 Profile は選択時に lazy load してキャッシュする。
+        private readonly Dictionary<string, Profile> _profileCache = new(StringComparer.OrdinalIgnoreCase);
 
         // 260507Codex: モデル一覧の再構築後に前回選択していたモデル名を復元します。
         private string _savedSelectedModelName = string.Empty;
@@ -81,10 +92,11 @@ namespace MineraScope
         private void LoadUserSettings()
         {
             var settings = FormUserSettingsStore.Load<FormMainUserSettings>(UserSettingsFileName);
+            // 260621Codex: Restore the selected model name before ModelPath triggers catalog refresh through TextChanged.
+            _savedSelectedModelName = settings.SelectedModelName;
+
             if (!string.IsNullOrWhiteSpace(settings.ModelPath))
                 ModelPath = settings.ModelPath;
-
-            _savedSelectedModelName = settings.SelectedModelName;
 
             if (!string.IsNullOrWhiteSpace(settings.EdxOutputPath))
                 EdxOutputPath = settings.EdxOutputPath;
@@ -124,6 +136,9 @@ namespace MineraScope
                 Visible = false,
                 ModelCatalog = _modelCatalog
             };
+
+            // 260620Claude: 起動直後はまだ分類結果が無いので、エクスポートはドロップ＆分類成功まで無効にする。
+            exportToolStripMenuItem.Enabled = false;
         }
 
         // 260513Codex: 共通ファイルパス欄の既定値だけをまとめ、イベント接続は Designer 側へ寄せます。
@@ -181,7 +196,16 @@ namespace MineraScope
                 : !string.IsNullOrWhiteSpace(previousSelection) ? previousSelection
                 : _savedSelectedModelName;
 
-            ModelComboBinder.Populate(comboBoxModelPath, _modelCatalog.ModelNames, target);
+            // 260620Codex: Catalog refresh can change selection internally; only user model changes should rerun analysis.
+            _isModelComboRefreshing = true;
+            try
+            {
+                ModelComboBinder.Populate(comboBoxModelPath, _modelCatalog.ModelNames, target);
+            }
+            finally
+            {
+                _isModelComboRefreshing = false;
+            }
         }
 
         private void buttonOpenGenerator_Click(object sender, EventArgs e)
@@ -204,84 +228,82 @@ namespace MineraScope
             form.Activate();
         }
 
-        // 260430Codex: 判定中は追加ドロップを受け付けず、単一スペクトルだけをコピー可能にします。
+        // 260620Claude: 判定中の追加ドロップは拒否し、msa/emsa/eds（フォルダ再帰含む）を複数受け付ける。
         private void FormMain_DragEnter(object? sender, DragEventArgs e)
         {
-            e.Effect = TryGetAcceptedSpectrumFile(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Effect = TryGetDroppedSpectrumFiles(e, out _) ? DragDropEffects.Copy : DragDropEffects.None;
         }
 
-        // 260430Codex: スペクトル表示が成功したら FormMain 上で鉱物判定を自動実行します。
+        // 260620Claude: ドロップされた全スペクトルを選択モデルで一括分類し、combo で閲覧・エクスポートできるようにする。
         private async void FormMain_DragDrop(object? sender, DragEventArgs e)
         {
-            if (!TryGetAcceptedSpectrumFile(e, out var filePath))
+            if (!TryGetDroppedSpectrumFiles(e, out var files))
                 return;
 
-            try
-            {
-                LoadSpectrumFile(filePath);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"スペクトルを読み込めませんでした。\r\n{ex.Message}",
-                    "スペクトルファイル",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-                return;
-            }
-
-            await RunMineralPredictionAsync(filePath);
+            // 260620Codex: Remember exactly what was dropped so model changes can rerun without another drop.
+            _droppedSpectrumFiles = files;
+            await RunBatchPredictionAsync(_droppedSpectrumFiles);
         }
 
-        // 260430Codex: 判定中の再入力と単一スペクトル以外のドロップを同じ条件で拒否します。
-        private bool TryGetAcceptedSpectrumFile(DragEventArgs e, out string filePath)
+        // 260620Claude: 判定中の再入力を拒否し、ドロップ（ファイル/フォルダ）から対象スペクトルを再帰収集する。
+        private bool TryGetDroppedSpectrumFiles(DragEventArgs e, out string[] files)
         {
-            if (_isPredictionRunning)
-            {
-                filePath = string.Empty;
-                return false;
-            }
+            files = [];
 
-            return TryGetSingleDroppedSpectrumFile(e, out filePath);
+            if (_isPredictionRunning)
+                return false;
+
+            if (e.Data is not IDataObject data || !data.GetDataPresent(DataFormats.FileDrop))
+                return false;
+
+            if (data.GetData(DataFormats.FileDrop) is not string[] paths)
+                return false;
+
+            files = MineralPredictionWorkflow.CollectSpectrumFiles(paths);
+            return files.Length > 0;
         }
 
         // 260430Codex: FormMain の判定ログを結果欄へ追記します。
         private void AnalysisLog(string message)
             => TextBoxLogHelper.AppendLine(textBoxAnalysisResult, message);
 
-        // 260430Codex: ドロップされた単一スペクトルを FormMain の結果欄へ自動判定します。
-        private async Task RunMineralPredictionAsync(string filePath)
+        // 260620Claude: ドロップされた複数スペクトルを一括分類し、結果を combo へ bind して先頭を表示する。
+        private async Task RunBatchPredictionAsync(IReadOnlyList<string> files, string preferredFilePath = "")
         {
-            if (_isPredictionRunning)
+            if (_isPredictionRunning || files.Count == 0)
                 return;
 
+            string selectedModelPath = SelectedModelPath;
+            string modelName = comboBoxModelPath.SelectedItem as string ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(selectedModelPath))
+            {
+                AnalysisLog("使用するモデルフォルダが選択されていません。");
+                return;
+            }
+
             _isPredictionRunning = true;
-            // 260611Claude: 判定は短時間で終わるため「判定中...」表示は出さず、前回結果のクリアだけ行う。
             textBoxAnalysisResult.Clear();
+            _profileCache.Clear();
+            _currentBatch = null;
+            comboBoxSpectrumFile.Items.Clear();
+            // 260620Claude: 分類中はエクスポート不可。完了後に成功があれば有効化する。
+            exportToolStripMenuItem.Enabled = false;
 
             try
             {
-                // 260507Codex: 親フォルダだけでなく、comboBoxModelPath で選択されたモデルフォルダまで確認します。
-                string selectedModelPath = SelectedModelPath;
-                if (string.IsNullOrWhiteSpace(selectedModelPath))
-                {
-                    AnalysisLog("使用するモデルフォルダが選択されていません。");
-                    return;
-                }
+                // 260620Claude: 先頭ファイルは分類完了を待たずに即グラフ表示する。
+                ShowSpectrumProfile(files[0]);
 
-                await new MineralPredictionWorkflow(AppContext.BaseDirectory, AnalysisLog)
-                    // 260507Codex: 選択中のモデルフォルダを予測ワークフローへ渡します。
-                    .RunAsync(selectedModelPath, new[] { filePath });
+                var batch = await new SpectrumBatchPredictionWorkflow(AppContext.BaseDirectory, AnalysisLog)
+                    .RunAsync(selectedModelPath, modelName, files);
 
-                // 260611Claude: 判定成功時のみ結果欄を先頭へ戻し、末尾までスクロールした表示の先頭 (鉱物名) を見せる。
-                textBoxAnalysisResult.SelectionStart = 0;
-                textBoxAnalysisResult.SelectionLength = 0;
-                textBoxAnalysisResult.ScrollToCaret();
+                _currentBatch = batch;
+                BindBatchToCombo(batch, preferredFilePath);
+                exportToolStripMenuItem.Enabled = batch.Items.Any(item => item.IsSuccess);
             }
             catch (Exception ex)
             {
                 AnalysisLog($"\nエラー: {ex.Message}");
-                AnalysisLog($"スタックトレース: {ex.StackTrace}");
             }
             finally
             {
@@ -289,46 +311,119 @@ namespace MineraScope
             }
         }
 
-        // 260427Codex: ドロップ入力は「存在する単一ファイル」かつ「msa/emsa」のみに絞ります。
-        private static bool TryGetSingleDroppedSpectrumFile(DragEventArgs e, out string filePath)
+        // 260620Claude: combo へ「ファイル名 -> 予測 確信度」を bind し、先頭を選択して表示する。内部参照は SelectedIndex→batch.Items[index]。
+        private void BindBatchToCombo(SpectrumPredictionBatch batch, string preferredFilePath = "")
         {
-            filePath = string.Empty;
+            comboBoxSpectrumFile.BeginUpdate();
+            comboBoxSpectrumFile.Items.Clear();
+            foreach (string label in BuildComboLabels(batch.Items))
+                comboBoxSpectrumFile.Items.Add(label);
+            comboBoxSpectrumFile.EndUpdate();
 
-            // 260427Codex: ドロップデータが取れないケースを先に除外して Null 警告と実行時例外を避けます。
-            IDataObject? dataObject = e.Data;
+            if (comboBoxSpectrumFile.Items.Count == 0)
+                return;
 
-            if (dataObject is null || !dataObject.GetDataPresent(DataFormats.FileDrop))
-                return false;
-
-            if (dataObject.GetData(DataFormats.FileDrop) is not string[] files || files.Length != 1)
-                return false;
-
-            if (!File.Exists(files[0]) || !IsSpectrumFile(files[0]))
-                return false;
-
-            filePath = files[0];
-            return true;
+            int preferredIndex = FindPredictionItemIndex(batch.Items, preferredFilePath);
+            comboBoxSpectrumFile.SelectedIndex = preferredIndex >= 0 ? preferredIndex : 0;
+            ShowSelectedItem();
         }
 
-        // 260427Codex: 現時点の FormMain 判定入力は msa/emsa の単一スペクトルに限定します。
-        // 260613Claude: バイナリ .eds も単一スペクトルのドロップ判定対象に含める。
-        private static bool IsSpectrumFile(string path)
+        // 260620Codex: After model reanalysis, keep the same spectrum selected when it is still in the batch.
+        private static int FindPredictionItemIndex(IReadOnlyList<SpectrumPredictionItem> items, string filePath)
         {
-            string extension = Path.GetExtension(path);
-            return extension.Equals(".msa", StringComparison.OrdinalIgnoreCase)
-                || extension.Equals(".emsa", StringComparison.OrdinalIgnoreCase)
-                || extension.Equals(".eds", StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(filePath))
+                return -1;
+
+            for (int i = 0; i < items.Count; i++)
+                if (string.Equals(items[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                    return i;
+
+            return -1;
         }
 
-        // 260427Codex: 読み込んだスペクトルをファイル名表示とグラフ表示へ反映します。
-        private void LoadSpectrumFile(string filePath)
+        // 260620Claude: ファイル名が重複する時だけ親フォルダ名を付けて区別する。
+        private static string[] BuildComboLabels(IReadOnlyList<SpectrumPredictionItem> items)
         {
-            var profile = ReadSpectrumProfile(filePath);
+            var nameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+                nameCounts[item.FileName] = nameCounts.GetValueOrDefault(item.FileName) + 1;
 
-            if (profile.Pt.Count == 0)
-                throw new InvalidDataException("スペクトルデータ点が見つかりませんでした。");
+            var labels = new string[items.Count];
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                string name = nameCounts[item.FileName] > 1
+                    ? Path.Combine(Path.GetFileName(Path.GetDirectoryName(item.FilePath) ?? string.Empty), item.FileName)
+                    : item.FileName;
+                labels[i] = item.IsSuccess
+                    ? $"{name} -> {item.Classification!.PredictedMineral} {(item.Classification.Confidence * 100).ToString("F2", CultureInfo.InvariantCulture)}"
+                    : $"{name} -> (失敗)";
+            }
 
-            textBoxSpectrumFile.Text = Path.GetFileName(filePath);
+            return labels;
+        }
+
+        // 260620Claude: combo 選択でスペクトルと結果を切り替える（Designer で SelectedIndexChanged を接続）。
+        private void comboBoxSpectrumFile_SelectedIndexChanged(object sender, EventArgs e)
+            => ShowSelectedItem();
+
+        // 260620Codex: Reanalyze the dropped spectra when the user switches models.
+        private async void comboBoxModelPath_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_isModelComboRefreshing || _droppedSpectrumFiles.Length == 0 || _isPredictionRunning)
+                return;
+
+            string selectedFilePath = GetSelectedPredictionFilePath();
+            await RunBatchPredictionAsync(_droppedSpectrumFiles, selectedFilePath);
+        }
+
+        // 260620Codex: Read the current batch selection before a rerun clears the combo.
+        private string GetSelectedPredictionFilePath()
+        {
+            if (_currentBatch is null)
+                return string.Empty;
+
+            int index = comboBoxSpectrumFile.SelectedIndex;
+            return index >= 0 && index < _currentBatch.Items.Count
+                ? _currentBatch.Items[index].FilePath
+                : string.Empty;
+        }
+
+        // 260620Claude: combo 選択中スペクトルのグラフと結果ブロックを表示する。
+        private void ShowSelectedItem()
+        {
+            if (_currentBatch is null)
+                return;
+
+            int index = comboBoxSpectrumFile.SelectedIndex;
+            if (index < 0 || index >= _currentBatch.Items.Count)
+                return;
+
+            var item = _currentBatch.Items[index];
+            ShowSpectrumProfile(item.FilePath);
+            textBoxAnalysisResult.Text = SpectrumPredictionBlockFormatter.FormatBody(item);
+        }
+
+        // 260620Claude: 指定ファイルの Profile を lazy load + cache してグラフへ表示する。読めない場合は何もしない。
+        private void ShowSpectrumProfile(string filePath)
+        {
+            if (!_profileCache.TryGetValue(filePath, out var profile))
+            {
+                try
+                {
+                    profile = ReadSpectrumProfile(filePath);
+                }
+                catch
+                {
+                    return;
+                }
+
+                if (profile.Pt.Count == 0)
+                    return;
+
+                _profileCache[filePath] = profile;
+            }
+
             graphControl1.Profile = profile;
             graphControl1.Refresh();
         }
@@ -397,11 +492,11 @@ namespace MineraScope
             if (values.Length == 0)
                 return false;
 
-            if (!double.TryParse(values[0], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double firstValue))
+            if (!double.TryParse(values[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double firstValue))
                 return false;
 
             if (values.Length >= 2
-                && double.TryParse(values[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double secondValue))
+                && double.TryParse(values[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double secondValue))
             {
                 point = new PointD(firstValue, secondValue);
                 return true;
@@ -439,7 +534,71 @@ namespace MineraScope
                 return false;
 
             string text = line[(separatorIndex + 1)..].Trim().TrimEnd('.');
-            return double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out value);
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        }
+
+        // 260620Claude: 読み込んだ全スペクトルの予測結果を、分析用 CSV と閲覧用 TXT の2ファイルへ書き出す。
+        private void exportToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (_currentBatch is null || !_currentBatch.Items.Any(item => item.IsSuccess))
+            {
+                MessageBox.Show(
+                    "エクスポートできる分類結果がありません。先にスペクトルをドロップしてください。",
+                    "エクスポート", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var dialog = new SaveFileDialog
+            {
+                // 260620Claude: 「ファイルの種類」で CSV か TXT を選ぶ。選択は FilterIndex で判定する。
+                Filter = "CSV (*.csv)|*.csv|TXT (*.txt)|*.txt",
+                FilterIndex = 1,
+                FileName = $"{SanitizeFileName(_currentBatch.ModelName)}_{DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}"
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+
+            // 260620Claude: 選んだ拡張子に依らず base 名から .csv/.txt を組み立て、FilterIndex で出力対象を決める。
+            string basePath = Path.Combine(
+                Path.GetDirectoryName(dialog.FileName) ?? string.Empty,
+                Path.GetFileNameWithoutExtension(dialog.FileName));
+            // 260621Codex: The dialog writes one selected format, so keep one output path instead of a list.
+            bool writeCsv = dialog.FilterIndex == 1;
+            string outputPath = basePath + (writeCsv ? ".csv" : ".txt");
+            try
+            {
+                if (writeCsv)
+                    SpectrumPredictionExporter.WriteCsv(outputPath, _currentBatch);
+                else
+                    SpectrumPredictionExporter.WriteReport(outputPath, _currentBatch);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"エクスポートに失敗しました。\r\n{ex.Message}",
+                    "エクスポート", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            int total = _currentBatch.Items.Count;
+            int success = _currentBatch.Items.Count(item => item.IsSuccess);
+            string summary = success == total
+                ? $"{success} 件を出力しました。"
+                : $"{success}/{total} 件を出力しました（{total - success} 件は失敗のため除外）。";
+            MessageBox.Show(
+                $"{summary}\r\n\r\n{outputPath}",
+                "エクスポート", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // 260620Claude: モデル名を既定ファイル名に使えるよう、ファイル名に使えない文字を _ へ置換する。
+        private static string SanitizeFileName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return "prediction";
+
+            foreach (char invalid in Path.GetInvalidFileNameChars())
+                name = name.Replace(invalid, '_');
+            return name;
         }
     }
 }
