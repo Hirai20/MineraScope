@@ -654,75 +654,6 @@
 		<Constraints />
 	</SolidSolution>
 	<SolidSolution>
-		<Name>Actinolite</Name>
-		<Formula>Ca2(Mg,Fe)5Si8O22(OH)2</Formula>
-		<Members>
-			<Mineral>
-				<Name>Tremolite</Name>
-				<FormulaText>Ca2Mg5Si8O22O2H2</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Ca</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Mg</Item1>
-						<Item2>5</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Si</Item1>
-						<Item2>8</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>22</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>H</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-			<Mineral>
-				<Name>Ferroactinolite</Name>
-				<FormulaText>Ca2Fe5Si8O22O2H2</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Ca</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Fe</Item1>
-						<Item2>5</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Si</Item1>
-						<Item2>8</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>22</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>H</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-		</Members>
-		<Constraints />
-	</SolidSolution>
-	<SolidSolution>
 		<Name>Apatite</Name>
 		<Formula />
 		<Members>
@@ -1108,7 +1039,7 @@
 	</SolidSolution>
 	<SolidSolution>
 		<Name>Ca Amphiboles</Name>
-		<Formula />
+		<Formula>Na0~1Ca2(Mg,Fe,Al)5(Si,Al)8O22(OH)2</Formula>
 		<Members>
 			<Mineral>
 				<Name>Na2Ca2Mg5Si6Al2O22O2H2</Name>
@@ -2137,7 +2068,7 @@
 	</SolidSolution>
 	<SolidSolution>
 		<Name>Ca-Na Amphibole</Name>
-		<Formula />
+		<Formula>NaCaNa(Mg,Fe,Al)5(Si,Al)8O22(OH)2</Formula>
 		<Members>
 			<Mineral>
 				<Name>Richterite</Name>

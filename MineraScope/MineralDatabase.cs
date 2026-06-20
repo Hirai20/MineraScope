@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Xml.Serialization;
 using xFunc.Maths;
 
 namespace MineraScope
@@ -233,6 +234,10 @@ namespace MineraScope
         public string Name { get; set; } = null!;
 
         public string FormulaText { get; set; } = null!;
+
+        // 260617Codex: Preserve the hand-maintained seed XML density element during local direct Original saves.
+        [XmlElement("density")]
+        public double Density { get; set; }
 
         public (string Element, double Num)[] Elements { get; set; } = null!;
 
