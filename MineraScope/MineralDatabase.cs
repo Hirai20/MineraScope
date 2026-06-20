@@ -11,6 +11,10 @@ namespace MineraScope
 {
     public class SolidSolution
     {
+        // 260620Codex: Keep percentage-grid fractions and DTSA-II weights free of floating-point residue.
+        private const double FractionSnapTolerance = 1e-12;
+        private const double WeightSnapTolerance = 1e-12;
+
         // 260416Codex: XML シリアライズで後から設定されるため、nullability のみ明示します。
         public string Name { get; set; } = null!;
 
@@ -89,7 +93,7 @@ namespace MineraScope
                 sum += fractions[i];
             fractions[Members.Length - 1] = 1.0 - sum;
 
-            return fractions;
+            return NormalizeEndmemberFractions(fractions, resolution);
         }
 
         // 260528Claude: 端成分定義順に並べた比率を文字列キーへ正規化します。Math.Round で浮動小数誤差を吸収し、manifest の EndmemberFractions と直接比較できる形にします。
@@ -113,13 +117,28 @@ namespace MineraScope
         }
 
         // 260507Codex: manifest の endmemberFractions へ保存する端成分比率を鉱物定義順で作ります。
-        public Dictionary<string, double> CreateEndmemberFractionMap(double[] fractions)
+        // 260620Codex: Persist endmember ratios on the integer-percent grid used by the composition UI.
+        public Dictionary<string, double> CreateEndmemberFractionMap(double[] fractions, double resolution)
         {
+            var normalized = NormalizeEndmemberFractions(fractions, resolution);
             var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < Members.Length && i < fractions.Length; i++)
-                result[Members[i].Name] = fractions[i];
+            for (int i = 0; i < Members.Length && i < normalized.Length; i++)
+                result[Members[i].Name] = normalized[i];
 
             return result;
+        }
+
+        // 260620Codex: Snap fractions to integer percent units before they become manifest labels or DTSA-II inputs.
+        public double[] NormalizeEndmemberFractions(double[] fractions, double resolution)
+        {
+            int percentStep = PercentStepFromResolution(resolution);
+            var percents = new int[Members.Length];
+
+            for (int i = 0; i < Members.Length && i < fractions.Length; i++)
+                percents[i] = SnapFractionPercent(fractions[i], percentStep);
+
+            NormalizePercentSum(percents);
+            return percents.Select(static percent => percent / 100.0).ToArray();
         }
 
         // 260507Codex: DTSA-II に渡す元素重量比を、manifest 予約済みの端成分比率から再構築します。
@@ -132,35 +151,79 @@ namespace MineraScope
             return NormalizeWeights(totalWeights);
         }
 
-        // 260416Codex: 単一メンバー時も複数メンバー時も同じ正規化ロジックを通すようにします。
-        private static (string ElementName, double Weight)[] CalculateNormalizedWeights((string Element, double Num)[] elements, double ratio)
-        {
-            var totalWeights = new Dictionary<string, double>();
-            AddWeights(totalWeights, elements, ratio);
-            return NormalizeWeights(totalWeights);
-        }
-
         // 260416Codex: 元の加算規則をそのまま共有ヘルパーへ寄せて可読性を上げます。
         private static void AddWeights(Dictionary<string, double> totalWeights, (string Element, double Num)[] elements, double ratio)
         {
             foreach (var (element, num) in elements)
             {
+                // 260620Codex: Match the dictionary accumulation style used elsewhere in the project.
                 double weight = num * ratio * AtomStatic.AtomicWeight(element);
-
-                if (totalWeights.ContainsKey(element))
-                    totalWeights[element] += weight;
-                else
-                {
-                    totalWeights.Add(element, weight);
-                }
+                totalWeights[element] = totalWeights.GetValueOrDefault(element) + weight;
             }
         }
 
         // 260416Codex: 正規化処理を 1 か所に集めて、返却タプルの形を揃えます。
         private static (string ElementName, double Weight)[] NormalizeWeights(Dictionary<string, double> totalWeights)
         {
-            double totalWeight = totalWeights.Values.Sum();
-            return totalWeights.Select(entry => (entry.Key, entry.Value / totalWeight)).ToArray();
+            var cleanedWeights = totalWeights
+                .Select(entry => (entry.Key, Weight: CleanWeight(entry.Value)))
+                .ToArray();
+            double totalWeight = cleanedWeights.Sum(entry => entry.Weight);
+            if (totalWeight <= 0)
+                throw new InvalidOperationException("Composition weight total must be positive.");
+
+            return cleanedWeights
+                .Select(entry => (entry.Key, CleanWeight(entry.Weight / totalWeight)))
+                .ToArray();
+        }
+
+        // 260620Codex: Convert fraction steps to integer mol-percent units so JSON can store clean labels.
+        private static int PercentStepFromResolution(double resolution)
+        {
+            if (resolution <= 0)
+                return 1;
+
+            int step = (int)Math.Round(resolution * 100.0, MidpointRounding.AwayFromZero);
+            return Math.Max(1, step);
+        }
+
+        // 260620Codex: Clamp only after snapping to the requested percent grid to prevent negative DTSA-II inputs.
+        private static int SnapFractionPercent(double value, int percentStep)
+        {
+            if (Math.Abs(value) < FractionSnapTolerance)
+                return 0;
+
+            int percent = (int)Math.Round(value * 100.0 / percentStep, MidpointRounding.AwayFromZero) * percentStep;
+            return Math.Clamp(percent, 0, 100);
+        }
+
+        // 260620Codex: Preserve a total of 100 mol% after independent percent-grid snapping.
+        private static void NormalizePercentSum(int[] percents)
+        {
+            int sum = percents.Sum();
+            if (sum == 100 || sum <= 0)
+                return;
+
+            int targetIndex = 0;
+            for (int i = 1; i < percents.Length; i++)
+                if (percents[i] > percents[targetIndex])
+                    targetIndex = i;
+
+            int adjusted = percents[targetIndex] + 100 - sum;
+            if (adjusted >= 0 && adjusted <= 100)
+                percents[targetIndex] = adjusted;
+        }
+
+        // 260620Codex: Treat tiny negative residues as zero while surfacing real invalid weights.
+        private static double CleanWeight(double value)
+        {
+            if (Math.Abs(value) < WeightSnapTolerance)
+                return 0;
+
+            if (value < 0)
+                throw new InvalidOperationException("Composition weight must not be negative.");
+
+            return value;
         }
 
         // 260528Claude: 全候補を 1 件ずつ yield する遅延列挙です。Take で打ち切るとメモリ・CPU とも O(取得数) で停止し、巨大候補空間でも UI を固めません。

@@ -187,6 +187,10 @@ namespace MineraScope
             var manifest = _repository.LoadOrCreate(handle);
             bool changed = EnsureNextSimulationIdAfterManifest(manifest);
 
+            // 260620Codex: Clean existing manifest labels so retries and training use percent-grid fractions.
+            foreach (var entry in manifest.Spectra)
+                changed |= NormalizeManifestEntryFractions(solution, entry, request.Simulation.ResolutionStep);
+
             foreach (var entry in manifest.Spectra.Where(e => e.Status == SpectrumManifestStatus.Completed))
             {
                 if (File.Exists(Path.Combine(handle.PoolFolder, entry.FileName)))
@@ -229,7 +233,7 @@ namespace MineraScope
             {
                 entry.Status = SpectrumManifestStatus.Pending;
                 entry.FailureReason = null;
-                reservations.Add(CreateReservation(solution, state.Handle, entry));
+                reservations.Add(CreateReservation(solution, state.Handle, entry, resolutionStep));
             }
 
             int newReservationCount = missingCount - reservations.Count;
@@ -268,11 +272,11 @@ namespace MineraScope
                     SimulationId = simulationId,
                     FileName = fileName,
                     Status = SpectrumManifestStatus.Pending,
-                    EndmemberFractions = solution.CreateEndmemberFractionMap(fractions)
+                    EndmemberFractions = solution.CreateEndmemberFractionMap(fractions, resolutionStep)
                 };
 
                 state.Manifest.Spectra.Add(entry);
-                reservations.Add(CreateReservation(solution, state.Handle, entry));
+                reservations.Add(CreateReservation(solution, state.Handle, entry, resolutionStep));
             }
 
             return reservations;
@@ -375,16 +379,12 @@ namespace MineraScope
         private static SpectrumSimulationReservation CreateReservation(
             SolidSolution solution,
             SpectrumPoolHandle handle,
-            SpectrumManifestEntry entry)
+            SpectrumManifestEntry entry,
+            double resolutionStep)
         {
-            var fractions = solution.Members
-                .Select(member => entry.EndmemberFractions.TryGetValue(member.Name, out double fraction)
-                    ? fraction
-                    : entry.EndmemberFractions
-                        .Where(pair => string.Equals(pair.Key, member.Name, StringComparison.OrdinalIgnoreCase))
-                        .Select(pair => pair.Value)
-                        .FirstOrDefault())
-                .ToArray();
+            var fractions = solution.NormalizeEndmemberFractions(
+                ReadEndmemberFractions(solution, entry),
+                resolutionStep);
 
             return new SpectrumSimulationReservation(
                 solution.Name,
@@ -393,6 +393,69 @@ namespace MineraScope
                 entry.SimulationId,
                 entry.FileName,
                 solution.CalculateCompositionWeights(fractions));
+        }
+
+        // 260620Codex: Reuse the same manifest lookup path for cleanup and DTSA-II reservation inputs.
+        private static double[] ReadEndmemberFractions(SolidSolution solution, SpectrumManifestEntry entry) =>
+            solution.Members
+                .Select(member => TryGetFraction(entry.EndmemberFractions, member.Name, out double fraction)
+                    ? fraction
+                    : 0)
+                .ToArray();
+
+        // 260620Codex: Normalize old manifest entries in place, including tiny negative values from past runs.
+        private static bool NormalizeManifestEntryFractions(
+            SolidSolution solution,
+            SpectrumManifestEntry entry,
+            double resolutionStep)
+        {
+            var normalized = solution.NormalizeEndmemberFractions(
+                ReadEndmemberFractions(solution, entry),
+                resolutionStep);
+            if (ManifestFractionsMatch(solution, entry, normalized))
+                return false;
+
+            entry.EndmemberFractions = solution.CreateEndmemberFractionMap(normalized, resolutionStep);
+            return true;
+        }
+
+        // 260620Codex: Keep comparisons exact so cleaned JSON values are written back once.
+        private static bool ManifestFractionsMatch(
+            SolidSolution solution,
+            SpectrumManifestEntry entry,
+            double[] normalized)
+        {
+            if (entry.EndmemberFractions.Count != solution.Members.Length)
+                return false;
+
+            for (int i = 0; i < solution.Members.Length && i < normalized.Length; i++)
+                if (!TryGetFraction(entry.EndmemberFractions, solution.Members[i].Name, out double value)
+                    || !value.Equals(normalized[i]))
+                    return false;
+
+            return true;
+        }
+
+        // 260620Codex: Accept legacy case differences without preserving duplicate endmember keys.
+        private static bool TryGetFraction(
+            IReadOnlyDictionary<string, double> fractions,
+            string memberName,
+            out double fraction)
+        {
+            if (fractions.TryGetValue(memberName, out fraction))
+                return true;
+
+            foreach (var pair in fractions)
+            {
+                if (!string.Equals(pair.Key, memberName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                fraction = pair.Value;
+                return true;
+            }
+
+            fraction = 0;
+            return false;
         }
 
         // 260527Codex: 実行結果は中身を読まず、終了コードと出力ファイルの存在で manifest に反映します。
