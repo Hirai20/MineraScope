@@ -911,6 +911,25 @@ namespace MineraScope
                 return;
             }
 
+            // 260619Codex: Confirm before allowing the workflow to replace an existing model folder.
+            if (Directory.Exists(trainingPlan.ModelOutputFolder))
+            {
+                string overwriteMessage =
+                    $"同じ名前のモデルが既に存在します。\n\n{trainingPlan.ModelOutputFolder}\n\n上書きしてもよいですか？";
+                var overwriteResult = MessageBox.Show(
+                    this,
+                    overwriteMessage,
+                    "モデルの上書き確認",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2);
+
+                if (overwriteResult != DialogResult.Yes)
+                    return;
+
+                trainingPlan = trainingPlan with { AllowOverwriteExistingModel = true };
+            }
+
             // 260511Codex: FormMain にはモデル群の親フォルダを保持し、個別モデル名フォルダは comboBox 側で選ばせます。
             ModelOutputPath = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
                 ? DefaultStoragePaths.ModelsFolder

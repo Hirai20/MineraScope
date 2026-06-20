@@ -11,11 +11,16 @@ namespace MineraScope
     internal sealed record ModelTrainingPlan(
         string ModelOutputFolder,
         IReadOnlyList<SpectrumTrainingPool> TrainingPools,
-        ModelTrainingSettings Settings);
+        ModelTrainingSettings Settings,
+        // 260619Codex: Store overwrite consent in the plan so workflow callers cannot replace models accidentally.
+        bool AllowOverwriteExistingModel);
 
     // 260514Codex: モデル学習の検証、tmp 保存先の管理、成功時の正式フォルダ昇格を Form から分離します。
     internal sealed class ModelTrainingWorkflow
     {
+        // 260619Codex: Share the overwrite guard message between preflight and promotion-time checks.
+        private const string OverwriteNotAllowedMessage = "同じ名前のモデルが既に存在するため、上書き許可なしでは作成できません。";
+
         private readonly DeepLearning _deepLearning;
         private readonly Action<string> _logAction;
 
@@ -32,14 +37,16 @@ namespace MineraScope
         // 260514Codex: 学習対象は pool workflow が抽出した Completed spectrum だけにします。
         public ModelTrainingPlan CreatePlan(
             ModelCreationRequest request,
-            IReadOnlyList<SpectrumTrainingPool> trainingPools)
+            IReadOnlyList<SpectrumTrainingPool> trainingPools,
+            // 260619Codex: UI callers pass true only after the user confirms overwriting an existing model.
+            bool allowOverwriteExistingModel = false)
         {
             string modelRootFolder = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
                 ? DefaultStoragePaths.ModelsFolder
                 : request.Paths.ModelOutputFolder;
             string modelOutputFolder = Path.Combine(modelRootFolder, request.ModelName);
 
-            return new ModelTrainingPlan(modelOutputFolder, trainingPools, request.Training);
+            return new ModelTrainingPlan(modelOutputFolder, trainingPools, request.Training, allowOverwriteExistingModel);
         }
 
         // 260514Codex: target 未設定や pool 不足は学習開始前に止めます。
@@ -74,6 +81,10 @@ namespace MineraScope
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // 260619Codex: Stop before expensive training when overwrite consent was not included in the plan.
+                if (Directory.Exists(plan.ModelOutputFolder) && !plan.AllowOverwriteExistingModel)
+                    throw new InvalidOperationException(OverwriteNotAllowedMessage);
+
                 if (Directory.Exists(temporaryOutputFolder))
                     Directory.Delete(temporaryOutputFolder, recursive: true);
 
@@ -89,7 +100,7 @@ namespace MineraScope
                     cancellationToken);
 
                 cancellationToken.ThrowIfCancellationRequested();
-                PromoteTemporaryFolder(temporaryOutputFolder, plan.ModelOutputFolder);
+                PromoteTemporaryFolder(temporaryOutputFolder, plan.ModelOutputFolder, plan.AllowOverwriteExistingModel);
             }
             catch
             {
@@ -110,7 +121,7 @@ namespace MineraScope
         }
 
         // 260514Codex: 既存の正式フォルダがある場合も、成功した tmp を置く直前まで退避して失敗時に戻せるようにします。
-        private void PromoteTemporaryFolder(string temporaryOutputFolder, string modelOutputFolder)
+        private void PromoteTemporaryFolder(string temporaryOutputFolder, string modelOutputFolder, bool allowOverwriteExistingModel)
         {
             _logAction("モデル保存先の仮フォルダを正式フォルダへ昇格します。");
 
@@ -121,6 +132,11 @@ namespace MineraScope
             bool backupCreated = false;
             if (Directory.Exists(modelOutputFolder))
             {
+                // 260619Codex: Re-check at promotion time so a late-created folder is not overwritten silently.
+                if (!allowOverwriteExistingModel)
+                    throw new InvalidOperationException(OverwriteNotAllowedMessage);
+
+                _logAction($"既存モデルを上書きします: {modelOutputFolder}");
                 Directory.Move(modelOutputFolder, backupOutputFolder);
                 backupCreated = true;
             }
