@@ -15,10 +15,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Class1.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="MemoryPack.Streaming" Version="1.21.4" />
     <PackageReference Include="NumSharp" Version="0.30.0" />
     <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
