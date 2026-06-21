@@ -100,6 +100,149 @@ namespace MineraScope
         // 260605Codex: Return the observed fit result because TensorFlow.Keras History is not reliable enough here.
         private sealed record TrainingFitResult(int RequestedEpochs, int CompletedEpochs, int LastEpoch, string LastEpochMetrics);
 
+        // 260621Codex: TensorFlow.NET の native memory を見ながら custom loop の GC 頻度を安全側/高速側へ寄せます。
+        private sealed class AdaptiveTrainingGcController : IDisposable
+        {
+            private const int ProbeInterval = 16;
+            private const int MinInterval = 16;
+            private const int MaxInterval = 128;
+            private const double PressureMemoryLoadRatio = 0.85;
+            private const double StableMemoryLoadRatio = 0.65;
+            private const long PressurePrivateGrowthMb = 512;
+            private const long StablePrivateGrowthMb = 128;
+
+            private readonly string _operation;
+            private readonly Process _process;
+            private readonly bool _adaptive;
+            private int _interval;
+            private long _lastGcPrivateMb;
+            private long _nextGcStep;
+
+            public AdaptiveTrainingGcController(string operationName)
+            {
+                _operation = TensorFlowTrainingDebugLog.Clean(operationName);
+                _process = Process.GetCurrentProcess();
+
+                int fixedInterval = ReadIntEnv("MINERASCOPE_CUSTOMLOOP_GC_INTERVAL", 0);
+                bool adaptiveDisabled = IsDisabled(Environment.GetEnvironmentVariable("MINERASCOPE_ADAPTIVE_GC"));
+                _adaptive = fixedInterval <= 0 && !adaptiveDisabled;
+                _interval = fixedInterval > 0
+                    ? fixedInterval
+                    : _adaptive ? ResolveInitialInterval() : CustomLoopGcInterval;
+                _nextGcStep = Math.Max(1, _interval);
+
+                var snapshot = CaptureMemorySnapshot();
+                _lastGcPrivateMb = snapshot.PrivateMb;
+                TensorFlowTrainingDebugLog.Write(
+                    "adaptive-gc-start",
+                    $"operation={_operation} mode={Mode} interval={_interval} probeInterval={ProbeInterval} minInterval={MinInterval} maxInterval={MaxInterval} privateMB={snapshot.PrivateMb} memoryLoad={FormatMetric(snapshot.MemoryLoadRatio)} totalAvailableMB={snapshot.TotalAvailableMb}");
+            }
+
+            public string Mode => _adaptive ? "adaptive" : "fixed";
+
+            public int CurrentInterval => _interval;
+
+            public void AfterBatch(long globalStep)
+            {
+                if (_interval <= 0)
+                    return;
+
+                if (!_adaptive)
+                {
+                    if (globalStep % _interval == 0)
+                        Collect(globalStep, "fixed", CaptureMemorySnapshot());
+                    return;
+                }
+
+                bool scheduled = globalStep >= _nextGcStep;
+                if (!scheduled && globalStep % ProbeInterval != 0)
+                    return;
+
+                var snapshot = CaptureMemorySnapshot();
+                long privateGrowthMb = Math.Max(0, snapshot.PrivateMb - _lastGcPrivateMb);
+                bool pressure = snapshot.MemoryLoadRatio >= PressureMemoryLoadRatio || privateGrowthMb >= PressurePrivateGrowthMb;
+                if (!scheduled && !pressure)
+                    return;
+
+                string reason = "scheduled";
+                if (pressure)
+                {
+                    _interval = Math.Max(MinInterval, Math.Max(1, _interval / 2));
+                    reason = "pressure";
+                }
+                else if (snapshot.MemoryLoadRatio <= StableMemoryLoadRatio && privateGrowthMb <= StablePrivateGrowthMb)
+                {
+                    int widenedInterval = Math.Min(MaxInterval, _interval * 2);
+                    if (widenedInterval != _interval)
+                    {
+                        _interval = widenedInterval;
+                        reason = "stable";
+                    }
+                }
+
+                Collect(globalStep, reason, snapshot);
+            }
+
+            public void Dispose() => _process.Dispose();
+
+            private void Collect(long globalStep, string reason, MemorySnapshot before)
+            {
+                var pauseBefore = GC.GetTotalPauseDuration();
+                GC.Collect();
+                long pauseDeltaMs = (long)(GC.GetTotalPauseDuration() - pauseBefore).TotalMilliseconds;
+                var after = CaptureMemorySnapshot();
+                long privateGrowthMb = Math.Max(0, before.PrivateMb - _lastGcPrivateMb);
+                _lastGcPrivateMb = after.PrivateMb;
+                _nextGcStep = globalStep + Math.Max(1, _interval);
+
+                TensorFlowTrainingDebugLog.Write(
+                    "adaptive-gc",
+                    $"operation={_operation} mode={Mode} step={globalStep} reason={reason} interval={_interval} nextStep={_nextGcStep} privateBeforeMB={before.PrivateMb} privateAfterMB={after.PrivateMb} privateGrowthMB={privateGrowthMb} memoryLoad={FormatMetric(before.MemoryLoadRatio)} gcPauseDeltaMs={pauseDeltaMs}");
+            }
+
+            private MemorySnapshot CaptureMemorySnapshot()
+            {
+                _process.Refresh();
+                var info = GC.GetGCMemoryInfo();
+                long highThresholdBytes = info.HighMemoryLoadThresholdBytes;
+                double memoryLoadRatio = highThresholdBytes > 0
+                    ? info.MemoryLoadBytes / (double)highThresholdBytes
+                    : 0d;
+
+                return new MemorySnapshot(
+                    _process.PrivateMemorySize64 / (1024 * 1024),
+                    memoryLoadRatio,
+                    info.TotalAvailableMemoryBytes / (1024 * 1024));
+            }
+
+            private static int ResolveInitialInterval()
+            {
+                var info = GC.GetGCMemoryInfo();
+                double memoryLoadRatio = info.HighMemoryLoadThresholdBytes > 0
+                    ? info.MemoryLoadBytes / (double)info.HighMemoryLoadThresholdBytes
+                    : 0d;
+                long totalAvailableMb = info.TotalAvailableMemoryBytes / (1024 * 1024);
+
+                if (memoryLoadRatio >= 0.80)
+                    return MinInterval;
+
+                if (totalAvailableMb >= 24 * 1024)
+                    return MaxInterval;
+
+                if (totalAvailableMb >= 12 * 1024)
+                    return 64;
+
+                return CustomLoopGcInterval;
+            }
+
+            private static bool IsDisabled(string? value) =>
+                string.Equals(value, "off", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)
+                || value == "0";
+
+            private readonly record struct MemorySnapshot(long PrivateMb, double MemoryLoadRatio, long TotalAvailableMb);
+        }
+
         // 260606Claude: 分類1個+回帰N個を1本のバーで表すため、モデル境界とエポックを「モデル均等×エポック比」で 0..1 の全体進捗へ畳み込みます。
         //              EarlyStopping で早期終了しても CompleteModel でその区間を 100% へスナップし、単調増加を保ちます。
         private sealed class TrainingProgressReporter
@@ -189,8 +332,8 @@ namespace MineraScope
         {
             cancellationToken.ThrowIfCancellationRequested();
             string op = TensorFlowTrainingDebugLog.Clean(operationName);
-            int gcInterval = CustomLoopGcInterval;
-            TensorFlowTrainingDebugLog.Write("custom-loop-start", $"operation={op} gcInterval={gcInterval}");
+            using var gcController = new AdaptiveTrainingGcController(operationName);
+            TensorFlowTrainingDebugLog.Write("custom-loop-start", $"operation={op} gcMode={gcController.Mode} gcInterval={gcController.CurrentInterval}");
 
             var lossFn = keras.losses.SparseCategoricalCrossentropy();
             var optimizer = keras.optimizers.Adam();
@@ -212,6 +355,8 @@ namespace MineraScope
             string lastEpochMetrics = "";
             long globalStep = 0;
             var epochStopwatch = new Stopwatch();
+            // 260621Claude: train metric (loss/accuracy) はログ用なので毎epochではなく N epoch ごと + 最終/early-stop epoch だけ評価する。
+            int trainMetricInterval = ReadIntEnv("MINERASCOPE_TRAIN_METRIC_INTERVAL", 10);
 
             for (int epoch = 0; epoch < epochs; epoch++)
             {
@@ -219,11 +364,8 @@ namespace MineraScope
                 epochStopwatch.Restart();
                 TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} customLoop=1");
 
-                double lossWeightedSum = 0d;
-                double lossStepSum = 0d;
-                long correct = 0;
-                int steps = 0;
-
+                // 260621Claude: batch loop は学習だけに絞り、train metric の scalar 同期(numpy)を毎batchで起こさない。
+                long batchLoopStart = Stopwatch.GetTimestamp();
                 for (int start = 0; start < sampleCount; start += batchSize)
                 {
                     int count = Math.Min(batchSize, sampleCount - start);
@@ -241,40 +383,23 @@ namespace MineraScope
                     }
                     optimizer.apply_gradients(zip(grads, model.TrainableVariables.Select(v => (v as ResourceVariable)!)));
 
-                    float lossValue = lossT.numpy().ToArray<float>()[0];
-                    lossWeightedSum += (double)lossValue * count;
-                    lossStepSum += lossValue;
-                    steps++;
-
-                    // 260609Claude: 訓練 accuracy はネイティブ op で集計し、scalar だけ取り出す。
-                    var predIdx = tf.arg_max(predT, 1);
-                    var correctT = tf.reduce_sum(tf.cast(tf.equal(predIdx, tf.cast(yb, predIdx.dtype)), tf.int32));
-                    correct += correctT.numpy().ToArray<int>()[0];
-
-                    DisposeTensors(xb, yb, predT, lossT, predIdx, correctT);
+                    DisposeTensors(xb, yb, predT, lossT);
                     foreach (var g in grads)
                         g?.Dispose();
 
                     globalStep++;
                     // 260609Claude: fit の毎batch GC.Collect の代わりに N batch ごとにだけ回収して native handle を bound する。
-                    if (gcInterval > 0 && globalStep % gcInterval == 0)
-                        GC.Collect();
+                    gcController.AfterBatch(globalStep);
                 }
+                double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
 
+                // 260609Claude: EarlyStopping(monitor=val_loss) のため val_loss は毎epoch評価する。
+                long valStart = Stopwatch.GetTimestamp();
                 var (valLoss, valAccuracy) = EvaluateClassification(model, xVal, yVal, valCount, lossFn);
-                double trainLoss = sampleCount > 0 ? lossWeightedSum / sampleCount : 0d;
-                double trainLossStepMean = steps > 0 ? lossStepSum / steps : 0d;
-                double trainAccuracy = sampleCount > 0 ? (double)correct / sampleCount : 0d;
-
-                // 260609Claude: epoch loss は sample-weighted mean を主に、step mean も併記して fit との平均化方式を後で突き合わせる。
-                string logs = $"loss={FormatMetric(trainLoss)},accuracy={FormatMetric(trainAccuracy)},val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},loss_step_mean={FormatMetric(trainLossStepMean)}";
-                completedEpochs++;
-                lastEpoch = epoch;
-                lastEpochMetrics = logs;
-                TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} durationMs={epochStopwatch.ElapsedMilliseconds} {TensorFlowTrainingDebugLog.Clean(logs)}");
-                logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
+                double validationMs = Stopwatch.GetElapsedTime(valStart).TotalMilliseconds;
 
                 // 260609Claude: EarlyStopping(monitor=val_loss, min_delta=0, restore_best_weights) を自前で再現。
+                bool willStop = false;
                 if (valLoss < bestValLoss)
                 {
                     bestValLoss = valLoss;
@@ -282,6 +407,29 @@ namespace MineraScope
                     wait = 0;
                 }
                 else if (++wait >= patience)
+                    willStop = true;
+
+                // 260621Claude: train metric は N epoch ごと + 最終 epoch + early-stop epoch だけ full train forward で評価する。
+                bool evalTrainMetric = epoch % trainMetricInterval == 0 || epoch == epochs - 1 || willStop;
+                double trainEvalMs = 0d;
+                string logs;
+                if (evalTrainMetric)
+                {
+                    long trainEvalStart = Stopwatch.GetTimestamp();
+                    var (trainLoss, trainAccuracy) = EvaluateClassification(model, xAll, yAll, sampleCount, lossFn);
+                    trainEvalMs = Stopwatch.GetElapsedTime(trainEvalStart).TotalMilliseconds;
+                    logs = $"loss={FormatMetric(trainLoss)},accuracy={FormatMetric(trainAccuracy)},val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},trainMetricMode=epoch_end_interval";
+                }
+                else
+                    logs = $"val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},trainMetricSkipped=1,trainMetricMode=skipped";
+
+                completedEpochs++;
+                lastEpoch = epoch;
+                lastEpochMetrics = logs;
+                TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} trainEvalMs={FormatMetric(trainEvalMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
+                logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
+
+                if (willStop)
                 {
                     reportEpoch?.Invoke(epoch);
                     break;
@@ -316,8 +464,8 @@ namespace MineraScope
         {
             cancellationToken.ThrowIfCancellationRequested();
             string op = TensorFlowTrainingDebugLog.Clean(operationName);
-            int gcInterval = CustomLoopGcInterval;
-            TensorFlowTrainingDebugLog.Write("custom-loop-start", $"operation={op} kind=regression gcInterval={gcInterval}");
+            using var gcController = new AdaptiveTrainingGcController(operationName);
+            TensorFlowTrainingDebugLog.Write("custom-loop-start", $"operation={op} kind=regression gcMode={gcController.Mode} gcInterval={gcController.CurrentInterval}");
 
             var lossFn = keras.losses.MeanSquaredError();
             var optimizer = keras.optimizers.Adam();
@@ -339,6 +487,8 @@ namespace MineraScope
             string lastEpochMetrics = "";
             long globalStep = 0;
             var epochStopwatch = new Stopwatch();
+            // 260621Claude: train metric (loss/MAE) はログ用なので毎epochではなく N epoch ごと + 最終/early-stop epoch だけ評価する。
+            int trainMetricInterval = ReadIntEnv("MINERASCOPE_TRAIN_METRIC_INTERVAL", 10);
 
             for (int epoch = 0; epoch < epochs; epoch++)
             {
@@ -346,11 +496,8 @@ namespace MineraScope
                 epochStopwatch.Restart();
                 TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} customLoop=1 kind=regression");
 
-                double lossWeightedSum = 0d;
-                double lossStepSum = 0d;
-                double absoluteErrorSum = 0d;
-                int steps = 0;
-
+                // 260621Claude: batch loop は学習だけに絞り、train metric の scalar 同期(numpy)を毎batchで起こさない。
+                long batchLoopStart = Stopwatch.GetTimestamp();
                 for (int start = 0; start < sampleCount; start += batchSize)
                 {
                     int count = Math.Min(batchSize, sampleCount - start);
@@ -368,37 +515,21 @@ namespace MineraScope
                     }
                     optimizer.apply_gradients(zip(grads, model.TrainableVariables.Select(v => (v as ResourceVariable)!)));
 
-                    float lossValue = lossT.numpy().ToArray<float>()[0];
-                    lossWeightedSum += (double)lossValue * count;
-                    lossStepSum += lossValue;
-                    steps++;
-
-                    var errorT = tf.subtract(predT, yb);
-                    var absErrorT = tf.abs(errorT);
-                    var absErrorSumT = tf.reduce_sum(absErrorT);
-                    absoluteErrorSum += absErrorSumT.numpy().ToArray<float>()[0];
-
-                    DisposeTensors(xb, yb, predT, lossT, errorT, absErrorT, absErrorSumT);
+                    DisposeTensors(xb, yb, predT, lossT);
                     foreach (var g in grads)
                         g?.Dispose();
 
                     globalStep++;
-                    if (gcInterval > 0 && globalStep % gcInterval == 0)
-                        GC.Collect();
+                    gcController.AfterBatch(globalStep);
                 }
+                double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
 
+                // 260611Codex: EarlyStopping(monitor=val_loss) のため val_loss は毎epoch評価する。
+                long valStart = Stopwatch.GetTimestamp();
                 var (valLoss, valMae) = EvaluateRegression(model, xVal, yVal, valCount, outputCount, lossFn);
-                double trainLoss = sampleCount > 0 ? lossWeightedSum / sampleCount : 0d;
-                double trainLossStepMean = steps > 0 ? lossStepSum / steps : 0d;
-                double trainMae = sampleCount > 0 && outputCount > 0 ? absoluteErrorSum / sampleCount / outputCount : 0d;
+                double validationMs = Stopwatch.GetElapsedTime(valStart).TotalMilliseconds;
 
-                string logs = $"loss={FormatMetric(trainLoss)},mean_absolute_error={FormatMetric(trainMae)},val_loss={FormatMetric(valLoss)},val_mean_absolute_error={FormatMetric(valMae)},loss_step_mean={FormatMetric(trainLossStepMean)}";
-                completedEpochs++;
-                lastEpoch = epoch;
-                lastEpochMetrics = logs;
-                TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} durationMs={epochStopwatch.ElapsedMilliseconds} {TensorFlowTrainingDebugLog.Clean(logs)}");
-                logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
-
+                bool willStop = false;
                 if (valLoss < bestValLoss)
                 {
                     bestValLoss = valLoss;
@@ -406,6 +537,29 @@ namespace MineraScope
                     wait = 0;
                 }
                 else if (++wait >= patience)
+                    willStop = true;
+
+                // 260621Claude: train metric は N epoch ごと + 最終 epoch + early-stop epoch だけ full train forward で評価する。
+                bool evalTrainMetric = epoch % trainMetricInterval == 0 || epoch == epochs - 1 || willStop;
+                double trainEvalMs = 0d;
+                string logs;
+                if (evalTrainMetric)
+                {
+                    long trainEvalStart = Stopwatch.GetTimestamp();
+                    var (trainLoss, trainMae) = EvaluateRegression(model, xAll, yAll, sampleCount, outputCount, lossFn);
+                    trainEvalMs = Stopwatch.GetElapsedTime(trainEvalStart).TotalMilliseconds;
+                    logs = $"loss={FormatMetric(trainLoss)},mean_absolute_error={FormatMetric(trainMae)},val_loss={FormatMetric(valLoss)},val_mean_absolute_error={FormatMetric(valMae)},trainMetricMode=epoch_end_interval";
+                }
+                else
+                    logs = $"val_loss={FormatMetric(valLoss)},val_mean_absolute_error={FormatMetric(valMae)},trainMetricSkipped=1,trainMetricMode=skipped";
+
+                completedEpochs++;
+                lastEpoch = epoch;
+                lastEpochMetrics = logs;
+                TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} trainEvalMs={FormatMetric(trainEvalMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
+                logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
+
+                if (willStop)
                 {
                     reportEpoch?.Invoke(epoch);
                     break;
@@ -550,6 +704,9 @@ namespace MineraScope
 
             // 260605Claude: 全モデルを通した累計時間を測り、分類1個+回帰N個のうちどこに時間が偏るかを比較できるようにする。
             var runTimer = Stopwatch.StartNew();
+            // 260621Codex: run 全体の CPU 使用率を、論理 CPU 総量に対する割合で後から比較できるようにします。
+            using var runProcess = Process.GetCurrentProcess();
+            TimeSpan runCpuStart = runProcess.TotalProcessorTime;
             int regressionCount = orderedPools.Count(pool => pool.EndmemberNames.Count >= 2);
             TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience}");
 
@@ -583,7 +740,13 @@ namespace MineraScope
 
             cancellationToken.ThrowIfCancellationRequested();
             Log(" 指定された全鉱物の処理が完了しました");
-            TensorFlowTrainingDebugLog.Write("training-run-end", $"totalMs={runTimer.ElapsedMilliseconds}");
+            runProcess.Refresh();
+            long totalMs = runTimer.ElapsedMilliseconds;
+            long runCpuMs = (long)(runProcess.TotalProcessorTime - runCpuStart).TotalMilliseconds;
+            double averageLogicalCpuPercent = totalMs > 0 && Environment.ProcessorCount > 0
+                ? runCpuMs * 100d / totalMs / Environment.ProcessorCount
+                : 0d;
+            TensorFlowTrainingDebugLog.Write("training-run-end", $"totalMs={totalMs} runCpuMs={runCpuMs} avgLogicalCpuPercent={FormatMetric(averageLogicalCpuPercent)} logicalProcessors={Environment.ProcessorCount}");
         }
 
         // 260507Codex: manifest の endmemberFractions から回帰ラベルを作り、ファイル名パースを通らずに学習します。
