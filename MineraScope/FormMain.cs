@@ -29,6 +29,9 @@ namespace MineraScope
         private string[] _droppedSpectrumFiles = [];
         private bool _isModelComboRefreshing;
 
+        // 260621Claude: デフォルトのエクスポート名を「ドロップしたフォルダ名/ファイル名」から作るため、生のドロップパスを保持する。
+        private string[] _droppedRawPaths = [];
+
         // 260620Claude: ドロップ済みスペクトルの分類結果（真実源）。combo 選択表示・エクスポートはここから作る。
         private SpectrumPredictionBatch? _currentBatch;
 
@@ -228,6 +231,13 @@ namespace MineraScope
             form.Activate();
         }
 
+        // 260621Codex: Keep the spectrum dropdown cap in sync with the current form width.
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            AdjustSpectrumFileDropDownWidth();
+        }
+
         // 260620Claude: 判定中の追加ドロップは拒否し、msa/emsa/eds（フォルダ再帰含む）を複数受け付ける。
         private void FormMain_DragEnter(object? sender, DragEventArgs e)
         {
@@ -242,6 +252,8 @@ namespace MineraScope
 
             // 260620Codex: Remember exactly what was dropped so model changes can rerun without another drop.
             _droppedSpectrumFiles = files;
+            // 260621Claude: デフォルトのエクスポート名生成用に、ユーザーが実際にドロップした項目（フォルダ/ファイル）を覚えておく。
+            _droppedRawPaths = (e.Data?.GetData(DataFormats.FileDrop) as string[]) ?? [];
             await RunBatchPredictionAsync(_droppedSpectrumFiles);
         }
 
@@ -311,14 +323,15 @@ namespace MineraScope
             }
         }
 
-        // 260620Claude: combo へ「ファイル名 -> 予測 確信度」を bind し、先頭を選択して表示する。内部参照は SelectedIndex→batch.Items[index]。
+        // 260621Codex: combo へファイル名だけを bind し、内部参照は SelectedIndex→batch.Items[index] のまま保つ。
         private void BindBatchToCombo(SpectrumPredictionBatch batch, string preferredFilePath = "")
         {
             comboBoxSpectrumFile.BeginUpdate();
             comboBoxSpectrumFile.Items.Clear();
-            foreach (string label in BuildComboLabels(batch.Items))
-                comboBoxSpectrumFile.Items.Add(label);
+            foreach (var item in batch.Items)
+                comboBoxSpectrumFile.Items.Add(item.FileName);
             comboBoxSpectrumFile.EndUpdate();
+            AdjustSpectrumFileDropDownWidth();
 
             if (comboBoxSpectrumFile.Items.Count == 0)
                 return;
@@ -341,26 +354,24 @@ namespace MineraScope
             return -1;
         }
 
-        // 260620Claude: ファイル名が重複する時だけ親フォルダ名を付けて区別する。
-        private static string[] BuildComboLabels(IReadOnlyList<SpectrumPredictionItem> items)
+        // 260621Codex: Let the dropdown fit long labels, but cap it at the current form width.
+        private void AdjustSpectrumFileDropDownWidth()
         {
-            var nameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            foreach (var item in items)
-                nameCounts[item.FileName] = nameCounts.GetValueOrDefault(item.FileName) + 1;
+            if (comboBoxSpectrumFile is null)
+                return;
 
-            var labels = new string[items.Count];
-            for (int i = 0; i < items.Count; i++)
+            int requiredWidth = comboBoxSpectrumFile.Width;
+            foreach (object item in comboBoxSpectrumFile.Items)
             {
-                var item = items[i];
-                string name = nameCounts[item.FileName] > 1
-                    ? Path.Combine(Path.GetFileName(Path.GetDirectoryName(item.FilePath) ?? string.Empty), item.FileName)
-                    : item.FileName;
-                labels[i] = item.IsSuccess
-                    ? $"{name} -> {item.Classification!.PredictedMineral} {(item.Classification.Confidence * 100).ToString("F2", CultureInfo.InvariantCulture)}"
-                    : $"{name} -> (失敗)";
+                int itemWidth = TextRenderer.MeasureText(
+                    item.ToString() ?? string.Empty,
+                    comboBoxSpectrumFile.Font).Width;
+                requiredWidth = Math.Max(requiredWidth, itemWidth);
             }
 
-            return labels;
+            int paddedWidth = requiredWidth + SystemInformation.VerticalScrollBarWidth + 12;
+            int maxWidth = Math.Max(comboBoxSpectrumFile.Width, ClientSize.Width);
+            comboBoxSpectrumFile.DropDownWidth = Math.Min(paddedWidth, maxWidth);
         }
 
         // 260620Claude: combo 選択でスペクトルと結果を切り替える（Designer で SelectedIndexChanged を接続）。
@@ -553,7 +564,7 @@ namespace MineraScope
                 // 260620Claude: 「ファイルの種類」で CSV か TXT を選ぶ。選択は FilterIndex で判定する。
                 Filter = "CSV (*.csv)|*.csv|TXT (*.txt)|*.txt",
                 FilterIndex = 1,
-                FileName = $"{SanitizeFileName(_currentBatch.ModelName)}_{DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)}"
+                FileName = BuildDefaultExportFileName()
             };
             if (dialog.ShowDialog(this) != DialogResult.OK)
                 return;
@@ -600,5 +611,29 @@ namespace MineraScope
                 name = name.Replace(invalid, '_');
             return name;
         }
+
+        // 260621Claude: 既定エクスポート名は「ドロップしたもの_モデル名」。ドロップ元が取れない時はモデル名のみ。
+        private string BuildDefaultExportFileName()
+        {
+            string modelName = SanitizeFileName(_currentBatch?.ModelName ?? string.Empty);
+            string baseName = BuildDroppedBaseName();
+            return string.IsNullOrEmpty(baseName) ? modelName : $"{SanitizeFileName(baseName)}_{modelName}";
+        }
+
+        // 260621Claude: フォルダ1つ→フォルダ名、ファイル1つ→ファイル名、複数→先頭名_etcN（共通フォルダ非依存・ファイル名に日本語を入れない）。
+        private string BuildDroppedBaseName()
+        {
+            if (_droppedRawPaths.Length == 0)
+                return string.Empty;
+
+            string firstName = DroppedItemName(_droppedRawPaths[0]);
+            return _droppedRawPaths.Length == 1 ? firstName : $"{firstName}_etc{_droppedRawPaths.Length - 1}";
+        }
+
+        // 260621Claude: ドロップ項目の表示名。フォルダはフォルダ名、ファイルは拡張子なしのファイル名。
+        private static string DroppedItemName(string path)
+            => Directory.Exists(path)
+                ? Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                : Path.GetFileNameWithoutExtension(path);
     }
 }
