@@ -47,6 +47,9 @@ namespace MineraScope
 
         // 260514Codex: 分類モデルの層構成を 1 箇所に集め、入力長とクラス数だけを呼び出し側から渡します。
         // 260622Codex: eager logits 検証時だけ最終層を生 logits にし、通常保存モデルは従来どおり softmax 出力に保つ。
+        // 260622Claude: from_logits=True を分類学習の正式既定に確定(数値安定で精度向上、Keras推奨)。eager は常に logits 出力で学習し
+        //              ConvertClassificationLogitsModelToSoftmax で softmax 保存。graph 経路は内部で logits を直接扱う。
+        //              旧 from_logits=False(最終層 softmax で学習)は legacy として残さず削除した(追試が要れば git 履歴 commit 5a4f6f9 以前から復元)。
         private static Model CreateClassificationModel(int numClasses, bool outputLogits = false)
         {
             var layers = new List<ILayer>
@@ -363,7 +366,7 @@ namespace MineraScope
             Action<string> logAction,
             Action<int>? reportEpoch,
             CancellationToken cancellationToken,
-            bool classificationFromLogits = false)
+            bool classificationFromLogits = true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (operationName.StartsWith("regression", StringComparison.Ordinal))
@@ -378,11 +381,6 @@ namespace MineraScope
         // 260622Claude: env が起動方法(VS デバッグ/Release 直起動)で渡らないため、マーカーファイル `Documents\MineraScope\graph_classification.on` でも有効化できるようにする。A/B 計測用で、合格後に既定化する際は撤去する。
         private static bool IsGraphClassificationEnabled()
             => IsExperimentFlagEnabled("MINERASCOPE_GRAPH_CLASSIFICATION", "graph_classification.on");
-
-        // 260622Codex: eager の数値経路だけを stable logits に替えて、graph との精度差の原因を切り分ける実験用。
-        // 260622Codex: Experimentally switch only eager classification to the stable logits loss path.
-        private static bool IsEagerLogitsClassificationEnabled()
-            => IsExperimentFlagEnabled("MINERASCOPE_EAGER_LOGITS_CLASSIFICATION", "eager_logits_classification.on");
 
         // 260609Claude: 分類用 custom training loop。fit の毎batch GC.Collect を撤去し、batch-local tensor を明示 Dispose + N batch ごと GC に置換。
         //              GradientTape+Apply+Adam.apply_gradients で fit と同じ最適化を自前で回す。data は1回 tensor 化して tf.slice でバッチ化(NumSharp スライス回避)。
@@ -858,9 +856,9 @@ namespace MineraScope
             int batchSize = ReadIntEnv("MINERASCOPE_SMOKE_BATCH", 128);
             int valSamples = Math.Max(classes, samples / 5);
             bool graphClassification = IsGraphClassificationEnabled();
-            bool classificationFromLogits = !graphClassification && IsEagerLogitsClassificationEnabled();
+            // 260622Claude: from_logits=True が分類の正式既定。eager は常に logits 学習(後で softmax へ変換保存)、graph は内部で logits 直接。
+            bool classificationFromLogits = !graphClassification;
 
-            // 260622Codex: Let the smoke path exercise the same eager logits experiment switch as real classification training.
             TensorFlowTrainingDebugLog.Write("smoke-start", $"samples={samples} classes={classes} epochs={epochs} batchSize={batchSize} graphClassification={graphClassification} classificationFromLogits={classificationFromLogits}");
             log($"headless smoke test: samples={samples} classes={classes} epochs={epochs} batch={batchSize}");
 
@@ -940,10 +938,9 @@ namespace MineraScope
             TimeSpan runCpuStart = runProcess.TotalProcessorTime;
             int regressionCount = orderedPools.Count(pool => pool.EndmemberNames.Count >= 2);
             bool graphClassification = IsGraphClassificationEnabled();
-            bool eagerLogitsClassification = !graphClassification && IsEagerLogitsClassificationEnabled();
             // 260622Claude: graph 分類フラグが実際にプロセスへ届いたかを起動時に残し、A/B で経路を取り違えていないか即判別できるようにする。
-            // 260622Codex: Log the effective eager logits flag; graph wins when both experiment toggles are present.
-            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience} graphClassification={graphClassification} eagerLogitsClassification={eagerLogitsClassification}");
+            //              from_logits=True は eager の正式既定になったので専用フラグのログは不要(graphClassification が経路を完全に決める)。
+            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience} graphClassification={graphClassification}");
 
             // 260606Claude: 分類1個+回帰N個を1本のバーで表す。各モデルを BeginModel/CompleteModel で挟み、epoch 進捗は reporter.ReportEpoch で報告する。
             var reporter = new TrainingProgressReporter(progress, 1 + regressionCount, epochs);
@@ -1118,7 +1115,8 @@ namespace MineraScope
             var modelTimer = Stopwatch.StartNew();
             int totalSamples = trainingPools.Sum(p => p.Samples.Count);
             bool graphClassification = IsGraphClassificationEnabled();
-            bool classificationFromLogits = !graphClassification && IsEagerLogitsClassificationEnabled();
+            // 260622Claude: from_logits=True が分類の正式既定。eager は常に logits 学習(後で softmax へ変換保存)、graph は内部で logits 直接。
+            bool classificationFromLogits = !graphClassification;
             TensorFlowTrainingDebugLog.Write("model-train-start", $"op={op} epochs={epochs} batchSize={batchSize} patience={patience} pools={trainingPools.Count} samples={totalSamples} graphClassification={graphClassification} classificationFromLogits={classificationFromLogits}");
 
             TensorFlowTrainingDebugLog.Write("clear-session-before", $"op={op}");
