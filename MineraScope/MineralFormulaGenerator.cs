@@ -1,8 +1,6 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Text;
-using System.Xml.Serialization;
 
 namespace MineraScope
 {
@@ -18,15 +16,17 @@ namespace MineraScope
             if (predictedRatios == null || predictedRatios.Count == 0)
                 return "";
 
-            string xmlPath = Path.Combine(assemblyPath, "MineralDatabase.xml");
-            if (!File.Exists(xmlPath))
+            // 260621Claude: 組成式も本体と同じ正本(MineralDatabaseRepository=ソースの Original)から読む。
+            //               以前は bin の古い MineralDatabase.xml を直接読んでおり、Original を直接編集すると名前がラベルとズレて組成式が空になっていた。
+            SolidSolution[] solidSolutions;
+            try
+            {
+                solidSolutions = new MineralDatabaseRepository(assemblyPath).Load();
+            }
+            catch
+            {
                 return "";
-
-            XmlSerializer xml = new(typeof(SolidSolution[]));
-            using var fs = new FileStream(xmlPath, FileMode.Open);
-            var solidSolutions = xml.Deserialize(fs) as SolidSolution[];
-            if (solidSolutions == null)
-                return "";
+            }
 
             var targetGroup = solidSolutions.FirstOrDefault(solution => solution.Name == targetMineralName);
             if (targetGroup == null)
