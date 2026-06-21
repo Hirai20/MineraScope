@@ -26,31 +26,11 @@ namespace MineraScope
                     sb.Append("\r\n");
                 first = false;
 
-                var classification = item.Classification!;
                 AppendRow(sb, "ファイルパス", item.FilePath);
                 AppendRow(sb, "使用モデル", batch.ModelName);
-                AppendRow(sb, "分類結果", classification.PredictedMineral);
-
-                // 260621Claude: 並び順は画像に合わせ、端成分比率→化学組成式→詳細確率の順にする（確率は行数が可変なので一番下）。
-                if (item.Endmembers.Count > 0)
-                {
-                    AppendRow(sb, "【端成分比率】", string.Empty);
-                    foreach (var component in item.Endmembers)
-                        AppendRow(sb, component.ComponentName, Percent(component.Ratio));
-                }
-
-                if (!string.IsNullOrEmpty(item.ChemicalFormula))
-                    AppendRow(sb, "化学組成式", item.ChemicalFormula);
-
-                AppendRow(sb, "【詳細確率】", string.Empty);
-                foreach (var probability in classification.Probabilities)
-                {
-                    // 260620Claude: テキストボックスと同じく 0.00 になる確率は出さない。
-                    string percent = Percent(probability.Confidence);
-                    if (percent == "0.00")
-                        continue;
-                    AppendRow(sb, probability.MineralName, percent);
-                }
+                // 260621Claude: 並び順・0.00隠し・%整形は BlockFormatter を唯一の真実源にし、CSV は各行を2列へ落とすだけ。
+                foreach (var row in SpectrumPredictionBlockFormatter.EnumerateBodyRows(item))
+                    AppendRow(sb, row.Label, row.Value);
             }
 
             File.WriteAllText(path, sb.ToString(), Utf8Bom);
@@ -97,9 +77,28 @@ namespace MineraScope
             File.WriteAllText(path, sb.ToString(), Utf8Bom);
         }
 
-        // 260620Claude: % 2桁。確率・端成分比率は 0-1 を 100倍して F2 で出す。
-        private static string Percent(float ratio)
-            => (ratio * 100).ToString("F2", CultureInfo.InvariantCulture);
+        // 260621Claude: 既定エクスポート名 =「ドロップしたもの_モデル名」。フォルダ1つ→フォルダ名/ファイル1つ→ファイル名/複数→先頭名_etcN。ドロップ元不明はモデル名のみ。
+        public static string BuildDefaultFileName(string modelName, IReadOnlyList<string> droppedPaths)
+        {
+            string model = SpectrumPoolRepository.SanitizeFileName(modelName);
+            string baseName = BuildDroppedBaseName(droppedPaths);
+            return baseName.Length == 0 ? model : $"{SpectrumPoolRepository.SanitizeFileName(baseName)}_{model}";
+        }
+
+        private static string BuildDroppedBaseName(IReadOnlyList<string> droppedPaths)
+        {
+            if (droppedPaths.Count == 0)
+                return string.Empty;
+
+            string firstName = DroppedItemName(droppedPaths[0]);
+            return droppedPaths.Count == 1 ? firstName : $"{firstName}_etc{droppedPaths.Count - 1}";
+        }
+
+        // 260621Claude: ドロップ項目の表示名。フォルダはフォルダ名、ファイルは拡張子なしのファイル名。
+        private static string DroppedItemName(string path)
+            => Directory.Exists(path)
+                ? Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+                : Path.GetFileNameWithoutExtension(path);
 
         // 260620Claude: RFC4180。カンマ・引用符・改行を含む場合だけ引用し、内部の引用符は二重化する。
         private static string Csv(string value)

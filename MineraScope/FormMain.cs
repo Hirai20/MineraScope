@@ -564,7 +564,7 @@ namespace MineraScope
                 // 260620Claude: 「ファイルの種類」で CSV か TXT を選ぶ。選択は FilterIndex で判定する。
                 Filter = "CSV (*.csv)|*.csv|TXT (*.txt)|*.txt",
                 FilterIndex = 1,
-                FileName = BuildDefaultExportFileName()
+                FileName = SpectrumPredictionExporter.BuildDefaultFileName(_currentBatch.ModelName, _droppedRawPaths)
             };
             if (dialog.ShowDialog(this) != DialogResult.OK)
                 return;
@@ -601,39 +601,5 @@ namespace MineraScope
                 "エクスポート", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        // 260620Claude: モデル名を既定ファイル名に使えるよう、ファイル名に使えない文字を _ へ置換する。
-        private static string SanitizeFileName(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-                return "prediction";
-
-            foreach (char invalid in Path.GetInvalidFileNameChars())
-                name = name.Replace(invalid, '_');
-            return name;
-        }
-
-        // 260621Claude: 既定エクスポート名は「ドロップしたもの_モデル名」。ドロップ元が取れない時はモデル名のみ。
-        private string BuildDefaultExportFileName()
-        {
-            string modelName = SanitizeFileName(_currentBatch?.ModelName ?? string.Empty);
-            string baseName = BuildDroppedBaseName();
-            return string.IsNullOrEmpty(baseName) ? modelName : $"{SanitizeFileName(baseName)}_{modelName}";
-        }
-
-        // 260621Claude: フォルダ1つ→フォルダ名、ファイル1つ→ファイル名、複数→先頭名_etcN（共通フォルダ非依存・ファイル名に日本語を入れない）。
-        private string BuildDroppedBaseName()
-        {
-            if (_droppedRawPaths.Length == 0)
-                return string.Empty;
-
-            string firstName = DroppedItemName(_droppedRawPaths[0]);
-            return _droppedRawPaths.Length == 1 ? firstName : $"{firstName}_etc{_droppedRawPaths.Length - 1}";
-        }
-
-        // 260621Claude: ドロップ項目の表示名。フォルダはフォルダ名、ファイルは拡張子なしのファイル名。
-        private static string DroppedItemName(string path)
-            => Directory.Exists(path)
-                ? Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
-                : Path.GetFileNameWithoutExtension(path);
     }
 }
