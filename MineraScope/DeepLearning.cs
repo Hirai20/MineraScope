@@ -46,13 +46,32 @@ namespace MineraScope
         private const int SpectrumLength = SpectrumDataLoader.SpectrumLength;
 
         // 260514Codex: 分類モデルの層構成を 1 箇所に集め、入力長とクラス数だけを呼び出し側から渡します。
-        private static Model CreateClassificationModel(int numClasses) =>
-            keras.Sequential(new List<ILayer>
+        // 260622Codex: eager logits 検証時だけ最終層を生 logits にし、通常保存モデルは従来どおり softmax 出力に保つ。
+        private static Model CreateClassificationModel(int numClasses, bool outputLogits = false)
+        {
+            var layers = new List<ILayer>
             {
                 keras.layers.Dense(128, activation: "relu", input_shape: new Shape(SpectrumLength)),
-                keras.layers.Dense(64, activation: "relu"),
-                keras.layers.Dense(numClasses, activation: "softmax")
-            });
+                keras.layers.Dense(64, activation: "relu")
+            };
+            layers.Add(outputLogits
+                ? keras.layers.Dense(numClasses)
+                : keras.layers.Dense(numClasses, activation: "softmax"));
+            return keras.Sequential(layers);
+        }
+
+        // 260622Codex: logits 実験で保存モデルの推論互換性を壊さないよう、学習後の重みを softmax モデルへ移す。
+        private static Model ConvertClassificationLogitsModelToSoftmax(Model logitsModel, int numClasses)
+        {
+            var softmaxModel = CreateClassificationModel(numClasses);
+            softmaxModel.build(new Shape(-1, SpectrumLength));
+            softmaxModel.set_weights(logitsModel.get_weights());
+            softmaxModel.compile(
+                optimizer: keras.optimizers.Adam(),
+                loss: CreateSparseCategoricalCrossentropy(fromLogits: false),
+                metrics: new[] { "accuracy" });
+            return softmaxModel;
+        }
 
         // 260514Codex: 回帰モデルの層構成を 1 箇所に集め、端成分数だけを呼び出し側から渡します。
         private static Model CreateRegressionModel(int numComponents) =>
@@ -90,6 +109,44 @@ namespace MineraScope
 
         // 260605Codex: Patience is intended to watch validation/test loss rather than training loss.
         private const string EarlyStoppingMonitor = "val_loss";
+
+        // 260622Codex: Read A/B env and marker toggles uniformly; explicit OFF wins over marker ON.
+        private static bool IsExperimentFlagEnabled(string environmentVariable, string markerFileName)
+        {
+            string? value = Environment.GetEnvironmentVariable(environmentVariable);
+            if (IsEnabledFlag(value))
+                return true;
+
+            if (IsDisabledFlag(value))
+                return false;
+
+            string offMarkerFileName = markerFileName.EndsWith(".on", StringComparison.OrdinalIgnoreCase)
+                ? markerFileName[..^3] + ".off"
+                : markerFileName + ".off";
+            if (File.Exists(GetExperimentMarkerPath(offMarkerFileName)))
+                return false;
+
+            return File.Exists(GetExperimentMarkerPath(markerFileName));
+        }
+
+        private static bool IsEnabledFlag(string? value) =>
+            string.Equals(value, "1", StringComparison.Ordinal)
+            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "on", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsDisabledFlag(string? value) =>
+            string.Equals(value, "0", StringComparison.Ordinal)
+            || string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, "off", StringComparison.OrdinalIgnoreCase);
+
+        private static string GetExperimentMarkerPath(string fileName) =>
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "MineraScope",
+                fileName);
+
+        private static ILossFunc CreateSparseCategoricalCrossentropy(bool fromLogits) =>
+            keras.losses.SparseCategoricalCrossentropy(from_logits: fromLogits);
 
         // 260612Claude: 分類・回帰とも自前 GradientTape ループで学習する(fit の毎batch強制 GC.Collect を撤去するのが目的)。
         //              fit/custom の等価性(bit-identical)と連続run leak を検証済みのため、旧 fit へ戻す安全弁トグルは撤去した。
@@ -305,13 +362,27 @@ namespace MineraScope
             string operationName,
             Action<string> logAction,
             Action<int>? reportEpoch,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool classificationFromLogits = false)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (operationName.StartsWith("regression", StringComparison.Ordinal))
                 return RunCustomRegressionLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
-            return RunCustomClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
+            // 260621Claude: 分類は env で v1 Graph/Session 経路(高速化の本命)へ切替可能。既定は従来 eager custom loop(検証付き同等ゲートを通すまで本番不変)。
+            if (IsGraphClassificationEnabled())
+                return RunGraphClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
+            return RunCustomClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken, classificationFromLogits);
         }
+
+        // 260621Claude: 分類の graph 学習経路を有効化する(既定OFF)。実データで eager と A/B して同等性ゲートを通すまで本番挙動を変えないため。
+        // 260622Claude: env が起動方法(VS デバッグ/Release 直起動)で渡らないため、マーカーファイル `Documents\MineraScope\graph_classification.on` でも有効化できるようにする。A/B 計測用で、合格後に既定化する際は撤去する。
+        private static bool IsGraphClassificationEnabled()
+            => IsExperimentFlagEnabled("MINERASCOPE_GRAPH_CLASSIFICATION", "graph_classification.on");
+
+        // 260622Codex: eager の数値経路だけを stable logits に替えて、graph との精度差の原因を切り分ける実験用。
+        // 260622Codex: Experimentally switch only eager classification to the stable logits loss path.
+        private static bool IsEagerLogitsClassificationEnabled()
+            => IsExperimentFlagEnabled("MINERASCOPE_EAGER_LOGITS_CLASSIFICATION", "eager_logits_classification.on");
 
         // 260609Claude: 分類用 custom training loop。fit の毎batch GC.Collect を撤去し、batch-local tensor を明示 Dispose + N batch ごと GC に置換。
         //              GradientTape+Apply+Adam.apply_gradients で fit と同じ最適化を自前で回す。data は1回 tensor 化して tf.slice でバッチ化(NumSharp スライス回避)。
@@ -328,14 +399,15 @@ namespace MineraScope
             string operationName,
             Action<string> logAction,
             Action<int>? reportEpoch,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool fromLogits)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string op = TensorFlowTrainingDebugLog.Clean(operationName);
             using var gcController = new AdaptiveTrainingGcController(operationName);
-            TensorFlowTrainingDebugLog.Write("custom-loop-start", $"operation={op} gcMode={gcController.Mode} gcInterval={gcController.CurrentInterval}");
+            TensorFlowTrainingDebugLog.Write("custom-loop-start", $"operation={op} fromLogits={fromLogits} gcMode={gcController.Mode} gcInterval={gcController.CurrentInterval}");
 
-            var lossFn = keras.losses.SparseCategoricalCrossentropy();
+            var lossFn = CreateSparseCategoricalCrossentropy(fromLogits);
             var optimizer = keras.optimizers.Adam();
 
             // 260609Claude: 毎batchの NumSharp スライスを避けるため、学習データと検証データを1回だけ native tensor 化する。
@@ -444,6 +516,162 @@ namespace MineraScope
 
             DisposeTensors(xAll, yAll, xVal, yVal);
             TensorFlowTrainingDebugLog.Write("custom-loop-end", $"operation={op} trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
+            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics);
+        }
+
+        // 260621Claude: 分類の v1-style Graph/Session 学習(高速化の本命)。eager custom loop の per-batch dispatch を畳んで大幅高速化する。
+        //   - to_graph は外部変数を capture できないため、manual Dense(W/b を自前変数)で graph を組み Session.run で train op を回す。
+        //   - 研究比較のため: 初期重みは渡された Keras model の get_weights() を注入し、Adam hyperparams を Keras Adam と一致(epsilon=1e-7)させる。
+        //   - eager は global 無効化せず graph.as_default() スコープ内だけ graph モード。学習後 best weights を model に set_weights し、
+        //     呼び出し側の evaluate/save(load_model 互換) をそのまま使う。★Dense-only 前提。
+        //   - 全データは graph 内 constant に置き start だけ feed して gather(tf.slice は動的 begin 不可)。巨大データで GraphDef が問題化したら feed-once Variable へ。
+        private static TrainingFitResult RunGraphClassificationLoop(
+            Model model,
+            NDArray xTrain,
+            NDArray yTrain,
+            NDArray xValidation,
+            NDArray yValidation,
+            int batchSize,
+            int epochs,
+            int patience,
+            string operationName,
+            Action<string> logAction,
+            Action<int>? reportEpoch,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string op = TensorFlowTrainingDebugLog.Clean(operationName);
+            int trainMetricInterval = ReadIntEnv("MINERASCOPE_TRAIN_METRIC_INTERVAL", 10);
+
+            // 初期重みを eager で確定させる(eager 経路と同一初期化にする)。未 build なら build してから取り出す。
+            int features = (int)xTrain.shape[1];
+            var initWeights = model.get_weights();
+            if (initWeights == null || initWeights.Count == 0)
+            {
+                model.build(new Shape(-1, features));
+                initWeights = model.get_weights();
+            }
+            TensorFlowTrainingDebugLog.Write("graph-loop-start", $"operation={op} engine=graph weights={initWeights.Count}");
+
+            int sampleCount = (int)xTrain.shape[0];
+            int valCount = (int)xValidation.shape[0];
+            List<NDArray>? bestWeights = null;
+            double bestValLoss = double.PositiveInfinity;
+            int wait = 0;
+            int completedEpochs = 0;
+            int lastEpoch = -1;
+            string lastEpochMetrics = "";
+            var epochStopwatch = new Stopwatch();
+
+            var graph = tf.Graph();
+            graph.as_default();
+            try
+            {
+                var dataX = tf.constant(xTrain);
+                var dataY = tf.constant(yTrain, dtype: TF_DataType.TF_INT32);
+                var valX = tf.constant(xValidation);
+                var valY = tf.constant(yValidation, dtype: TF_DataType.TF_INT32);
+
+                var W1 = tf.Variable(tf.constant(initWeights[0]), name: "W1");
+                var b1 = tf.Variable(tf.constant(initWeights[1]), name: "b1");
+                var W2 = tf.Variable(tf.constant(initWeights[2]), name: "W2");
+                var b2 = tf.Variable(tf.constant(initWeights[3]), name: "b2");
+                var W3 = tf.Variable(tf.constant(initWeights[4]), name: "W3");
+                var b3 = tf.Variable(tf.constant(initWeights[5]), name: "b3");
+                var weightVars = new[] { W1, b1, W2, b2, W3, b3 };
+
+                Tensor Forward(Tensor x)
+                {
+                    var h1 = tf.nn.relu(tf.matmul(x, W1.AsTensor()) + b1.AsTensor());
+                    var h2 = tf.nn.relu(tf.matmul(h1, W2.AsTensor()) + b2.AsTensor());
+                    return tf.matmul(h2, W3.AsTensor()) + b3.AsTensor();
+                }
+
+                var startPh = tf.placeholder(tf.int32, new Shape(Array.Empty<int>()), "start");
+                var idx = tf.range(startPh, tf.add(startPh, tf.constant(batchSize)));
+                var trainLoss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(tf.gather(dataY, idx), Forward(tf.gather(dataX, idx))));
+                // 260621Claude: Keras Adam と同一の hyperparams(epsilon=1e-7)で minimize し、研究比較の同等性を保つ。
+                var optimizer = new Tensorflow.Train.AdamOptimizer(0.001f, 0.9f, 0.999f, 1e-7f, false, TF_DataType.TF_FLOAT, "Adam");
+                var trainOp = optimizer.minimize(trainLoss);
+
+                var valLogits = Forward(valX);
+                var valLossOp = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(valY, valLogits));
+                var valCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(valLogits, 1), tf.cast(valY, tf.int64)), tf.int32));
+
+                var trainLogitsFull = Forward(dataX);
+                var trainLossFullOp = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(dataY, trainLogitsFull));
+                var trainCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(trainLogitsFull, 1), tf.cast(dataY, tf.int64)), tf.int32));
+
+                // 260621Claude: minimize 後に init を作って Adam の slot variables まで初期化する。
+                var init = tf.global_variables_initializer();
+                using var sess = tf.Session(graph);
+                sess.run(init);
+
+                for (int epoch = 0; epoch < epochs; epoch++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    epochStopwatch.Restart();
+                    TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} engine=graph");
+
+                    long batchLoopStart = Stopwatch.GetTimestamp();
+                    for (int start = 0; start + batchSize <= sampleCount; start += batchSize)
+                        sess.run(trainOp, new FeedItem(startPh, start));
+                    double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
+
+                    long valStart = Stopwatch.GetTimestamp();
+                    double valLoss = sess.run(valLossOp).ToArray<float>()[0];
+                    double valAccuracy = valCount > 0 ? sess.run(valCorrectOp).ToArray<int>()[0] / (double)valCount : 0d;
+                    double validationMs = Stopwatch.GetElapsedTime(valStart).TotalMilliseconds;
+
+                    bool willStop = false;
+                    if (valLoss < bestValLoss)
+                    {
+                        bestValLoss = valLoss;
+                        bestWeights = weightVars.Select(v => sess.run(v.AsTensor())).ToList();
+                        wait = 0;
+                    }
+                    else if (++wait >= patience)
+                        willStop = true;
+
+                    bool evalTrainMetric = epoch % trainMetricInterval == 0 || epoch == epochs - 1 || willStop;
+                    double trainEvalMs = 0d;
+                    string logs;
+                    if (evalTrainMetric)
+                    {
+                        long trainEvalStart = Stopwatch.GetTimestamp();
+                        double trainLossFull = sess.run(trainLossFullOp).ToArray<float>()[0];
+                        double trainAccuracy = sampleCount > 0 ? sess.run(trainCorrectOp).ToArray<int>()[0] / (double)sampleCount : 0d;
+                        trainEvalMs = Stopwatch.GetElapsedTime(trainEvalStart).TotalMilliseconds;
+                        logs = $"loss={FormatMetric(trainLossFull)},accuracy={FormatMetric(trainAccuracy)},val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},trainMetricMode=epoch_end_interval";
+                    }
+                    else
+                        logs = $"val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},trainMetricSkipped=1,trainMetricMode=skipped";
+
+                    completedEpochs++;
+                    lastEpoch = epoch;
+                    lastEpochMetrics = logs;
+                    TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} engine=graph durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} trainEvalMs={FormatMetric(trainEvalMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
+                    logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
+
+                    if (willStop)
+                    {
+                        reportEpoch?.Invoke(epoch);
+                        break;
+                    }
+
+                    reportEpoch?.Invoke(epoch);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+            }
+            finally
+            {
+                graph.Exit();
+            }
+
+            // 260621Claude: best weights を eager の Keras model に書き戻し、呼び出し側の evaluate/save をそのまま使う。
+            if (bestWeights != null)
+                model.set_weights(bestWeights);
+            TensorFlowTrainingDebugLog.Write("graph-loop-end", $"operation={op} engine=graph trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
             return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics);
         }
 
@@ -629,8 +857,11 @@ namespace MineraScope
             int epochs = ReadIntEnv("MINERASCOPE_SMOKE_EPOCHS", 5);
             int batchSize = ReadIntEnv("MINERASCOPE_SMOKE_BATCH", 128);
             int valSamples = Math.Max(classes, samples / 5);
+            bool graphClassification = IsGraphClassificationEnabled();
+            bool classificationFromLogits = !graphClassification && IsEagerLogitsClassificationEnabled();
 
-            TensorFlowTrainingDebugLog.Write("smoke-start", $"samples={samples} classes={classes} epochs={epochs} batchSize={batchSize}");
+            // 260622Codex: Let the smoke path exercise the same eager logits experiment switch as real classification training.
+            TensorFlowTrainingDebugLog.Write("smoke-start", $"samples={samples} classes={classes} epochs={epochs} batchSize={batchSize} graphClassification={graphClassification} classificationFromLogits={classificationFromLogits}");
             log($"headless smoke test: samples={samples} classes={classes} epochs={epochs} batch={batchSize}");
 
             tf.set_random_seed(42);
@@ -643,14 +874,14 @@ namespace MineraScope
             var (xTrain, yTrain) = MakeSyntheticClassificationData(samples, classes, centers, rng);
             var (xTest, yTest) = MakeSyntheticClassificationData(valSamples, classes, centers, rng);
 
-            var model = CreateClassificationModel(classes);
+            var model = CreateClassificationModel(classes, outputLogits: classificationFromLogits);
             model.compile(
                 optimizer: keras.optimizers.Adam(),
-                loss: keras.losses.SparseCategoricalCrossentropy(),
+                loss: CreateSparseCategoricalCrossentropy(classificationFromLogits),
                 metrics: new[] { "accuracy" });
 
             var sw = Stopwatch.StartNew();
-            var result = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, 10, "classification:Smoke", log, null, default);
+            var result = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, 10, "classification:Smoke", log, null, default, classificationFromLogits);
             sw.Stop();
 
             TensorFlowTrainingDebugLog.Write("smoke-end", $"totalMs={sw.ElapsedMilliseconds} trainedEpochs={result.CompletedEpochs} finalMetrics={TensorFlowTrainingDebugLog.Clean(result.LastEpochMetrics)}");
@@ -708,7 +939,11 @@ namespace MineraScope
             using var runProcess = Process.GetCurrentProcess();
             TimeSpan runCpuStart = runProcess.TotalProcessorTime;
             int regressionCount = orderedPools.Count(pool => pool.EndmemberNames.Count >= 2);
-            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience}");
+            bool graphClassification = IsGraphClassificationEnabled();
+            bool eagerLogitsClassification = !graphClassification && IsEagerLogitsClassificationEnabled();
+            // 260622Claude: graph 分類フラグが実際にプロセスへ届いたかを起動時に残し、A/B で経路を取り違えていないか即判別できるようにする。
+            // 260622Codex: Log the effective eager logits flag; graph wins when both experiment toggles are present.
+            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience} graphClassification={graphClassification} eagerLogitsClassification={eagerLogitsClassification}");
 
             // 260606Claude: 分類1個+回帰N個を1本のバーで表す。各モデルを BeginModel/CompleteModel で挟み、epoch 進捗は reporter.ReportEpoch で報告する。
             var reporter = new TrainingProgressReporter(progress, 1 + regressionCount, epochs);
@@ -882,7 +1117,9 @@ namespace MineraScope
             const string op = "classification:AllMinerals";
             var modelTimer = Stopwatch.StartNew();
             int totalSamples = trainingPools.Sum(p => p.Samples.Count);
-            TensorFlowTrainingDebugLog.Write("model-train-start", $"op={op} epochs={epochs} batchSize={batchSize} patience={patience} pools={trainingPools.Count} samples={totalSamples}");
+            bool graphClassification = IsGraphClassificationEnabled();
+            bool classificationFromLogits = !graphClassification && IsEagerLogitsClassificationEnabled();
+            TensorFlowTrainingDebugLog.Write("model-train-start", $"op={op} epochs={epochs} batchSize={batchSize} patience={patience} pools={trainingPools.Count} samples={totalSamples} graphClassification={graphClassification} classificationFromLogits={classificationFromLogits}");
 
             TensorFlowTrainingDebugLog.Write("clear-session-before", $"op={op}");
             keras.backend.clear_session();
@@ -913,19 +1150,19 @@ namespace MineraScope
             Log($"テストデータ: {xTest.shape[0]}\n");
 
             var buildTimer = Stopwatch.StartNew();
-            var model = CreateClassificationModel(encoder.Count);
+            var model = CreateClassificationModel(encoder.Count, outputLogits: classificationFromLogits);
 
             model.compile(
                 optimizer: keras.optimizers.Adam(),
-                loss: keras.losses.SparseCategoricalCrossentropy(),
+                loss: CreateSparseCategoricalCrossentropy(classificationFromLogits),
                 metrics: new[] { "accuracy" }
             );
-            TensorFlowTrainingDebugLog.Write("build-compile-end", $"op={op} durationMs={buildTimer.ElapsedMilliseconds}");
+            TensorFlowTrainingDebugLog.Write("build-compile-end", $"op={op} durationMs={buildTimer.ElapsedMilliseconds} classificationOutputLogits={classificationFromLogits}");
 
             Log("訓練中...");
             var fitTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("fit-start", $"op={op}");
-            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken);
+            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken, classificationFromLogits);
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
             // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
@@ -938,7 +1175,7 @@ namespace MineraScope
 
             double testLoss = GetMetricValue(score, 0, "loss");
             double testAccuracy = GetMetricValue(score, 1, "accuracy");
-            TensorFlowTrainingDebugLog.Write("evaluate-end", $"op={op} durationMs={evalTimer.ElapsedMilliseconds} testLoss={FormatMetric(testLoss)} testAccuracy={FormatMetric(testAccuracy)} trainedEpochs={fitResult.CompletedEpochs}");
+            TensorFlowTrainingDebugLog.Write("evaluate-end", $"op={op} durationMs={evalTimer.ElapsedMilliseconds} testLoss={FormatMetric(testLoss)} testAccuracy={FormatMetric(testAccuracy)} trainedEpochs={fitResult.CompletedEpochs} classificationFromLogits={classificationFromLogits}");
 
             Log($"Test loss: {testLoss:F4}");
             Log($"Test accuracy: {testAccuracy * 100:F2}%");
@@ -949,6 +1186,12 @@ namespace MineraScope
 
             string modelTypePath = Path.Combine(outputPath, "modelType.txt");
             File.WriteAllText(modelTypePath, "classification");
+            if (classificationFromLogits)
+            {
+                // 260622Codex: Preserve prediction-service compatibility by saving a softmax-output model with the learned logits weights.
+                TensorFlowTrainingDebugLog.Write("classification-logits-save-convert", $"op={op}");
+                model = ConvertClassificationLogitsModelToSoftmax(model, encoder.Count);
+            }
             cancellationToken.ThrowIfCancellationRequested();
             var saveTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("save-start", $"op={op}");
