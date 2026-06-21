@@ -53,13 +53,15 @@ namespace MineraScope
             using var process = Process.GetCurrentProcess();
             long workingSetMb = process.WorkingSet64 / (1024 * 1024);
             long privateMb = process.PrivateMemorySize64 / (1024 * 1024);
+            // 260621Codex: CPU をどれだけ使えたか後で集計できるよう、プロセス累積 CPU 時間も残します。
+            long processCpuMs = (long)process.TotalProcessorTime.TotalMilliseconds;
             // 260608Claude: Server GC 計測用に GC モード・累積 pause 時間・累積 alloc を追加する。precise:false は計測自身が GC 圧/コストを足さないため。
             long gcPauseMs = (long)GC.GetTotalPauseDuration().TotalMilliseconds;
             long allocMb = GC.GetTotalAllocatedBytes(false) / (1024 * 1024);
             string cleanedDetails = Clean(details);
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"{DateTime.Now:O}\tsession={_sessionId}\tevent={eventName}\tmanagedThread={Environment.CurrentManagedThreadId}\tnativeThread={CurrentNativeThreadId}\tprocessThreads={process.Threads.Count}\tworkingSetMB={workingSetMb}\tprivateMB={privateMb}\tgc0={GC.CollectionCount(0)}\tgc1={GC.CollectionCount(1)}\tgc2={GC.CollectionCount(2)}\tgcServer={GCSettings.IsServerGC}\tgcPauseMs={gcPauseMs}\tallocMB={allocMb}\t{cleanedDetails}");
+                $"{DateTime.Now:O}\tsession={_sessionId}\tevent={eventName}\tmanagedThread={Environment.CurrentManagedThreadId}\tnativeThread={CurrentNativeThreadId}\tprocessThreads={process.Threads.Count}\tprocessCpuMs={processCpuMs}\tworkingSetMB={workingSetMb}\tprivateMB={privateMb}\tgc0={GC.CollectionCount(0)}\tgc1={GC.CollectionCount(1)}\tgc2={GC.CollectionCount(2)}\tgcServer={GCSettings.IsServerGC}\tgcPauseMs={gcPauseMs}\tallocMB={allocMb}\t{cleanedDetails}");
         }
 
         private void AppendLine(string line)
