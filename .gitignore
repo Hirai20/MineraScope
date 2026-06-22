@@ -27,3 +27,5 @@ CLAUDE.md
 .mcp.json
 # 260606Claude: launchSettings.json is environment-specific; keep it untracked.
 MineraScope/Properties/launchSettings.json
+# 260622Claude: 個人の勉強用フォルダ (見返し・資料作成用) はリポジトリ管理外にする。
+/勉強用/
