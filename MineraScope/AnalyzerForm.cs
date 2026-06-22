@@ -861,13 +861,25 @@ namespace MineraScope
             {
                 "クリック地点の分析結果",
                 "",
-                $"判定鉱物: {result.PredictedMineral}",
+                $"判定鉱物: {result.DisplayMineralName}",
                 $"信頼度: {confidenceText}%",
                 positionText,
                 $"ビニング: {spectrum.RequestedBinSize} x {spectrum.RequestedBinSize}",
                 "",
                 "上位候補:",
             };
+
+            if (result.IsUnknown)
+            {
+                // 260622Codex: Click details show the closed-set candidate and open-set distance for unknown pixels.
+                lines.Add($"Open-set: {MineralUnknownDetector.UnknownDisplayName}");
+                lines.Add($"Top-1 candidate: {result.PredictedMineral}");
+                if (!string.IsNullOrWhiteSpace(result.NearestKnownMineral))
+                    lines.Add($"Nearest known: {result.NearestKnownMineral}");
+                if (result.UnknownScore.HasValue && result.UnknownThreshold.HasValue)
+                    lines.Add($"Unknown score: {result.UnknownScore.Value:G6} / {result.UnknownThreshold.Value:G6}");
+                lines.Add("");
+            }
 
             int rank = 1;
             foreach (var probability in result.Probabilities)

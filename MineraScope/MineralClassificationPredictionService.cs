@@ -13,6 +13,9 @@ namespace MineraScope
         private string? _loadedClassificationPath;
         private IModel? _classificationModel;
         private string[]? _labelNames;
+        // 260622Codex: Optional open-set detector state is cached with the loaded classifier model.
+        private DenseClassificationFeatureExtractor? _featureExtractor;
+        private MineralUnknownDetector? _unknownDetector;
         // 260604Codex: Track the thread that loaded the cached model so TF.NET ThreadLocal context moves are visible.
         private int _modelLoadManagedThreadId;
         private uint _modelLoadNativeThreadId;
@@ -47,7 +50,11 @@ namespace MineraScope
                     try
                     {
                         var probabilities = predictionArray.ToArray<float>();
-                        return BuildPredictionResult(probabilities);
+                        // 260622Codex: Keep the softmax top-1 while attaching the optional unknown-distance verdict.
+                        MineralUnknownDetectionResult? unknown = _unknownDetector is not null && _featureExtractor is not null
+                            ? _unknownDetector.Evaluate(_featureExtractor.Transform(normalizedSpectrum))
+                            : null;
+                        return BuildPredictionResult(probabilities, unknown);
                     }
                     finally
                     {
@@ -96,7 +103,9 @@ namespace MineraScope
                     try
                     {
                         var probabilities = predictionArray.ToArray<float>();
-                        return BuildTop1BatchResult(probabilities, rows);
+                        var results = BuildTop1BatchResult(probabilities, rows);
+                        ApplyUnknownDetector(batch, rows, results);
+                        return results;
                     }
                     finally
                     {
@@ -127,7 +136,8 @@ namespace MineraScope
             return (string[])_labelNames!.Clone();
         }
 
-        private MineralClassificationPredictionResult BuildPredictionResult(float[] probabilities)
+        // 260622Codex: Preserve closed-set details and add nullable open-set metadata for callers that understand it.
+        private MineralClassificationPredictionResult BuildPredictionResult(float[] probabilities, MineralUnknownDetectionResult? unknown)
         {
             if (probabilities.Length != _labelNames!.Length)
                 throw new InvalidDataException("分類モデルの出力数と labelEncoder.json が一致しません。");
@@ -138,7 +148,19 @@ namespace MineraScope
             orderedResults.Sort((a, b) => b.Confidence.CompareTo(a.Confidence));
 
             var best = orderedResults[0];
-            return new MineralClassificationPredictionResult(best.MineralName, best.Confidence, orderedResults);
+            string? nearestKnown = unknown is { } detection
+                && detection.NearestLabelId >= 0
+                && detection.NearestLabelId < _labelNames.Length
+                    ? _labelNames[detection.NearestLabelId]
+                    : null;
+            return new MineralClassificationPredictionResult(
+                best.MineralName,
+                best.Confidence,
+                orderedResults,
+                unknown?.IsUnknown ?? false,
+                unknown?.Score,
+                unknown?.Threshold,
+                nearestKnown);
         }
 
         private int[] BuildTop1BatchResult(float[] probabilities, int rows)
@@ -165,6 +187,22 @@ namespace MineraScope
                 results[r] = best;
             }
             return results;
+        }
+
+        // 260622Codex: PTS map batches keep the fast top-1 path and overwrite only rows outside the known embedding distribution.
+        private void ApplyUnknownDetector(float[,] batch, int rows, int[] results)
+        {
+            if (_unknownDetector is null || _featureExtractor is null)
+                return;
+
+            var embeddings = _featureExtractor.Transform(batch, rows);
+            var diff = new double[_unknownDetector.EmbeddingDim];
+            for (int row = 0; row < rows; row++)
+            {
+                var detection = _unknownDetector.Evaluate(embeddings, row, diff);
+                if (detection.IsUnknown)
+                    results[row] = PtsClassificationMapResult.UnknownLabelId;
+            }
         }
 
         private static string GetClassificationPath(string modelPath)
@@ -227,10 +265,37 @@ namespace MineraScope
             TensorFlowPredictionDebugLog.Write("model-load-before", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)}");
             _classificationModel = keras.models.load_model(classificationPath);
             _labelNames = labelNames;
+            // 260622Codex: Load optional open-set metadata after the classifier weights are available.
+            LoadUnknownDetector(classificationPath, labelNames.Length);
             _loadedClassificationPath = classificationPath;
             _modelLoadManagedThreadId = Environment.CurrentManagedThreadId;
             _modelLoadNativeThreadId = TensorFlowPredictionDebugLog.CurrentNativeThreadId;
             TensorFlowPredictionDebugLog.Write("model-load-after", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} {GetModelDebugInfo()} labels={labelNames.Length}");
+        }
+
+        // 260622Codex: Unknown detection is optional, so stale or missing artifacts disable only the open-set score.
+        private void LoadUnknownDetector(string classificationPath, int labelCount)
+        {
+            _featureExtractor = null;
+            _unknownDetector = null;
+            try
+            {
+                _featureExtractor = DenseClassificationFeatureExtractor.FromModel(_classificationModel!);
+                if (MineralUnknownDetector.TryLoad(classificationPath, labelCount, _featureExtractor.EmbeddingDim, out var detector, out string message))
+                {
+                    _unknownDetector = detector;
+                    TensorFlowPredictionDebugLog.Write("unknown-detector-load", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} status=loaded threshold={detector!.Threshold:G9}");
+                    return;
+                }
+
+                TensorFlowPredictionDebugLog.Write("unknown-detector-load", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} status=disabled reason={TensorFlowPredictionDebugLog.Clean(message)}");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _featureExtractor = null;
+                _unknownDetector = null;
+                TensorFlowPredictionDebugLog.Write("unknown-detector-load", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} status=disabled reason={TensorFlowPredictionDebugLog.Clean(ex.Message)}");
+            }
         }
 
         private static string[] BuildLabelNames(Dictionary<string, int> encoder)
@@ -257,6 +322,9 @@ namespace MineraScope
             _loadedClassificationPath = null;
             _classificationModel = null;
             _labelNames = null;
+            // 260622Codex: Keep optional open-set cache lifetime identical to the classifier cache.
+            _featureExtractor = null;
+            _unknownDetector = null;
             _modelLoadManagedThreadId = 0;
             _modelLoadNativeThreadId = 0;
         }
@@ -288,7 +356,15 @@ namespace MineraScope
     internal sealed record MineralClassificationPredictionResult(
         string PredictedMineral,
         float Confidence,
-        IReadOnlyList<MineralClassificationProbability> Probabilities);
+        IReadOnlyList<MineralClassificationProbability> Probabilities,
+        bool IsUnknown = false,
+        float? UnknownScore = null,
+        float? UnknownThreshold = null,
+        string? NearestKnownMineral = null)
+    {
+        // 260622Codex: UI and exports can show Unknown without losing the closed-set top-1 candidate.
+        public string DisplayMineralName => IsUnknown ? MineralUnknownDetector.UnknownDisplayName : PredictedMineral;
+    }
 
     // 260521Codex: Holds one mineral label probability returned by the classification model.
     internal sealed record MineralClassificationProbability(string MineralName, float Confidence);

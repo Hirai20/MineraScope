@@ -18,8 +18,16 @@ namespace MineraScope
         public static IEnumerable<SpectrumBlockRow> EnumerateBodyRows(SpectrumPredictionItem item)
         {
             var classification = item.Classification!;
-            yield return new(SpectrumBlockRowKind.Field, "分類結果", classification.PredictedMineral);
-
+            yield return new(SpectrumBlockRowKind.Field, "分類結果", classification.DisplayMineralName);
+            if (classification.IsUnknown)
+            {
+                // 260622Codex: Unknown keeps the closed-set candidate and distance so the result remains auditable.
+                yield return new(SpectrumBlockRowKind.Field, "Top-1 candidate", $"{classification.PredictedMineral} ({FormatPercent(classification.Confidence)}%)");
+                if (!string.IsNullOrWhiteSpace(classification.NearestKnownMineral))
+                    yield return new(SpectrumBlockRowKind.Field, "Nearest known", classification.NearestKnownMineral);
+                if (classification.UnknownScore.HasValue && classification.UnknownThreshold.HasValue)
+                    yield return new(SpectrumBlockRowKind.Field, "Unknown score", $"{FormatScore(classification.UnknownScore.Value)} / {FormatScore(classification.UnknownThreshold.Value)}");
+            }
             if (item.Endmembers.Count > 0)
             {
                 yield return new(SpectrumBlockRowKind.Header, "【端成分比率】", string.Empty);
@@ -75,5 +83,9 @@ namespace MineraScope
         // 260620Claude: % 2桁。確率・端成分比率は 0-1 を 100倍して F2 で出す。
         public static string FormatPercent(float ratio)
             => (ratio * 100).ToString("F2", CultureInfo.InvariantCulture);
+
+        // 260622Codex: Unknown distances are model-scale diagnostics, so compact invariant formatting is clearer than percent formatting.
+        private static string FormatScore(float score)
+            => score.ToString("G6", CultureInfo.InvariantCulture);
     }
 }
