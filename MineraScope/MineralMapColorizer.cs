@@ -14,6 +14,8 @@ namespace MineraScope
         // 260526Claude: Other はグレー、未判定は黒。上位鉱物色とは別色にする。
         private static readonly Color OtherColor = Color.FromArgb(128, 128, 128);
         private static readonly Color UnclassifiedColor = Color.FromArgb(0, 0, 0);
+        // 260622Codex: Unknown has signal and model output, so it needs a color distinct from zero-signal black.
+        private static readonly Color UnknownColor = Color.FromArgb(255, 255, 255);
 
         // 260528Claude: 凡例で 1 つだけ強調するとき、非選択カテゴリを塗る dim color。Unclassified(黒) と Other(灰) の中間域に置いて区別を保つ。
         private static readonly (byte R, byte G, byte B) DimColor = (48, 48, 48);
@@ -37,9 +39,15 @@ namespace MineraScope
             // 260526Claude: ラベル別の出現ブロック数を数える（未判定は別カウント）。
             var occurrence = new Dictionary<int, int>();
             int unclassifiedCount = 0;
+            int unknownCount = 0;
             for (int i = 0; i < result.BlockCount; i++)
             {
                 int labelId = result.GetLabelIdAt(i);
+                if (labelId == PtsClassificationMapResult.UnknownLabelId)
+                {
+                    unknownCount++;
+                    continue;
+                }
                 if (labelId < 0)
                 {
                     unclassifiedCount++;
@@ -61,8 +69,9 @@ namespace MineraScope
                 labelToDisplay[topLabelIds[display]] = display;
 
             int otherDisplayIndex = topLabelIds.Count;
-            int unclassifiedDisplayIndex = topLabelIds.Count + 1;
-            int categoryCount = topLabelIds.Count + 2;
+            int unknownDisplayIndex = topLabelIds.Count + 1;
+            int unclassifiedDisplayIndex = topLabelIds.Count + 2;
+            int categoryCount = topLabelIds.Count + 3;
 
             var palette = new (byte R, byte G, byte B)[categoryCount];
             // 260528Codex: 凡例と palette が同じ色選択を使うよう、色取得と RGB 変換を helper に寄せます。
@@ -72,6 +81,7 @@ namespace MineraScope
                 palette[display] = ToPaletteEntry(color);
             }
             palette[otherDisplayIndex] = ToPaletteEntry(OtherColor);
+            palette[unknownDisplayIndex] = ToPaletteEntry(UnknownColor);
             palette[unclassifiedDisplayIndex] = ToPaletteEntry(UnclassifiedColor);
 
             // 260526Claude: 各ブロックを表示インデックスへ。Other に落ちたブロック数も数える。
@@ -81,7 +91,9 @@ namespace MineraScope
             {
                 int labelId = result.GetLabelIdAt(i);
                 int display;
-                if (labelId < 0)
+                if (labelId == PtsClassificationMapResult.UnknownLabelId)
+                    display = unknownDisplayIndex;
+                else if (labelId < 0)
                     display = unclassifiedDisplayIndex;
                 else if (labelToDisplay.TryGetValue(labelId, out int mapped))
                     display = mapped;
@@ -101,6 +113,8 @@ namespace MineraScope
                 legend.Add(new MineralMapLegendEntry(result.GetMineralName(labelId), color, occurrence[labelId], false, false));
             }
             legend.Add(new MineralMapLegendEntry("Other", OtherColor, otherCount, true, false));
+            // 260622Codex: Show unknown spectra separately from existing zero-signal unclassified blocks.
+            legend.Add(new MineralMapLegendEntry(MineralUnknownDetector.UnknownDisplayName, UnknownColor, unknownCount, false, false));
             legend.Add(new MineralMapLegendEntry("未判定", UnclassifiedColor, unclassifiedCount, false, true));
 
             return new MineralMapImage(values, result.GridWidth, palette, categoryCount, legend);

@@ -760,7 +760,38 @@ namespace MineraScope
             model.save(outputPath);
             TensorFlowTrainingDebugLog.Write("save-end", $"op={op} durationMs={saveTimer.ElapsedMilliseconds}");
             cancellationToken.ThrowIfCancellationRequested();
+            // 260622Codex: Persist optional open-set statistics after the classifier itself is safely saved.
+            TrySaveUnknownDetector(model, xTrain, yTrain, xTest, outputPath, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=ok totalMs={modelTimer.ElapsedMilliseconds} trainedEpochs={fitResult.CompletedEpochs} testLoss={FormatMetric(testLoss)} testAccuracy={FormatMetric(testAccuracy)}");
+        }
+
+        // 260622Codex: Build the optional open-set detector beside the classifier without making classifier training depend on it.
+        private void TrySaveUnknownDetector(
+            Model model,
+            NDArray xTrain,
+            NDArray yTrain,
+            NDArray xTest,
+            string outputPath,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                TensorFlowTrainingDebugLog.Write("unknown-detector-start", $"path={TensorFlowTrainingDebugLog.Clean(outputPath)}");
+                var detector = MineralUnknownDetector.Build(model, xTrain, yTrain, xTest, cancellationToken);
+                detector.Save(outputPath);
+                TensorFlowTrainingDebugLog.Write(
+                    "unknown-detector-end",
+                    $"path={TensorFlowTrainingDebugLog.Clean(outputPath)} labels={detector.LabelCount} dim={detector.EmbeddingDim} threshold={FormatMetric(detector.Threshold)} q={FormatMetric(detector.ThresholdQuantile)} ridge={FormatMetric(detector.Ridge)}");
+                Log($"Unknown detector: threshold={detector.Threshold:F4} (q={detector.ThresholdQuantile:F3})");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                TensorFlowTrainingDebugLog.Write(
+                    "unknown-detector-skip",
+                    $"path={TensorFlowTrainingDebugLog.Clean(outputPath)} error={TensorFlowTrainingDebugLog.Clean(ex.Message)}");
+                Log($"Unknown detector skipped: {ex.Message}");
+            }
         }
 
         #endregion
@@ -816,7 +847,16 @@ namespace MineraScope
                     string topPercent = (classification.Confidence * 100).ToString("F2", CultureInfo.InvariantCulture);
                     Log($"ファイル: {Path.GetFileName(filePath)}");
                     Log("");
-                    Log($"{classification.PredictedMineral} ({topPercent}%)");
+                    Log($"{classification.DisplayMineralName} ({topPercent}%)");
+                    if (classification.IsUnknown)
+                    {
+                        // 260622Codex: Keep the closed-set candidate visible but avoid treating it as a trusted mineral.
+                        Log($"Top-1 candidate: {classification.PredictedMineral}");
+                        if (!string.IsNullOrWhiteSpace(classification.NearestKnownMineral))
+                            Log($"Nearest known: {classification.NearestKnownMineral}");
+                        if (classification.UnknownScore.HasValue && classification.UnknownThreshold.HasValue)
+                            Log($"Unknown score: {classification.UnknownScore.Value:G6} / {classification.UnknownThreshold.Value:G6}");
+                    }
                     Log("");
                     Log("[詳細確率]");
                     // 260613Claude: 0.00% (F2 で丸めて 0) の候補は隠す。AnalyzerForm は別形式 (ランク表示) で自前整形のため helper 共有はやめインライン化。
@@ -829,6 +869,7 @@ namespace MineraScope
                     }
 
                     // 260522Codex: 予測鉱物名に対応する回帰モデルだけを成分比率予測の候補にします。
+                    // 260622Codex: Unknown keeps the display verdict, but regression still follows the closed-set top-1 candidate for borderline known spectra.
                     string[] candidates = Directory.GetDirectories(modelPath, $"{classification.PredictedMineral}*_Regression");
                     if (candidates.Length == 0)
                         continue;

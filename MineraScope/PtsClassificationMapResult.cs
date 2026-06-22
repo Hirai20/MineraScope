@@ -7,6 +7,8 @@ namespace MineraScope
     internal sealed class PtsClassificationMapResult
     {
         public const int UnclassifiedLabelId = -1;
+        // 260622Codex: Unknown means a usable spectrum was classified but falls outside the known embedding distribution.
+        public const int UnknownLabelId = -2;
 
         // 260526Claude: 行優先フラット配列 by * GridWidth + bx。未判定は UnclassifiedLabelId。
         private readonly int[] _top1LabelId;

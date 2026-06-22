@@ -74,6 +74,7 @@ namespace MineraScope
                 return Failed(filePath, $"分類に失敗しました: {ex.Message}");
             }
 
+            // 260622Codex: Even Unknown results keep regression for the closed-set top-1 candidate so borderline known spectra retain endmember estimates.
             var (regressionModelName, endmembers, formula) =
                 PredictRegression(regressionService, modelPath, classification.PredictedMineral, spectrum);
 
