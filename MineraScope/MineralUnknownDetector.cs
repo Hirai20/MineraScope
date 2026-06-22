@@ -10,29 +10,35 @@ namespace MineraScope
         public const string FileName = "unknownDetector.json";
         public const string UnknownDisplayName = "Unknown";
 
-        private const int CurrentVersion = 1;
-        private const double DefaultThresholdQuantile = 0.99d;
+        private const int CurrentVersion = 2;
+        private const double DefaultThresholdQuantile = 1.0d;
+        private const double DefaultThresholdRadiusExpansion = 1.15d;
         private const double BaseRidgeScale = 1e-3d;
 
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
         private readonly double[][] _means;
         private readonly double[][] _precision;
+        private readonly double[] _thresholds;
 
         private MineralUnknownDetector(
             int embeddingDim,
             double threshold,
             double thresholdQuantile,
+            double thresholdRadiusExpansion,
             double ridge,
             double[][] means,
-            double[][] precision)
+            double[][] precision,
+            double[] thresholds)
         {
             EmbeddingDim = embeddingDim;
             Threshold = threshold;
             ThresholdQuantile = thresholdQuantile;
+            ThresholdRadiusExpansion = thresholdRadiusExpansion;
             Ridge = ridge;
             _means = means;
             _precision = precision;
+            _thresholds = thresholds;
         }
 
         public int EmbeddingDim { get; }
@@ -40,6 +46,8 @@ namespace MineraScope
         public double Threshold { get; private set; }
 
         public double ThresholdQuantile { get; }
+
+        public double ThresholdRadiusExpansion { get; }
 
         public double Ridge { get; }
 
@@ -50,17 +58,32 @@ namespace MineraScope
             NDArray xTrain,
             NDArray yTrain,
             NDArray xValidation,
+            NDArray yValidation,
             CancellationToken cancellationToken)
         {
             var extractor = DenseClassificationFeatureExtractor.FromWeights(model.get_weights());
             float[,] trainEmbeddings = extractor.TransformFlat(xTrain.ToArray<float>(), (int)xTrain.shape[0]);
             int[] trainLabels = yTrain.ToArray<int>();
-            var detector = BuildFromEmbeddings(trainEmbeddings, trainLabels, DefaultThresholdQuantile, cancellationToken);
+            var detector = BuildFromEmbeddings(
+                trainEmbeddings,
+                trainLabels,
+                DefaultThresholdQuantile,
+                DefaultThresholdRadiusExpansion,
+                cancellationToken);
 
             float[,] calibrationEmbeddings = xValidation.shape[0] > 0
                 ? extractor.TransformFlat(xValidation.ToArray<float>(), (int)xValidation.shape[0])
                 : trainEmbeddings;
-            detector.Threshold = CalculateThreshold(detector, calibrationEmbeddings, DefaultThresholdQuantile, cancellationToken);
+            int[] calibrationLabels = xValidation.shape[0] > 0 ? yValidation.ToArray<int>() : trainLabels;
+            detector.SetThresholds(CalculateThresholds(
+                detector,
+                trainEmbeddings,
+                trainLabels,
+                calibrationEmbeddings,
+                calibrationLabels,
+                DefaultThresholdQuantile,
+                DefaultThresholdRadiusExpansion,
+                cancellationToken));
             return detector;
         }
 
@@ -83,7 +106,7 @@ namespace MineraScope
                     return false;
                 }
 
-                if (artifact.Version != CurrentVersion)
+                if (artifact.Version < 1 || artifact.Version > CurrentVersion)
                 {
                     message = $"{FileName} version is unsupported.";
                     return false;
@@ -101,13 +124,18 @@ namespace MineraScope
                     return false;
                 }
 
+                double[] thresholds = IsVector(artifact.Thresholds, expectedLabelCount)
+                    ? artifact.Thresholds
+                    : Enumerable.Repeat(artifact.Threshold, expectedLabelCount).ToArray();
                 detector = new MineralUnknownDetector(
                     artifact.EmbeddingDim,
                     artifact.Threshold,
                     artifact.ThresholdQuantile,
+                    artifact.ThresholdRadiusExpansion > 0d ? artifact.ThresholdRadiusExpansion : 1d,
                     artifact.Ridge,
                     artifact.Means,
-                    artifact.Precision);
+                    artifact.Precision,
+                    thresholds);
                 message = "loaded";
                 return true;
             }
@@ -130,11 +158,14 @@ namespace MineraScope
                 Distance = "shared_covariance_mahalanobis_squared",
                 Ridge = Ridge,
                 ThresholdQuantile = ThresholdQuantile,
+                ThresholdMode = "per_label_known_max_squared_distance_with_radius_margin",
+                ThresholdRadiusExpansion = ThresholdRadiusExpansion,
                 Threshold = Threshold,
+                Thresholds = _thresholds,
                 Means = _means,
                 Precision = _precision,
                 LabelCount = LabelCount,
-                CalibrationSource = "classification_test_split"
+                CalibrationSource = "classification_train_and_test_split"
             };
             File.WriteAllText(Path.Combine(classificationPath, FileName), JsonSerializer.Serialize(artifact, JsonOptions));
         }
@@ -157,7 +188,8 @@ namespace MineraScope
                 }
             }
 
-            return new MineralUnknownDetectionResult(bestScore > Threshold, (float)bestScore, (float)Threshold, bestLabel);
+            double threshold = _thresholds[bestLabel];
+            return new MineralUnknownDetectionResult(bestScore > threshold, (float)bestScore, (float)threshold, bestLabel);
         }
 
         public MineralUnknownDetectionResult Evaluate(float[,] embeddings, int row)
@@ -185,10 +217,16 @@ namespace MineraScope
                 }
             }
 
-            return new MineralUnknownDetectionResult(bestScore > Threshold, (float)bestScore, (float)Threshold, bestLabel);
+            double threshold = _thresholds[bestLabel];
+            return new MineralUnknownDetectionResult(bestScore > threshold, (float)bestScore, (float)threshold, bestLabel);
         }
 
-        private static MineralUnknownDetector BuildFromEmbeddings(float[,] embeddings, int[] labels, double thresholdQuantile, CancellationToken cancellationToken)
+        private static MineralUnknownDetector BuildFromEmbeddings(
+            float[,] embeddings,
+            int[] labels,
+            double thresholdQuantile,
+            double thresholdRadiusExpansion,
+            CancellationToken cancellationToken)
         {
             int rows = embeddings.GetLength(0);
             int dim = embeddings.GetLength(1);
@@ -251,28 +289,94 @@ namespace MineraScope
                 covariance[i][i] += ridge;
 
             double[][] precision = Invert(covariance);
-            return new MineralUnknownDetector(dim, 0d, thresholdQuantile, ridge, means, precision);
+            return new MineralUnknownDetector(
+                dim,
+                0d,
+                thresholdQuantile,
+                thresholdRadiusExpansion,
+                ridge,
+                means,
+                precision,
+                new double[labelCount]);
         }
 
-        private static double CalculateThreshold(MineralUnknownDetector detector, float[,] calibrationEmbeddings, double quantile, CancellationToken cancellationToken)
+        private void SetThresholds(double[] thresholds)
         {
-            int rows = calibrationEmbeddings.GetLength(0);
-            if (rows == 0)
+            if (thresholds.Length != LabelCount)
+                throw new InvalidDataException("Unknown detector threshold count does not match label count.");
+
+            Array.Copy(thresholds, _thresholds, thresholds.Length);
+            Threshold = thresholds.Max();
+        }
+
+        private static double[] CalculateThresholds(
+            MineralUnknownDetector detector,
+            float[,] trainEmbeddings,
+            int[] trainLabels,
+            float[,] calibrationEmbeddings,
+            int[] calibrationLabels,
+            double quantile,
+            double radiusExpansion,
+            CancellationToken cancellationToken)
+        {
+            if (trainEmbeddings.GetLength(0) == 0)
                 throw new InvalidDataException("Unknown detector calibration requires at least one embedding.");
 
-            var scores = new double[rows];
+            var scoresByLabel = new List<double>[detector.LabelCount];
+            for (int label = 0; label < scoresByLabel.Length; label++)
+                scoresByLabel[label] = [];
+
             var diff = new double[detector.EmbeddingDim];
+            AddKnownScores(detector, trainEmbeddings, trainLabels, scoresByLabel, diff, cancellationToken);
+            if (!ReferenceEquals(trainEmbeddings, calibrationEmbeddings))
+                AddKnownScores(detector, calibrationEmbeddings, calibrationLabels, scoresByLabel, diff, cancellationToken);
+
+            var thresholds = new double[detector.LabelCount];
+            for (int label = 0; label < thresholds.Length; label++)
+            {
+                if (scoresByLabel[label].Count == 0)
+                    throw new InvalidDataException("Every classification label must have at least one calibration sample.");
+
+                scoresByLabel[label].Sort();
+                double threshold = QuantileSorted(scoresByLabel[label], quantile);
+                thresholds[label] = ExpandSquaredDistance(threshold, radiusExpansion);
+                if (double.IsNaN(thresholds[label]) || double.IsInfinity(thresholds[label]))
+                    throw new InvalidDataException("Unknown detector threshold is not finite.");
+            }
+
+            return thresholds;
+        }
+
+        // 260622Codex: Calibrate each label from its true known samples so broad solid-solution classes get broader accepted regions.
+        private static void AddKnownScores(
+            MineralUnknownDetector detector,
+            float[,] embeddings,
+            int[] labels,
+            List<double>[] scoresByLabel,
+            double[] diff,
+            CancellationToken cancellationToken)
+        {
+            int rows = embeddings.GetLength(0);
+            if (labels.Length != rows)
+                throw new InvalidDataException("Unknown detector calibration requires matching embeddings and labels.");
+
             for (int row = 0; row < rows; row++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                scores[row] = detector.Evaluate(calibrationEmbeddings, row, diff).Score;
-            }
+                int label = labels[row];
+                if (label < 0 || label >= detector.LabelCount)
+                    throw new InvalidDataException("Calibration labels are not contiguous.");
 
-            Array.Sort(scores);
-            double threshold = QuantileSorted(scores, quantile);
-            if (double.IsNaN(threshold) || double.IsInfinity(threshold))
-                throw new InvalidDataException("Unknown detector threshold is not finite.");
-            return threshold;
+                for (int i = 0; i < detector.EmbeddingDim; i++)
+                    diff[i] = embeddings[row, i] - detector._means[label][i];
+                scoresByLabel[label].Add(detector.Score(diff));
+            }
+        }
+
+        private static double ExpandSquaredDistance(double squaredDistance, double radiusExpansion)
+        {
+            double expansion = Math.Max(1d, radiusExpansion);
+            return squaredDistance * expansion * expansion;
         }
 
         private double Score(float[] embedding, double[] mean, double[] diff)
@@ -295,12 +399,12 @@ namespace MineraScope
             return Math.Max(0d, score);
         }
 
-        private static double QuantileSorted(double[] sorted, double quantile)
+        private static double QuantileSorted(IReadOnlyList<double> sorted, double quantile)
         {
-            if (sorted.Length == 1)
+            if (sorted.Count == 1)
                 return sorted[0];
 
-            double position = Math.Clamp(quantile, 0d, 1d) * (sorted.Length - 1);
+            double position = Math.Clamp(quantile, 0d, 1d) * (sorted.Count - 1);
             int lower = (int)Math.Floor(position);
             int upper = (int)Math.Ceiling(position);
             if (lower == upper)
@@ -391,6 +495,9 @@ namespace MineraScope
                && matrix.Length == rows
                && matrix.All(row => row is not null && row.Length == columns);
 
+        private static bool IsVector(double[]? vector, int length)
+            => vector is not null && vector.Length == length;
+
         private sealed class UnknownDetectorArtifact
         {
             public int Version { get; set; }
@@ -407,7 +514,13 @@ namespace MineraScope
 
             public double ThresholdQuantile { get; set; }
 
+            public string ThresholdMode { get; set; } = string.Empty;
+
+            public double ThresholdRadiusExpansion { get; set; }
+
             public double Threshold { get; set; }
+
+            public double[] Thresholds { get; set; } = [];
 
             public double[][] Means { get; set; } = [];
 
