@@ -63,22 +63,6 @@ namespace MineraScope
                 keras.layers.Dense(numComponents)
             });
 
-        // 260416Codex: 評価辞書から優先キー順で値を取る helper を追加し、回帰・分類で同じ流れを再利用します。
-        private static double GetMetricValue<TMetric>(IReadOnlyDictionary<string, TMetric> metrics, int fallbackIndex, params string[] keys)
-            where TMetric : struct, IConvertible
-        {
-            foreach (var key in keys)
-            {
-                if (metrics.TryGetValue(key, out var value))
-                    return value.ToDouble(CultureInfo.InvariantCulture);
-            }
-
-            if (metrics.Count > fallbackIndex)
-                return metrics.ElementAt(fallbackIndex).Value.ToDouble(CultureInfo.InvariantCulture);
-
-            return 0;
-        }
-
         // 260605Codex: Keep debug metric formatting culture-stable for log parsing.
         private static string FormatMetric(double value) => value.ToString("G9", CultureInfo.InvariantCulture);
 
@@ -96,7 +80,8 @@ namespace MineraScope
             keras.losses.SparseCategoricalCrossentropy(from_logits: false);
 
         // 260605Codex: Return the observed fit result because TensorFlow.Keras History is not reliable enough here.
-        private sealed record TrainingFitResult(int RequestedEpochs, int CompletedEpochs, int LastEpoch, string LastEpochMetrics);
+        // 260622Claude: TestLoss/TestMetric は graph ループが best epoch の val(=test) で測った値。呼び出し側の冗長な model.evaluate を置き換える。
+        private sealed record TrainingFitResult(int RequestedEpochs, int CompletedEpochs, int LastEpoch, string LastEpochMetrics, double TestLoss, double TestMetric);
 
         // 260606Claude: 分類1個+回帰N個を1本のバーで表すため、モデル境界とエポックを「モデル均等×エポック比」で 0..1 の全体進捗へ畳み込みます。
         //              EarlyStopping で早期終了しても CompleteModel でその区間を 100% へスナップし、単調増加を保ちます。
@@ -191,7 +176,6 @@ namespace MineraScope
         {
             cancellationToken.ThrowIfCancellationRequested();
             string op = TensorFlowTrainingDebugLog.Clean(operationName);
-            int trainMetricInterval = ReadIntEnv("MINERASCOPE_TRAIN_METRIC_INTERVAL", 10);
 
             // 初期重みを eager で確定させる(eager 経路と同一初期化にする)。未 build なら build してから取り出す。
             int features = (int)xTrain.shape[1];
@@ -207,6 +191,7 @@ namespace MineraScope
             int valCount = (int)xValidation.shape[0];
             List<NDArray>? bestWeights = null;
             double bestValLoss = double.PositiveInfinity;
+            double bestValAccuracy = 0d;
             int wait = 0;
             int completedEpochs = 0;
             int lastEpoch = -1;
@@ -248,10 +233,6 @@ namespace MineraScope
                 var valLossOp = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(valY, valLogits));
                 var valCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(valLogits, 1), tf.cast(valY, tf.int64)), tf.int32));
 
-                var trainLogitsFull = Forward(dataX);
-                var trainLossFullOp = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(dataY, trainLogitsFull));
-                var trainCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(trainLogitsFull, 1), tf.cast(dataY, tf.int64)), tf.int32));
-
                 // 260621Claude: minimize 後に init を作って Adam の slot variables まで初期化する。
                 var init = tf.global_variables_initializer();
                 using var sess = tf.Session(graph);
@@ -277,30 +258,20 @@ namespace MineraScope
                     if (valLoss < bestValLoss)
                     {
                         bestValLoss = valLoss;
+                        bestValAccuracy = valAccuracy;
                         bestWeights = weightVars.Select(v => sess.run(v.AsTensor())).ToList();
                         wait = 0;
                     }
                     else if (++wait >= patience)
                         willStop = true;
 
-                    bool evalTrainMetric = epoch % trainMetricInterval == 0 || epoch == epochs - 1 || willStop;
-                    double trainEvalMs = 0d;
-                    string logs;
-                    if (evalTrainMetric)
-                    {
-                        long trainEvalStart = Stopwatch.GetTimestamp();
-                        double trainLossFull = sess.run(trainLossFullOp).ToArray<float>()[0];
-                        double trainAccuracy = sampleCount > 0 ? sess.run(trainCorrectOp).ToArray<int>()[0] / (double)sampleCount : 0d;
-                        trainEvalMs = Stopwatch.GetElapsedTime(trainEvalStart).TotalMilliseconds;
-                        logs = $"loss={FormatMetric(trainLossFull)},accuracy={FormatMetric(trainAccuracy)},val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},trainMetricMode=epoch_end_interval";
-                    }
-                    else
-                        logs = $"val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},trainMetricSkipped=1,trainMetricMode=skipped";
+                    // 260622Claude: 学習データ全体の metric はログ専用かつ初回ウォームアップが重いので算出しない。val(=test) のみ毎epoch評価する。
+                    string logs = $"val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)}";
 
                     completedEpochs++;
                     lastEpoch = epoch;
                     lastEpochMetrics = logs;
-                    TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} engine=graph durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} trainEvalMs={FormatMetric(trainEvalMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
+                    TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} engine=graph durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
                     logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
 
                     if (willStop)
@@ -318,11 +289,11 @@ namespace MineraScope
                 graph.Exit();
             }
 
-            // 260621Claude: best weights を eager の Keras model に書き戻し、呼び出し側の evaluate/save をそのまま使う。
+            // 260621Claude: best weights を eager の Keras model に書き戻し、呼び出し側の save をそのまま使う。
             if (bestWeights != null)
                 model.set_weights(bestWeights);
             TensorFlowTrainingDebugLog.Write("graph-loop-end", $"operation={op} engine=graph trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
-            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics);
+            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics, bestValLoss, bestValAccuracy);
         }
 
         // 260622Claude: 回帰の v1-style Graph/Session 学習。分類 graph 経路と同形で、loss を MSE・出力を線形(端成分比率)にしたもの。
@@ -344,7 +315,6 @@ namespace MineraScope
         {
             cancellationToken.ThrowIfCancellationRequested();
             string op = TensorFlowTrainingDebugLog.Clean(operationName);
-            int trainMetricInterval = ReadIntEnv("MINERASCOPE_TRAIN_METRIC_INTERVAL", 10);
 
             int features = (int)xTrain.shape[1];
             int outputCount = (int)yTrain.shape[1];
@@ -360,6 +330,7 @@ namespace MineraScope
             int valCount = (int)xValidation.shape[0];
             List<NDArray>? bestWeights = null;
             double bestValLoss = double.PositiveInfinity;
+            double bestValMae = 0d;
             int wait = 0;
             int completedEpochs = 0;
             int lastEpoch = -1;
@@ -403,10 +374,6 @@ namespace MineraScope
                 var valLossOp = MseLoss(valPred, valY);
                 var valAbsSumOp = tf.reduce_sum(tf.abs(valPred - valY));
 
-                var trainPredFull = Forward(dataX);
-                var trainLossFullOp = MseLoss(trainPredFull, dataY);
-                var trainAbsSumOp = tf.reduce_sum(tf.abs(trainPredFull - dataY));
-
                 var init = tf.global_variables_initializer();
                 using var sess = tf.Session(graph);
                 sess.run(init);
@@ -431,30 +398,20 @@ namespace MineraScope
                     if (valLoss < bestValLoss)
                     {
                         bestValLoss = valLoss;
+                        bestValMae = valMae;
                         bestWeights = weightVars.Select(v => sess.run(v.AsTensor())).ToList();
                         wait = 0;
                     }
                     else if (++wait >= patience)
                         willStop = true;
 
-                    bool evalTrainMetric = epoch % trainMetricInterval == 0 || epoch == epochs - 1 || willStop;
-                    double trainEvalMs = 0d;
-                    string logs;
-                    if (evalTrainMetric)
-                    {
-                        long trainEvalStart = Stopwatch.GetTimestamp();
-                        double trainLossFull = sess.run(trainLossFullOp).ToArray<float>()[0];
-                        double trainMae = sampleCount > 0 && outputCount > 0 ? sess.run(trainAbsSumOp).ToArray<float>()[0] / sampleCount / outputCount : 0d;
-                        trainEvalMs = Stopwatch.GetElapsedTime(trainEvalStart).TotalMilliseconds;
-                        logs = $"loss={FormatMetric(trainLossFull)},mean_absolute_error={FormatMetric(trainMae)},val_loss={FormatMetric(valLoss)},val_mean_absolute_error={FormatMetric(valMae)},trainMetricMode=epoch_end_interval";
-                    }
-                    else
-                        logs = $"val_loss={FormatMetric(valLoss)},val_mean_absolute_error={FormatMetric(valMae)},trainMetricSkipped=1,trainMetricMode=skipped";
+                    // 260622Claude: 学習データ全体の metric はログ専用かつ初回ウォームアップが重いので算出しない。val(=test) のみ毎epoch評価する。
+                    string logs = $"val_loss={FormatMetric(valLoss)},val_mean_absolute_error={FormatMetric(valMae)}";
 
                     completedEpochs++;
                     lastEpoch = epoch;
                     lastEpochMetrics = logs;
-                    TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} engine=graph kind=regression durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} trainEvalMs={FormatMetric(trainEvalMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
+                    TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} engine=graph kind=regression durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
                     logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
 
                     if (willStop)
@@ -475,7 +432,7 @@ namespace MineraScope
             if (bestWeights != null)
                 model.set_weights(bestWeights);
             TensorFlowTrainingDebugLog.Write("graph-loop-end", $"operation={op} engine=graph kind=regression trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
-            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics);
+            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics, bestValLoss, bestValMae);
         }
 
         // 260609Claude: GUI なしで分類 custom loop 学習を回す開発用ヘッドレス smoke test。env MINERASCOPE_HEADLESS_TRAIN=1 で Program から呼ぶ。
@@ -682,15 +639,10 @@ namespace MineraScope
             // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
 
-            Log("モデル評価中");
-            cancellationToken.ThrowIfCancellationRequested();
-            var evalTimer = Stopwatch.StartNew();
-            TensorFlowTrainingDebugLog.Write("evaluate-start", $"op={op}");
-            var score = model.evaluate(xTest, yTest);
-
-            double testLoss = GetMetricValue(score, 0, "loss");
-            double testMae = GetMetricValue(score, 1, "mae", "mean_absolute_error");
-            TensorFlowTrainingDebugLog.Write("evaluate-end", $"op={op} durationMs={evalTimer.ElapsedMilliseconds} testLoss={FormatMetric(testLoss)} testMae={FormatMetric(testMae)} trainedEpochs={fitResult.CompletedEpochs}");
+            // 260622Claude: 検証に test を渡しているので graph が best epoch で測った test loss/MAE をそのまま使い、冗長な model.evaluate を省く。
+            double testLoss = fitResult.TestLoss;
+            double testMae = fitResult.TestMetric;
+            TensorFlowTrainingDebugLog.Write("evaluate-end", $"op={op} testLoss={FormatMetric(testLoss)} testMae={FormatMetric(testMae)} trainedEpochs={fitResult.CompletedEpochs} source=graph-bestval");
 
             Log($" 評価完了");
             Log($"  Test Loss (MSE): {testLoss:F6}");
@@ -788,16 +740,10 @@ namespace MineraScope
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
             // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
-            Log("モデル評価中");
-
-            cancellationToken.ThrowIfCancellationRequested();
-            var evalTimer = Stopwatch.StartNew();
-            TensorFlowTrainingDebugLog.Write("evaluate-start", $"op={op}");
-            var score = model.evaluate(xTest, yTest);
-
-            double testLoss = GetMetricValue(score, 0, "loss");
-            double testAccuracy = GetMetricValue(score, 1, "accuracy");
-            TensorFlowTrainingDebugLog.Write("evaluate-end", $"op={op} durationMs={evalTimer.ElapsedMilliseconds} testLoss={FormatMetric(testLoss)} testAccuracy={FormatMetric(testAccuracy)} trainedEpochs={fitResult.CompletedEpochs}");
+            // 260622Claude: 検証に test を渡しているので graph が best epoch で測った test loss/accuracy をそのまま使い、冗長な model.evaluate を省く。
+            double testLoss = fitResult.TestLoss;
+            double testAccuracy = fitResult.TestMetric;
+            TensorFlowTrainingDebugLog.Write("evaluate-end", $"op={op} testLoss={FormatMetric(testLoss)} testAccuracy={FormatMetric(testAccuracy)} trainedEpochs={fitResult.CompletedEpochs} source=graph-bestval");
 
             Log($"Test loss: {testLoss:F4}");
             Log($"Test accuracy: {testAccuracy * 100:F2}%");
