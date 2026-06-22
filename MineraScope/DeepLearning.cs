@@ -761,7 +761,7 @@ namespace MineraScope
             TensorFlowTrainingDebugLog.Write("save-end", $"op={op} durationMs={saveTimer.ElapsedMilliseconds}");
             cancellationToken.ThrowIfCancellationRequested();
             // 260622Codex: Persist optional open-set statistics after the classifier itself is safely saved.
-            TrySaveUnknownDetector(model, xTrain, yTrain, xTest, outputPath, cancellationToken);
+            TrySaveUnknownDetector(model, xTrain, yTrain, xTest, yTest, outputPath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=ok totalMs={modelTimer.ElapsedMilliseconds} trainedEpochs={fitResult.CompletedEpochs} testLoss={FormatMetric(testLoss)} testAccuracy={FormatMetric(testAccuracy)}");
         }
@@ -772,18 +772,19 @@ namespace MineraScope
             NDArray xTrain,
             NDArray yTrain,
             NDArray xTest,
+            NDArray yTest,
             string outputPath,
             CancellationToken cancellationToken)
         {
             try
             {
                 TensorFlowTrainingDebugLog.Write("unknown-detector-start", $"path={TensorFlowTrainingDebugLog.Clean(outputPath)}");
-                var detector = MineralUnknownDetector.Build(model, xTrain, yTrain, xTest, cancellationToken);
+                var detector = MineralUnknownDetector.Build(model, xTrain, yTrain, xTest, yTest, cancellationToken);
                 detector.Save(outputPath);
                 TensorFlowTrainingDebugLog.Write(
                     "unknown-detector-end",
-                    $"path={TensorFlowTrainingDebugLog.Clean(outputPath)} labels={detector.LabelCount} dim={detector.EmbeddingDim} threshold={FormatMetric(detector.Threshold)} q={FormatMetric(detector.ThresholdQuantile)} ridge={FormatMetric(detector.Ridge)}");
-                Log($"Unknown detector: threshold={detector.Threshold:F4} (q={detector.ThresholdQuantile:F3})");
+                    $"path={TensorFlowTrainingDebugLog.Clean(outputPath)} labels={detector.LabelCount} dim={detector.EmbeddingDim} threshold={FormatMetric(detector.Threshold)} q={FormatMetric(detector.ThresholdQuantile)} radiusExpansion={FormatMetric(detector.ThresholdRadiusExpansion)} ridge={FormatMetric(detector.Ridge)}");
+                Log($"Unknown detector: threshold={detector.Threshold:F4} (known max + radius x{detector.ThresholdRadiusExpansion:F2})");
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
