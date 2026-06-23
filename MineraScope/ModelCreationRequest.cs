@@ -18,17 +18,21 @@ namespace MineraScope
         double ProbeCurrent);
 
     // 260507Codex: target は学習に使用したい件数、parallel は不足分生成のジョブ分割数として扱います。
+    // 260622Claude: CarbonThicknessJitterPercent は生成時にカーボン蒸着膜厚を spectrum ごとへ ±x% 振る幅 (0 で無効)。conditionKey には含めない。
     internal sealed record SimulationExecutionSettings(
         int TargetSpectrumCount,
         double ResolutionStep,
-        int ParallelCount);
+        int ParallelCount,
+        double CarbonThicknessJitterPercent);
 
     // 260507Codex: 学習条件は conditionKey から外し、モデル作成時だけ使う設定として分離します。
+    // 260622Claude: UnknownDistanceScale は未知判定で既知とみなす距離に掛ける倍率 (大きいほど Unknown を出しにくい)。
     internal sealed record ModelTrainingSettings(
         int Epochs,
         int BatchSize,
         int EarlyStoppingPatience,
-        float ValidationSplit);
+        float ValidationSplit,
+        double UnknownDistanceScale);
 
     // 260507Codex: モデル作成対象は checkedListBoxMineral のチェック済み SolidSolution だけに統一します。
     internal sealed record ModelCreationRequest(

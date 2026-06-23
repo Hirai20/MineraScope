@@ -15,16 +15,22 @@ namespace MineraScope
             StringBuilder builder = new();
             (string ElementName, double Weight)[][] atoms = property.Atoms1;
             string[] outputFiles = property.OutputFiles;
+            // 260622Claude: ばらつき幅が正のときだけカーボン膜厚を spectrum ごとに ±x% 振る (0 なら従来どおり基準値固定)。
+            bool jitterCarbon = property.CarbonCoatThicknessJitterPercent > 0;
 
             builder.AppendLine("import dtsa2.mcSimulate3 as mc");
             builder.AppendLine("import os");
             // 260528Codex: DTSA-II の保存完了を外側の進捗表示へ即時通知できるよう stdout を明示 flush します。
             builder.AppendLine("import sys");
+            if (jitterCarbon)
+                builder.AppendLine("import random");
             builder.AppendLine("output_dir = " + ToPythonString(property.OutputFolder));
             builder.AppendLine("det = findDetector(" + ToPythonString(property.DetectorName) + ")");
             builder.AppendLine("e0 = " + ToInvariantString(property.BeamEnergy));
             builder.AppendLine("dose = " + ToInvariantString(property.ProbeCurrent) + " * " + ToInvariantString(property.LiveTime));
             builder.AppendLine("cThickness = " + ToInvariantString(property.CarbonCoatThickness));
+            if (jitterCarbon)
+                builder.AppendLine("cJitter = " + ToInvariantString(property.CarbonCoatThicknessJitterPercent / 100));
             builder.AppendLine("carbonCoating = epq.MaterialFactory.createPureElement(epq.Element.C)");
             builder.AppendLine("Weights = [");
 
@@ -66,7 +72,14 @@ namespace MineraScope
             builder.Remove(builder.Length - 2, 2);
             builder.AppendLine("]), epq.ToSI.gPerCC(" + ToInvariantString(DefaultDensity) + "))");
             builder.AppendLine("\tprint(\"Starting simulation {0}...\".format(idx + 1))");
-            builder.AppendLine("\tsd = mc.coatedSubstrate(carbonCoating, cThickness, material, det, dose = dose)");
+            if (jitterCarbon)
+            {
+                // 260622Claude: spectrum ごとに基準膜厚へ ±cJitter の一様乱数を掛け、負値は 0 に丸める。
+                builder.AppendLine("\teffectiveThickness = max(0.0, cThickness * (1.0 + random.uniform(-cJitter, cJitter)))");
+                builder.AppendLine("\tsd = mc.coatedSubstrate(carbonCoating, effectiveThickness, material, det, dose = dose)");
+            }
+            else
+                builder.AppendLine("\tsd = mc.coatedSubstrate(carbonCoating, cThickness, material, det, dose = dose)");
             builder.AppendLine("\toutput_file = os.path.join(output_dir, FileNames[idx])");
             builder.AppendLine("\tsd.rename(FileNames[idx])");
             builder.AppendLine("\tsd.save(output_file)");

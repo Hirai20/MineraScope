@@ -503,6 +503,7 @@ namespace MineraScope
             int batchSize,
             int patience,
             float testSplit,
+            double unknownDistanceScale,
             string outputPath,
             IProgress<TrainingProgress>? progress = null,
             CancellationToken cancellationToken = default)
@@ -541,7 +542,7 @@ namespace MineraScope
             string classificationOutputPath = Path.Combine(outputPath, "AllMinerals_Classification");
             Log("分類モデル学習開始");
             reporter.BeginModel("AllMinerals_Classification");
-            TrainClassificationModel(orderedPools, epochs, batchSize, patience, testSplit, classificationOutputPath, spectrumCache, reporter.ReportEpoch, cancellationToken);
+            TrainClassificationModel(orderedPools, epochs, batchSize, patience, testSplit, unknownDistanceScale, classificationOutputPath, spectrumCache, reporter.ReportEpoch, cancellationToken);
             reporter.CompleteModel();
 
             foreach (var pool in orderedPools.Where(pool => pool.EndmemberNames.Count >= 2))
@@ -685,6 +686,7 @@ namespace MineraScope
             int batchSize,
             int patience,
             float testSplit,
+            double unknownDistanceScale,
             string outputPath,
             SpectrumDataLoader.NormalizedSpectrumCache? spectrumCache,
             Action<int>? reportEpoch,
@@ -761,7 +763,7 @@ namespace MineraScope
             TensorFlowTrainingDebugLog.Write("save-end", $"op={op} durationMs={saveTimer.ElapsedMilliseconds}");
             cancellationToken.ThrowIfCancellationRequested();
             // 260622Codex: Persist optional open-set statistics after the classifier itself is safely saved.
-            TrySaveUnknownDetector(model, xTrain, yTrain, xTest, yTest, outputPath, cancellationToken);
+            TrySaveUnknownDetector(model, xTrain, yTrain, xTest, yTest, unknownDistanceScale, outputPath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=ok totalMs={modelTimer.ElapsedMilliseconds} trainedEpochs={fitResult.CompletedEpochs} testLoss={FormatMetric(testLoss)} testAccuracy={FormatMetric(testAccuracy)}");
         }
@@ -773,13 +775,14 @@ namespace MineraScope
             NDArray yTrain,
             NDArray xTest,
             NDArray yTest,
+            double unknownDistanceScale,
             string outputPath,
             CancellationToken cancellationToken)
         {
             try
             {
                 TensorFlowTrainingDebugLog.Write("unknown-detector-start", $"path={TensorFlowTrainingDebugLog.Clean(outputPath)}");
-                var detector = MineralUnknownDetector.Build(model, xTrain, yTrain, xTest, yTest, cancellationToken);
+                var detector = MineralUnknownDetector.Build(model, xTrain, yTrain, xTest, yTest, unknownDistanceScale, cancellationToken);
                 detector.Save(outputPath);
                 TensorFlowTrainingDebugLog.Write(
                     "unknown-detector-end",

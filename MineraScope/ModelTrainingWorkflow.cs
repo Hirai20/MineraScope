@@ -95,6 +95,7 @@ namespace MineraScope
                     plan.Settings.BatchSize,
                     plan.Settings.EarlyStoppingPatience,
                     plan.Settings.ValidationSplit,
+                    plan.Settings.UnknownDistanceScale,
                     temporaryOutputFolder,
                     progress,
                     cancellationToken);
