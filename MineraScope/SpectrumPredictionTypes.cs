@@ -12,7 +12,8 @@ namespace MineraScope
     {
         public string FileName => Path.GetFileName(FilePath);
 
-        public bool IsSuccess => Classification is not null && Error is null;
+        // 260623Claude: 回帰のみ予測 (分類スキップ) では Classification=null・端成分ありで成功とみなす。
+        public bool IsSuccess => Error is null && (Classification is not null || Endmembers.Count > 0);
     }
 
     // 260620Claude: バッチ全体の結果。Model 名（コンボ選択名）と各 item を真実源にし、画面表示・CSV・report はここから作る。
