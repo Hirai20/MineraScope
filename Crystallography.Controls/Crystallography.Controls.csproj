@@ -64,7 +64,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Crystallograohy\Crystallography.csproj" />
+    <ProjectReference Include="..\Crystallography\Crystallography.csproj" />
   </ItemGroup>
 
 

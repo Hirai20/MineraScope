@@ -15,7 +15,7 @@ Open `MineraScope.code-workspace` in VS Code.
 The workspace includes:
 
 - `MineraScope`
-- `Crystallography` from `Crystallograohy`
+- `Crystallography`
 
 That matches the project paths used by `MineraScope.sln`.
 
