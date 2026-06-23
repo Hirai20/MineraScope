@@ -28,6 +28,9 @@ namespace MineraScope
         private readonly SimulationPlanBuilder _simulationPlanBuilder;
         private readonly Random _random = new();
 
+        // 260623Claude: 学習データ選抜を再現可能にするための固定 seed。コードベース他所の split/seed と同じ 42 に合わせる。
+        private const int TrainingSelectionSeed = 42;
+
         public SpectrumPoolWorkflow(
             SpectrumPoolRepository repository,
             SimulationPlanBuilder simulationPlanBuilder)
@@ -99,11 +102,15 @@ namespace MineraScope
             int targetCount = request.Simulation.TargetSpectrumCount;
             var pools = new List<SpectrumTrainingPool>(request.SelectedMineralSolutions.Count);
 
+            // 260623Claude: 学習データの選抜・並び順は固定 seed の専用乱数で行い、再学習のたびに train/test が変わって結果がばらつくのを防ぐ。
+            //               生成側の _random とは分け、呼び出しごとに seed=42 から作り直す (フィールドにすると同一セッションの2回目で選抜がずれる)。
+            var selectionRandom = new Random(TrainingSelectionSeed);
+
             foreach (var solution in request.SelectedMineralSolutions)
             {
                 var state = LoadState(request, solution);
                 var selectedEntries = state.CompletedEntries
-                    .OrderBy(_ => _random.Next())
+                    .OrderBy(_ => selectionRandom.Next())
                     .Take(targetCount)
                     .ToArray();
 
