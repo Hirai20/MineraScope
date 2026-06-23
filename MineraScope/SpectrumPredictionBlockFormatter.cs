@@ -17,17 +17,27 @@ namespace MineraScope
         //               確率は丸めて 0.00 になるものを隠す。ファイルパス・モデル名は呼び出し側レンダラが前置する。
         public static IEnumerable<SpectrumBlockRow> EnumerateBodyRows(SpectrumPredictionItem item)
         {
-            var classification = item.Classification!;
-            yield return new(SpectrumBlockRowKind.Field, "分類結果", classification.DisplayMineralName);
-            if (classification.IsUnknown)
+            // 260623Claude: 回帰のみ予測では分類が無いので、見出し代わりに使用回帰モデルを出し、詳細確率は省く。
+            var classification = item.Classification;
+            if (classification is null)
             {
-                // 260622Codex: Unknown keeps the closed-set candidate and distance so the result remains auditable.
-                yield return new(SpectrumBlockRowKind.Field, "Top-1 candidate", $"{classification.PredictedMineral} ({FormatPercent(classification.Confidence)}%)");
-                if (!string.IsNullOrWhiteSpace(classification.NearestKnownMineral))
-                    yield return new(SpectrumBlockRowKind.Field, "Nearest known", classification.NearestKnownMineral);
-                if (classification.UnknownScore.HasValue && classification.UnknownThreshold.HasValue)
-                    yield return new(SpectrumBlockRowKind.Field, "Unknown score", $"{FormatScore(classification.UnknownScore.Value)} / {FormatScore(classification.UnknownThreshold.Value)}");
+                if (!string.IsNullOrEmpty(item.RegressionModelName))
+                    yield return new(SpectrumBlockRowKind.Field, "回帰モデル", item.RegressionModelName);
             }
+            else
+            {
+                yield return new(SpectrumBlockRowKind.Field, "分類結果", classification.DisplayMineralName);
+                if (classification.IsUnknown)
+                {
+                    // 260622Codex: Unknown keeps the closed-set candidate and distance so the result remains auditable.
+                    yield return new(SpectrumBlockRowKind.Field, "Top-1 candidate", $"{classification.PredictedMineral} ({FormatPercent(classification.Confidence)}%)");
+                    if (!string.IsNullOrWhiteSpace(classification.NearestKnownMineral))
+                        yield return new(SpectrumBlockRowKind.Field, "Nearest known", classification.NearestKnownMineral);
+                    if (classification.UnknownScore.HasValue && classification.UnknownThreshold.HasValue)
+                        yield return new(SpectrumBlockRowKind.Field, "Unknown score", $"{FormatScore(classification.UnknownScore.Value)} / {FormatScore(classification.UnknownThreshold.Value)}");
+                }
+            }
+
             if (item.Endmembers.Count > 0)
             {
                 yield return new(SpectrumBlockRowKind.Header, "【端成分比率】", string.Empty);
@@ -38,6 +48,9 @@ namespace MineraScope
 
             if (!string.IsNullOrEmpty(item.ChemicalFormula))
                 yield return new(SpectrumBlockRowKind.Field, "化学組成式", item.ChemicalFormula);
+
+            if (classification is null)
+                yield break;
 
             yield return new(SpectrumBlockRowKind.Header, "【詳細確率】", string.Empty);
             foreach (var probability in classification.Probabilities)

@@ -35,23 +35,84 @@ namespace MineraScope
             var regressionService = new MineralRegressionPredictionService();
             var items = new List<SpectrumPredictionItem>(files.Count);
 
-            _log($"分類を開始します（{files.Count} 件）。");
+            // 260623Claude: 親フォルダを1つ深くして *_Regression を直接選んだ場合は、分類を通さず回帰モデルだけで予測する（実測ずれ評価用）。
+            string? regressionMineral = IsRegressionModelFolder(modelPath) ? ResolveRegressionMineralName(modelPath) : null;
+            bool regressionOnly = regressionMineral is not null;
+            string verb = regressionOnly ? "回帰" : "分類";
+
+            _log(regressionOnly
+                ? $"回帰のみで予測を開始します（{files.Count} 件、{regressionMineral}）。"
+                : $"分類を開始します（{files.Count} 件）。");
 
             for (int i = 0; i < files.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                items.Add(PredictOne(classificationService, regressionService, modelPath, files[i]));
+                items.Add(regressionOnly
+                    ? PredictRegressionOnly(regressionService, modelPath, regressionMineral!, files[i])
+                    : PredictOne(classificationService, regressionService, modelPath, files[i]));
 
                 if ((i + 1) % ProgressInterval == 0 && i + 1 != files.Count)
-                    _log($"分類中 {i + 1}/{files.Count}");
+                    _log($"{verb}中 {i + 1}/{files.Count}");
             }
 
             int failed = items.Count(item => !item.IsSuccess);
             _log(failed == 0
-                ? $"分類が完了しました（{files.Count} 件）。"
-                : $"分類が完了しました（{files.Count} 件中 {failed} 件失敗）。");
+                ? $"{verb}が完了しました（{files.Count} 件）。"
+                : $"{verb}が完了しました（{files.Count} 件中 {failed} 件失敗）。");
 
             return new SpectrumPredictionBatch(modelName, items);
+        }
+
+        // 260623Claude: 選択フォルダ自体が回帰モデルか判定する。modelType.txt を正とし、無い旧モデルは componentIndex.json + 分類サブフォルダ無しで代替判定する。
+        private static bool IsRegressionModelFolder(string modelPath)
+        {
+            string modelTypePath = Path.Combine(modelPath, "modelType.txt");
+            if (File.Exists(modelTypePath)
+                && File.ReadAllText(modelTypePath).Trim().Equals("regression", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return File.Exists(Path.Combine(modelPath, "componentIndex.json"))
+                && !Directory.Exists(Path.Combine(modelPath, "AllMinerals_Classification"));
+        }
+
+        // 260623Claude: 化学組成式生成に渡す鉱物名を mineralName.txt から取り、無ければフォルダ名から _Regression を外して使う。
+        private static string ResolveRegressionMineralName(string modelPath)
+        {
+            string namePath = Path.Combine(modelPath, "mineralName.txt");
+            if (File.Exists(namePath))
+            {
+                string name = File.ReadAllText(namePath).Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                    return name;
+            }
+
+            string folder = Path.GetFileName(modelPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            const string suffix = "_Regression";
+            return folder.EndsWith(suffix, StringComparison.Ordinal) ? folder[..^suffix.Length] : folder;
+        }
+
+        // 260623Claude: 分類をスキップし、選択した回帰モデル1つだけでスペクトルの端成分比率と組成式を求める。
+        private SpectrumPredictionItem PredictRegressionOnly(
+            MineralRegressionPredictionService regressionService,
+            string regressionModelPath,
+            string mineralName,
+            string filePath)
+        {
+            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath);
+            if (spectrum is null)
+                return Failed(filePath, "スペクトルを読み込めませんでした。");
+
+            try
+            {
+                var regression = regressionService.Predict(regressionModelPath, spectrum);
+                var ratios = regression.Components.ToDictionary(component => component.ComponentName, component => component.Ratio);
+                string formula = MineralFormulaGenerator.Generate(ratios, mineralName, _assemblyPath);
+                return new SpectrumPredictionItem(filePath, null, Path.GetFileName(regressionModelPath), regression.Components, formula, null);
+            }
+            catch (Exception ex)
+            {
+                return Failed(filePath, $"回帰に失敗しました: {ex.Message}");
+            }
         }
 
         private SpectrumPredictionItem PredictOne(
