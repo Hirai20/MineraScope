@@ -24,8 +24,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Crystallograohy.Controls\Crystallography.Controls.csproj" />
-    <ProjectReference Include="..\Crystallograohy\Crystallography.csproj" />
+    <ProjectReference Include="..\Crystallography.Controls\Crystallography.Controls.csproj" />
+    <ProjectReference Include="..\Crystallography\Crystallography.csproj" />
   </ItemGroup>
 
   <ItemGroup>
