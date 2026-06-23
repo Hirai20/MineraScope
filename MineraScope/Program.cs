@@ -20,6 +20,16 @@
                 RunHeadless("train", () => DeepLearning.RunHeadlessSmokeTest(Console.WriteLine));
                 return;
             }
+            // 260623Claude: 【デバッグ・開発専用】GUI を出さずに保存済み設定で spectrum 生成を回すヘッドレス。
+            //   エンドユーザーは使わない開発補助で、環境変数 MINERASCOPE_HEADLESS_SIMULATE がセットされたときだけ有効。
+            //   dryrun は DTSA を起動せず対象と不足件数だけ報告する。詳細は SimulationHeadlessRunner を参照。
+            string? simulateMode = Environment.GetEnvironmentVariable("MINERASCOPE_HEADLESS_SIMULATE");
+            if (!string.IsNullOrEmpty(simulateMode))
+            {
+                bool dryRun = string.Equals(simulateMode, "dryrun", StringComparison.OrdinalIgnoreCase);
+                RunHeadless("simulate", () => SimulationHeadlessRunner.Run(dryRun));
+                return;
+            }
             // 260416Codex: Open FormMain at startup.
             Application.Run(new FormMain());
         }
