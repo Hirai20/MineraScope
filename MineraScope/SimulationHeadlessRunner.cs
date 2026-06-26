@@ -65,7 +65,7 @@ namespace MineraScope
                 new ModelCreationPaths(
                     outputFolder.Trim(),
                     scriptOutput,
-                    (formMain.DtsaPath ?? string.Empty).Trim(),
+                    DtsaMsiInstallation.UseDefaultIfBlank(formMain.DtsaPath),
                     (formMain.ModelPath ?? string.Empty).Trim()),
                 generator.ModelName.Trim(),
                 new SemEdxCondition(
@@ -92,9 +92,10 @@ namespace MineraScope
             Log($"minerals={selectedSolutions.Length} ({string.Join(", ", selectedSolutions.Select(s => s.Name))})");
             Log($"target={request.Simulation.TargetSpectrumCount} resolutionStep={request.Simulation.ResolutionStep.ToString(CultureInfo.InvariantCulture)} parallel={request.Simulation.ParallelCount} carbonJitter%={request.Simulation.CarbonThicknessJitterPercent.ToString(CultureInfo.InvariantCulture)}");
 
-            if (!dryRun && string.IsNullOrWhiteSpace(request.Paths.DtsaFolder))
+            // 260626Codex: Match the GUI-side dtsa2.msi validation before reserving/running spectra.
+            if (!dryRun && !DtsaMsiInstallation.IsUsableInstallFolder(request.Paths.DtsaFolder))
             {
-                Log("ERROR: DTSA-II path is empty in FormMainSettings.json. Abort.");
+                Log($"ERROR: {DtsaMsiInstallation.NotFoundMessage} Abort.");
                 return;
             }
 

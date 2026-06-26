@@ -357,6 +357,10 @@ namespace MineraScope
             if (requireDtsaPath && string.IsNullOrWhiteSpace(request.Paths.DtsaFolder))
                 return "DTSA-II のフォルダを指定してください。";
 
+            // 260626Codex: Fail early when the selected folder is not the dtsa2.msi install root.
+            if (requireDtsaPath && !DtsaMsiInstallation.IsUsableInstallFolder(request.Paths.DtsaFolder))
+                return DtsaMsiInstallation.NotFoundMessage;
+
             return string.Empty;
         }
 
