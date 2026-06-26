@@ -24,41 +24,28 @@
             Application.Run(new FormMain());
         }
 
-        // 260621Codex: 外部環境変数があれば尊重し、無ければこの PC でまず試す既定値を process env にだけ適用します。
+        // 260621Codex: VS 実行でも TensorFlow/oneDNN 初期化前に、この PC 向けの既定スレッド数を process env にだけ適用します。
+        // 260626Claude: 実験用の上書きノブ MINERASCOPE_TF_THREADS / MINERASCOPE_CLASSIFICATION_LOAD_PARALLELISM を撤去。
+        //   スレッド数はコア数由来の既定式で決め、読込並列度は SpectrumDataLoader 側の既定 (Clamp(コア数,2,8)) に委ねる。
         private static void ApplyTensorFlowStartupDefaults()
         {
-            string? mode = Environment.GetEnvironmentVariable("MINERASCOPE_TF_THREADS");
-            if (IsDisabled(mode))
-            {
-                TensorFlowTrainingDebugLog.Write("tf-startup-defaults", "status=disabled switch=MINERASCOPE_TF_THREADS");
-                return;
-            }
-
-            int threadCount = ResolveTensorFlowThreadCount(mode);
+            int threadCount = ResolveTensorFlowThreadCount();
             var values = new Dictionary<string, string>
             {
                 ["TF_NUM_INTRAOP_THREADS"] = threadCount.ToString(),
                 ["TF_NUM_INTEROP_THREADS"] = ResolveInterOpThreadCount(threadCount).ToString(),
-                ["OMP_NUM_THREADS"] = threadCount.ToString(),
-                ["MINERASCOPE_CLASSIFICATION_LOAD_PARALLELISM"] = threadCount.ToString()
+                ["OMP_NUM_THREADS"] = threadCount.ToString()
             };
 
             var applied = values.Select(pair => SetDefaultEnvironmentVariable(pair.Key, pair.Value));
             TensorFlowTrainingDebugLog.Write(
                 "tf-startup-defaults",
-                $"processorCount={Environment.ProcessorCount} requested={TensorFlowTrainingDebugLog.Clean(mode ?? "auto")} {string.Join(" ", applied)}");
+                $"processorCount={Environment.ProcessorCount} threads={threadCount} {string.Join(" ", applied)}");
         }
 
-        private static bool IsDisabled(string? value) =>
-            string.Equals(value, "off", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(value, "false", StringComparison.OrdinalIgnoreCase)
-            || value == "0";
-
-        private static int ResolveTensorFlowThreadCount(string? value)
+        // 260626Claude: コア数からこの PC の既定スレッド数を決める (外部上書きは廃止)。
+        private static int ResolveTensorFlowThreadCount()
         {
-            if (int.TryParse(value, out int requested) && requested > 0)
-                return requested;
-
             int logicalProcessors = Environment.ProcessorCount;
             return logicalProcessors <= 4
                 ? Math.Max(1, logicalProcessors)

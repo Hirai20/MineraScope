@@ -19,9 +19,9 @@ namespace MineraScope
         // 260430Codex: 学習と予測で共通する 2048 点スペクトル長を 1 か所で管理します。
         public const int SpectrumLength = 2048;
 
-        // 260607Codex: Bound classification file-open parallelism and allow measurement fallback without code changes.
+        // 260607Codex: Bound classification file-open parallelism.
+        // 260626Claude: 実験用 env 上書き (MINERASCOPE_CLASSIFICATION_LOAD_PARALLELISM) を撤去し、コア数由来の既定だけを使う。
         private const int MaxClassificationLoadParallelism = 8;
-        private const string ClassificationLoadParallelismEnvironmentVariable = "MINERASCOPE_CLASSIFICATION_LOAD_PARALLELISM";
 
         // 260607Codex: Classification load diagnostics make parallel data-load measurements comparable across runs.
         internal readonly record struct ClassificationLoadStats(
@@ -356,16 +356,12 @@ namespace MineraScope
             return loadedSpectra;
         }
 
-        // 260607Codex: Limit parallel file opens conservatively, with an environment override for measurement fallback.
+        // 260607Codex: Limit parallel file opens conservatively.
+        // 260626Claude: コア数を 2..8 にクランプした既定だけで決める (env 上書きは廃止)。
         private static int GetClassificationLoadParallelDegree(int sampleCount)
         {
             if (sampleCount <= 1)
                 return 1;
-
-            string? configured = Environment.GetEnvironmentVariable(ClassificationLoadParallelismEnvironmentVariable);
-            if (int.TryParse(configured, NumberStyles.Integer, CultureInfo.InvariantCulture, out int configuredDegree)
-                && configuredDegree > 0)
-                return Math.Min(sampleCount, configuredDegree);
 
             return Math.Min(sampleCount, Math.Clamp(Environment.ProcessorCount, 2, MaxClassificationLoadParallelism));
         }
