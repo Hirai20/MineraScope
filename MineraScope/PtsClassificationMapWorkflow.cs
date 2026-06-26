@@ -73,6 +73,11 @@ namespace MineraScope
                 "map-labels-ready",
                 $"mapRun={mapRunId} labels={labelNames.Length} elapsedMs={ElapsedTime(modelPreparationTicks).TotalMilliseconds:F0}");
 
+            // 260626Claude: 分類モデルの前処理を読み、学習時と同じ低エネルギーマスクをマップ全画素にも自動適用する。
+            //   preprocessing.json が無い既存モデルは None = マスク無しで従来どおり。
+            var preprocessing = SpectrumPreprocessing.LoadFromModelFolder(Path.Combine(modelPath, "AllMinerals_Classification"));
+            TensorFlowPredictionDebugLog.Write("map-preprocessing", $"mapRun={mapRunId} {preprocessing.Describe()}");
+
             int blockCount = (int)blockCountLong;
             var top1LabelId = new int[blockCount];
             int tileBlockRows = CalculateTileBlockRows(gridWidth, channelCount, gridHeight);
@@ -123,7 +128,7 @@ namespace MineraScope
                     for (int blockX = 0; blockX < grid.GridWidth; blockX++)
                     {
                         int flatIndex = globalBlockY * gridWidth + blockX;
-                        bool hasSignal = SpectrumDataLoader.NormalizeInto(grid.GetBlockCounts(blockX, localBlockY), batch, rowsInChunk);
+                        bool hasSignal = SpectrumDataLoader.NormalizeInto(grid.GetBlockCounts(blockX, localBlockY), batch, rowsInChunk, preprocessing);
                         if (!hasSignal)
                         {
                             top1LabelId[flatIndex] = PtsClassificationMapResult.UnclassifiedLabelId;

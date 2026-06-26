@@ -518,7 +518,10 @@ namespace MineraScope
                 return;
             }
 
-            float[]? normalizedSpectrum = SpectrumDataLoader.CreateNormalizedSpectrum(spectrum);
+            // 260626Claude: 分類モデルの前処理を読み、学習時と同じ低エネルギーマスクをクリック分析にも自動適用する。
+            //   preprocessing.json が無い既存モデルは None = マスク無しで従来どおり。
+            var preprocessing = SpectrumPreprocessing.LoadFromModelFolder(Path.Combine(modelPath, "AllMinerals_Classification"));
+            float[]? normalizedSpectrum = SpectrumDataLoader.CreateNormalizedSpectrum(spectrum, preprocessing);
             if (normalizedSpectrum is null)
             {
                 textBox1.Text =

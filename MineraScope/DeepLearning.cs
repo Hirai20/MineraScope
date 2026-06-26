@@ -592,9 +592,12 @@ namespace MineraScope
             Log($"対象鉱物: {trainingPool.MineralName}");
 
             Log("manifest からスペクトルデータを読み込み中...");
+            // 260626Claude: 低エネルギー(C コンタミ)マスクを学習データに適用し、同じ前処理を preprocessing.json に保存する。
+            var preprocessing = SpectrumPreprocessing.ForTraining();
+            TensorFlowTrainingDebugLog.Write("preprocessing", $"op={op} {preprocessing.Describe()}");
             var dataTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("data-load-start", $"op={op}");
-            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(trainingPool, cancellationToken, spectrumCache);
+            var (allSpectra, allLabels, componentIdx) = SpectrumDataLoader.LoadRegressionData(trainingPool, cancellationToken, spectrumCache, preprocessing);
             TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds}{FormatSpectrumCacheStats(spectrumCache)}");
             ComponentIndex = componentIdx;
 
@@ -672,6 +675,9 @@ namespace MineraScope
             string mineralNamePath = Path.Combine(outputPath, "mineralName.txt");
             File.WriteAllText(mineralNamePath, trainingPool.MineralName);
 
+            // 260626Claude: モデルが自分の前処理を持ち歩くよう、保存物の隣に preprocessing.json を残す。予測時に自動適用される。
+            preprocessing.WriteToModelFolder(outputPath);
+
             Log($" モデル保存完了: {outputPath}\n");
             TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=ok totalMs={modelTimer.ElapsedMilliseconds} trainedEpochs={fitResult.CompletedEpochs} testLoss={FormatMetric(testLoss)} testMae={FormatMetric(testMae)}");
         }
@@ -703,9 +709,12 @@ namespace MineraScope
             tf.set_random_seed(42);
             Log($"\n 訓練データ読み込み中");
 
+            // 260626Claude: 分類学習データにも同じ低エネルギーマスクを適用し、preprocessing.json に保存する。
+            var preprocessing = SpectrumPreprocessing.ForTraining();
+            TensorFlowTrainingDebugLog.Write("preprocessing", $"op={op} {preprocessing.Describe()}");
             var dataTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("data-load-start", $"op={op}");
-            var (allSpectra, allLabelsList, loadStats) = SpectrumDataLoader.LoadClassificationData(trainingPools, cancellationToken, spectrumCache);
+            var (allSpectra, allLabelsList, loadStats) = SpectrumDataLoader.LoadClassificationData(trainingPools, cancellationToken, spectrumCache, preprocessing);
             // 260607Codex: Log bounded parallel classification load stats so data-load speedups can be compared safely.
             TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds} inputSamples={loadStats.InputSamples} loadedSamples={loadStats.LoadedSamples} skippedSamples={loadStats.SkippedSamples} parallelDegree={loadStats.ParallelDegree}{FormatSpectrumCacheStats(spectrumCache)}");
             Log($"\n 読み込み完了 (合計 {allSpectra.shape[0]} 件)\n");
@@ -762,6 +771,8 @@ namespace MineraScope
             model.save(outputPath);
             TensorFlowTrainingDebugLog.Write("save-end", $"op={op} durationMs={saveTimer.ElapsedMilliseconds}");
             cancellationToken.ThrowIfCancellationRequested();
+            // 260626Claude: 予測時に自動適用するため、分類モデルフォルダにも前処理を記録する。
+            preprocessing.WriteToModelFolder(outputPath);
             // 260622Codex: Persist optional open-set statistics after the classifier itself is safely saved.
             TrySaveUnknownDetector(model, xTrain, yTrain, xTest, yTest, unknownDistanceScale, outputPath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -833,11 +844,17 @@ namespace MineraScope
                 var classificationService = new MineralClassificationPredictionService();
                 var regressionService = new MineralRegressionPredictionService();
 
+                // 260626Claude: モデルの前処理を読み、学習時と同じ低エネルギーマスクを予測にも自動適用する。
+                //   preprocessing.json が無い既存モデルは None = マスク無しで従来どおり判定される。
+                var preprocessing = SpectrumPreprocessing.LoadFromModelFolder(classificationPath);
+                TensorFlowPredictionDebugLog.Write("preprocessing", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} {preprocessing.Describe()}");
+                Log($"前処理: {preprocessing.Describe()}");
+
                 // 260611Claude: 複数ファイル判定時に各結果ブロックを空行で区切るための先頭判定。
                 bool isFirstFile = true;
                 foreach (var filePath in files)
                 {
-                    var spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath);
+                    var spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath, preprocessing);
                     if (spectrum == null)
                         continue;
 

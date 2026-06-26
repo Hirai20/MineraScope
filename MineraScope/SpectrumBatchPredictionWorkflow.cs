@@ -40,6 +40,12 @@ namespace MineraScope
             bool regressionOnly = regressionMineral is not null;
             string verb = regressionOnly ? "回帰" : "分類";
 
+            // 260626Claude: モデルの前処理を読み、学習時と同じ低エネルギーマスクを予測へ自動適用する。
+            //   回帰のみは選択フォルダ自体、分類経路は分類サブフォルダの preprocessing.json を正とする(同一 run なら回帰側と一致)。
+            string preprocessingFolder = regressionOnly ? modelPath : Path.Combine(modelPath, "AllMinerals_Classification");
+            var preprocessing = SpectrumPreprocessing.LoadFromModelFolder(preprocessingFolder);
+            _log($"前処理: {preprocessing.Describe()}");
+
             _log(regressionOnly
                 ? $"回帰のみで予測を開始します（{files.Count} 件、{regressionMineral}）。"
                 : $"分類を開始します（{files.Count} 件）。");
@@ -48,8 +54,8 @@ namespace MineraScope
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 items.Add(regressionOnly
-                    ? PredictRegressionOnly(regressionService, modelPath, regressionMineral!, files[i])
-                    : PredictOne(classificationService, regressionService, modelPath, files[i]));
+                    ? PredictRegressionOnly(regressionService, modelPath, regressionMineral!, files[i], preprocessing)
+                    : PredictOne(classificationService, regressionService, modelPath, files[i], preprocessing));
 
                 if ((i + 1) % ProgressInterval == 0 && i + 1 != files.Count)
                     _log($"{verb}中 {i + 1}/{files.Count}");
@@ -96,9 +102,10 @@ namespace MineraScope
             MineralRegressionPredictionService regressionService,
             string regressionModelPath,
             string mineralName,
-            string filePath)
+            string filePath,
+            SpectrumPreprocessing preprocessing)
         {
-            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath);
+            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath, preprocessing);
             if (spectrum is null)
                 return Failed(filePath, "スペクトルを読み込めませんでした。");
 
@@ -119,9 +126,10 @@ namespace MineraScope
             MineralClassificationPredictionService classificationService,
             MineralRegressionPredictionService regressionService,
             string modelPath,
-            string filePath)
+            string filePath,
+            SpectrumPreprocessing preprocessing)
         {
-            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath);
+            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath, preprocessing);
             if (spectrum is null)
                 return Failed(filePath, "スペクトルを読み込めませんでした。");
 
