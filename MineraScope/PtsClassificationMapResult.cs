@@ -85,6 +85,9 @@ namespace MineraScope
         // 260526Claude: labelId が範囲外/未判定なら空文字を返す。
         public string GetMineralName(int labelId)
             => labelId >= 0 && labelId < _labelNames.Length ? _labelNames[labelId] : string.Empty;
+
+        // 260623Claude: classes.csv 生成用に labelEncoder 順のラベル名一覧を公開する (出力 ID = index + 1)。
+        public IReadOnlyList<string> LabelNames => _labelNames;
     }
 
     // 260527Codex: Carries map-generation timing diagnostics so UI can show whether reading or inference dominates.

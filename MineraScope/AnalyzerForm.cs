@@ -680,6 +680,43 @@ namespace MineraScope
             UpdateMappingButtons();
         }
 
+        // 260623Claude: 表示中の鉱物マップ視野を、外部 BSE と同寸法の予測画像群 (8bitラベル/RGB/classes.csv/metadata) として出力する。
+        // ラベルは RGB の逆算ではなくモデルの top1 クラスID配列を直接 uint8 化し、グリッドを外部 BSE 寸法へ最近傍スケールして同視野・同座標に揃える。
+        // ROI を引く BSE はユーザーの外部電子像 (JEOL View0xx IMG1.bmp 等) を使う前提なので、アプリは BSE を出力しない。
+        private async void exportMapToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (IsInteractiveClassificationBusy || _isMappingBusy)
+                return;
+
+            PtsClassificationMapResult? map = _classificationMap;
+            MineralMapImage? image = _mapImage;
+            if (map is null || image is null)
+            {
+                MessageBox.Show("先に鉱物マッピングを実行してください。", "エクスポート", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var dialog = new FolderBrowserDialog { Description = "出力先フォルダを選択" };
+            if (dialog.ShowDialog() != DialogResult.OK)
+                return;
+
+            string outputDir = dialog.SelectedPath;
+            UseWaitCursor = true;
+            try
+            {
+                await Task.Run(() => MineralMapImageExporter.ExportCurrentView(outputDir, map, image, map.LabelNames));
+                SetMappingStatus($"エクスポート完了: {outputDir}", 0);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"エクスポートに失敗しました。\r\n{ex.Message}", "エクスポート", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                UseWaitCursor = false;
+            }
+        }
+
         // 260526Claude: マッピングの 2 ボタン状態を 1 か所で更新する（待機/実行中/中止中）。例外時も finally から呼んで UI を必ず戻す。
         private void UpdateMappingButtons()
         {
