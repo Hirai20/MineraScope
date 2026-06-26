@@ -57,6 +57,7 @@
             panelBrightness = new Panel();
             trackBarBrightness = new TrackBar();
             labelBrightness = new Label();
+            exportMapToolStripMenuItem = new ToolStripMenuItem();
             flowLayoutPanelBinning.SuspendLayout();
             flowLayoutPanelModellFolder.SuspendLayout();
             menuStrip1.SuspendLayout();
@@ -289,9 +290,10 @@
             // 
             // fileToolStripMenuItem
             // 
+            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { exportMapToolStripMenuItem });
             fileToolStripMenuItem.Name = "fileToolStripMenuItem";
-            fileToolStripMenuItem.Size = new Size(37, 20);
-            fileToolStripMenuItem.Text = "File";
+            fileToolStripMenuItem.Size = new Size(50, 20);
+            fileToolStripMenuItem.Text = "Menu";
             // 
             // statusStrip1
             // 
@@ -340,27 +342,27 @@
             panel1.Name = "panel1";
             panel1.Size = new Size(811, 47);
             panel1.TabIndex = 91;
-            //
+            // 
             // label1
-            //
+            // 
             label1.AutoSize = true;
             label1.Location = new Point(640, 11);
             label1.Name = "label1";
             label1.Size = new Size(42, 15);
             label1.TabIndex = 35;
             label1.Text = "スイープ";
-            //
+            // 
             // comboBox1
-            //
+            // 
             comboBox1.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBox1.FormattingEnabled = true;
             comboBox1.Location = new Point(704, 8);
             comboBox1.Name = "comboBox1";
             comboBox1.Size = new Size(95, 23);
             comboBox1.TabIndex = 34;
-            //
+            // 
             // panel2
-            //
+            // 
             panel2.Controls.Add(panelContrast);
             panel2.Controls.Add(panelBrightness);
             panel2.Controls.Add(graphControl1);
@@ -371,18 +373,18 @@
             panel2.Name = "panel2";
             panel2.Size = new Size(363, 676);
             panel2.TabIndex = 92;
-            //
+            // 
             // panelContrast
-            //
+            // 
             panelContrast.Controls.Add(trackBarContrast);
             panelContrast.Controls.Add(labelContrast);
             panelContrast.Location = new Point(132, 254);
             panelContrast.Name = "panelContrast";
             panelContrast.Size = new Size(118, 79);
             panelContrast.TabIndex = 37;
-            //
+            // 
             // trackBarContrast
-            //
+            // 
             trackBarContrast.Location = new Point(3, 34);
             trackBarContrast.Maximum = 100;
             trackBarContrast.Minimum = -100;
@@ -391,27 +393,27 @@
             trackBarContrast.TabIndex = 35;
             trackBarContrast.TickFrequency = 25;
             trackBarContrast.Scroll += trackBarContrast_Scroll;
-            //
+            // 
             // labelContrast
-            //
+            // 
             labelContrast.AutoSize = true;
             labelContrast.Location = new Point(21, 0);
             labelContrast.Name = "labelContrast";
             labelContrast.Size = new Size(57, 15);
             labelContrast.TabIndex = 36;
             labelContrast.Text = "コントラスト";
-            //
+            // 
             // panelBrightness
-            //
+            // 
             panelBrightness.Controls.Add(trackBarBrightness);
             panelBrightness.Controls.Add(labelBrightness);
             panelBrightness.Location = new Point(9, 257);
             panelBrightness.Name = "panelBrightness";
             panelBrightness.Size = new Size(117, 79);
             panelBrightness.TabIndex = 37;
-            //
+            // 
             // trackBarBrightness
-            //
+            // 
             trackBarBrightness.Location = new Point(10, 31);
             trackBarBrightness.Maximum = 255;
             trackBarBrightness.Minimum = -255;
@@ -420,18 +422,25 @@
             trackBarBrightness.TabIndex = 35;
             trackBarBrightness.TickFrequency = 51;
             trackBarBrightness.Scroll += trackBarBrightness_Scroll;
-            //
+            // 
             // labelBrightness
-            //
+            // 
             labelBrightness.AutoSize = true;
             labelBrightness.Location = new Point(26, 0);
             labelBrightness.Name = "labelBrightness";
             labelBrightness.Size = new Size(60, 15);
             labelBrightness.TabIndex = 36;
             labelBrightness.Text = "ブライトネス";
-            //
+            // 
+            // exportMapToolStripMenuItem
+            // 
+            exportMapToolStripMenuItem.Name = "exportMapToolStripMenuItem";
+            exportMapToolStripMenuItem.Size = new Size(180, 22);
+            exportMapToolStripMenuItem.Text = "Export";
+            exportMapToolStripMenuItem.Click += exportMapToolStripMenuItem_Click;
+            // 
             // AnalyzerForm
-            //
+            // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             AutoScroll = true;
@@ -500,5 +509,6 @@
         private Panel panelBrightness;
         private Label label1;
         private ComboBox comboBox1;
+        private ToolStripMenuItem exportMapToolStripMenuItem;
     }
 }
