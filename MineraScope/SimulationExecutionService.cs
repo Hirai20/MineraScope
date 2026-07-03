@@ -16,6 +16,10 @@ namespace MineraScope
         private const string SavedSpectrumMarker = "MINERASCOPE_SPECTRUM_SAVED|";
         // 260611Codex: Poll generated spectrum files because DTSA-II stdout can be delayed until process exit.
         private static readonly TimeSpan OutputFilePollInterval = TimeSpan.FromMilliseconds(500);
+        // 260629Codex: Treat DTSA-II as stuck only when stdout, files, and CPU are all idle for a while.
+        private static readonly TimeSpan DtsaIdleTimeout = TimeSpan.FromMinutes(10);
+        private static readonly TimeSpan DtsaWatchdogPollInterval = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan DtsaCpuActivityThreshold = TimeSpan.FromSeconds(1);
 
         private readonly SimulationScriptGenerator _scriptGenerator;
 
@@ -153,27 +157,58 @@ namespace MineraScope
             progress.ReportJobProgress(SimulationExecutionProgressKind.ProcessStarted, "DTSA-II process 起動");
             // 260606Claude: 保存完了マーカーのファイル名をここに集め、ジョブ全体の成否とは別に「保存できた spectrum」を結果へ渡します。
             var savedSpectrumFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var activity = new SimulationJobActivityTracker();
             // 260611Codex: File polling drives live progress even when the process buffers stdout.
             using var outputMonitorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var outputMonitorTask = MonitorOutputFilesAsync(job, progress, outputMonitorCts.Token);
-            var standardOutputTask = ReadStandardOutputAsync(process, progress, savedSpectrumFiles);
+            using var watchdogCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var outputMonitorTask = MonitorOutputFilesAsync(job, progress, savedSpectrumFiles, activity, outputMonitorCts.Token);
+            var standardOutputTask = ReadStandardOutputAsync(process, progress, savedSpectrumFiles, activity);
             var standardErrorTask = process.StandardError.ReadToEndAsync();
+            var watchdogTask = WatchDtsaProcessAsync(process, job, activity, watchdogCts.Token);
 
             try
             {
-                await process.WaitForExitAsync(cancellationToken);
+                var processExitTask = process.WaitForExitAsync(cancellationToken);
+                var completedTask = await Task.WhenAny(processExitTask, watchdogTask);
+                if (completedTask == watchdogTask)
+                {
+                    string? watchdogMessage = await watchdogTask;
+                    if (!string.IsNullOrWhiteSpace(watchdogMessage))
+                    {
+                        KillProcessTree(process);
+                        await WaitForProcessExitAfterKillAsync(process);
+                        await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
+                        await StopWatchdogAsync(watchdogCts, watchdogTask);
+                        ReportExistingOutputFiles(job, progress, savedSpectrumFiles, activity);
+                        string timeoutOutput = await ReadProcessOutputAsync(standardOutputTask);
+                        string timeoutError = await ReadProcessOutputAsync(standardErrorTask);
+                        return new SimulationExecutionResult(
+                            job.Reservations,
+                            ExitCode: -1,
+                            StandardOutput: timeoutOutput,
+                            StandardError: timeoutError,
+                            ExceptionMessage: watchdogMessage,
+                            SavedSpectrumFiles: savedSpectrumFiles);
+                    }
+                }
+
+                await processExitTask;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 KillProcessTree(process);
                 await WaitForProcessExitAfterKillAsync(process);
                 await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
+                await StopWatchdogAsync(watchdogCts, watchdogTask);
+                ReportExistingOutputFiles(job, progress, savedSpectrumFiles, activity);
                 string canceledOutput = await ReadProcessOutputAsync(standardOutputTask);
                 string canceledError = await ReadProcessOutputAsync(standardErrorTask);
                 return CreateCanceledResult(job, canceledOutput, canceledError, savedSpectrumFiles);
             }
 
             await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
+            await StopWatchdogAsync(watchdogCts, watchdogTask);
+            ReportExistingOutputFiles(job, progress, savedSpectrumFiles, activity);
             string standardOutput = await ReadProcessOutputAsync(standardOutputTask);
             string standardError = await ReadProcessOutputAsync(standardErrorTask);
 
@@ -206,7 +241,8 @@ namespace MineraScope
         private static async Task<string> ReadStandardOutputAsync(
             Process process,
             SimulationJobProgress progress,
-            HashSet<string> savedSpectrumFiles)
+            HashSet<string> savedSpectrumFiles,
+            SimulationJobActivityTracker activity)
         {
             var builder = new StringBuilder();
             string? line;
@@ -221,8 +257,9 @@ namespace MineraScope
                 if (savedFileName.Length == 0)
                     continue;
 
-                savedSpectrumFiles.Add(savedFileName);
-                progress.ReportSpectrumSaved(savedFileName);
+                activity.MarkActivity();
+                if (savedSpectrumFiles.Add(savedFileName))
+                    progress.ReportSpectrumSaved(savedFileName);
             }
 
             return builder.ToString();
@@ -232,13 +269,15 @@ namespace MineraScope
         private static async Task MonitorOutputFilesAsync(
             SimulationExecutionJob job,
             SimulationJobProgress progress,
+            HashSet<string> savedSpectrumFiles,
+            SimulationJobActivityTracker activity,
             CancellationToken cancellationToken)
         {
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    ReportExistingOutputFiles(job, progress);
+                    ReportExistingOutputFiles(job, progress, savedSpectrumFiles, activity);
                     await Task.Delay(OutputFilePollInterval, cancellationToken);
                 }
             }
@@ -247,7 +286,7 @@ namespace MineraScope
             }
             finally
             {
-                ReportExistingOutputFiles(job, progress);
+                ReportExistingOutputFiles(job, progress, savedSpectrumFiles, activity);
             }
         }
 
@@ -266,17 +305,96 @@ namespace MineraScope
         }
 
         // 260611Codex: Report each reserved output file at most once through SimulationJobProgress.
-        private static void ReportExistingOutputFiles(SimulationExecutionJob job, SimulationJobProgress progress)
+        private static void ReportExistingOutputFiles(
+            SimulationExecutionJob job,
+            SimulationJobProgress progress,
+            HashSet<string> savedSpectrumFiles,
+            SimulationJobActivityTracker activity)
         {
             foreach (var reservation in job.Reservations)
             {
                 string outputPath = Path.Combine(reservation.PoolFolder, reservation.FileName);
-                if (File.Exists(outputPath))
+                if (File.Exists(outputPath) && savedSpectrumFiles.Add(reservation.FileName))
+                {
+                    activity.MarkActivity();
                     progress.ReportSpectrumSaved(reservation.FileName);
+                }
             }
         }
 
         // 260513Codex: キャンセル要求後に残った子プロセスも含めて DTSA-II を止めます。
+        // 260629Codex: Kill DTSA-II jobs that stop producing stdout, files, and CPU so the batch can return.
+        private static async Task<string?> WatchDtsaProcessAsync(
+            Process process,
+            SimulationExecutionJob job,
+            SimulationJobActivityTracker activity,
+            CancellationToken cancellationToken)
+        {
+            TimeSpan lastCpuTime = ReadProcessCpuTime(process);
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(DtsaWatchdogPollInterval, cancellationToken);
+                    if (process.HasExited)
+                        return null;
+
+                    TimeSpan currentCpuTime = ReadProcessCpuTime(process);
+                    TimeSpan cpuDelta = currentCpuTime - lastCpuTime;
+                    lastCpuTime = currentCpuTime;
+                    // 260629Codex: Ignore tiny Derby wait/housekeeping CPU ticks; they are not simulation progress.
+                    if (cpuDelta >= DtsaCpuActivityThreshold)
+                    {
+                        activity.MarkActivity();
+                        continue;
+                    }
+
+                    TimeSpan idleFor = activity.IdleFor;
+                    if (idleFor >= DtsaIdleTimeout)
+                        return $"DTSA-II watchdog timeout: no stdout marker, output file, or CPU progress for {FormatTimeSpan(DtsaIdleTimeout)}. script={Path.GetFileName(job.ScriptPath)}";
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            return null;
+        }
+
+        private static async Task StopWatchdogAsync(CancellationTokenSource watchdogCancellation, Task<string?> watchdogTask)
+        {
+            watchdogCancellation.Cancel();
+
+            try
+            {
+                await watchdogTask;
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or InvalidOperationException)
+            {
+            }
+        }
+
+        private static TimeSpan ReadProcessCpuTime(Process process)
+        {
+            try
+            {
+                process.Refresh();
+                return process.HasExited ? TimeSpan.Zero : process.TotalProcessorTime;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+            {
+                return TimeSpan.Zero;
+            }
+        }
+
+        private static string FormatTimeSpan(TimeSpan value) =>
+            value.TotalMinutes >= 1
+                ? $"{value.TotalMinutes:0.#} minutes"
+                : $"{value.TotalSeconds:0.#} seconds";
+
         private static void KillProcessTree(Process process)
         {
             try
@@ -369,6 +487,17 @@ namespace MineraScope
         }
 
         // 260528Codex: job 固有の進捗表示と spectrum 保存数をまとめ、外部実行処理を短く保ちます。
+        private sealed class SimulationJobActivityTracker
+        {
+            private long _lastActivityUtcTicks = DateTime.UtcNow.Ticks;
+
+            public TimeSpan IdleFor =>
+                DateTime.UtcNow - new DateTime(Volatile.Read(ref _lastActivityUtcTicks), DateTimeKind.Utc);
+
+            public void MarkActivity() =>
+                Volatile.Write(ref _lastActivityUtcTicks, DateTime.UtcNow.Ticks);
+        }
+
         private sealed class SimulationJobProgress
         {
             private readonly SimulationProgressScope _scope;
