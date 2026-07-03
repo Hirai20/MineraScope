@@ -442,8 +442,30 @@ namespace MineraScope
                 _profileCache[filePath] = profile;
             }
 
-            graphControl1.Profile = profile;
+            // 260630Claude: キャッシュは生プロファイルのまま保持し、表示時に選択モデルのマスクを掛けたコピーを描く。
+            //   モデルを切り替えても再キャッシュ無しで反映でき、エクスポート等の生データ参照とも分離できる。
+            graphControl1.Profile = ApplyDisplayMask(profile);
             graphControl1.Refresh();
+        }
+
+        // 260630Claude: マスクあり(NoCarbon)モデル選択時は、表示スペクトルの低エネルギー範囲(先頭チャンネル)も 0 にして、
+        //   C 領域が実際にゼロ化されているのを目視確認できるようにする。マスク無し/モデル未選択なら生プロファイルをそのまま返す。
+        //   マスクはチャンネル番号基準(=点の並び順)なので、モデル入力 (ZeroLeadingChannels) と同じ範囲が 0 になる。
+        private Profile ApplyDisplayMask(Profile rawProfile)
+        {
+            string modelPath = SelectedModelPath;
+            var preprocessing = string.IsNullOrWhiteSpace(modelPath)
+                ? SpectrumPreprocessing.None
+                : SpectrumPreprocessing.LoadFromModelFolder(Path.Combine(modelPath, "AllMinerals_Classification"));
+            if (!preprocessing.HasLowEnergyMask)
+                return rawProfile;
+
+            int maskCount = Math.Min(preprocessing.MaskChannelCount, rawProfile.Pt.Count);
+            var points = new List<PointD>(rawProfile.Pt.Count);
+            for (int i = 0; i < rawProfile.Pt.Count; i++)
+                points.Add(i < maskCount ? new PointD(rawProfile.Pt[i].X, 0) : rawProfile.Pt[i]);
+
+            return new Profile { Pt = points };
         }
 
         // 260427Codex: EMSA/MSA の Y データを読み、ヘッダーがあればエネルギー軸へ変換します。
@@ -571,6 +593,8 @@ namespace MineraScope
                 // 260620Claude: 「ファイルの種類」で CSV か TXT を選ぶ。選択は FilterIndex で判定する。
                 Filter = "CSV (*.csv)|*.csv|TXT (*.txt)|*.txt",
                 FilterIndex = 1,
+                // 260629Codex: Existing CSV files are append targets, so the app handles replace prompts after the dialog.
+                OverwritePrompt = false,
                 FileName = SpectrumPredictionExporter.BuildDefaultFileName(_currentBatch.ModelName, _droppedRawPaths)
             };
             if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -583,10 +607,18 @@ namespace MineraScope
             // 260621Codex: The dialog writes one selected format, so keep one output path instead of a list.
             bool writeCsv = dialog.FilterIndex == 1;
             string outputPath = basePath + (writeCsv ? ".csv" : ".txt");
+            // 260629Codex: CSV exports append to existing files; TXT reports keep the old replace behavior.
+            bool appendCsv = writeCsv && File.Exists(outputPath);
+            if (!writeCsv && File.Exists(outputPath) &&
+                MessageBox.Show(
+                    $"既存のTXTファイルを上書きしますか？\r\n\r\n{outputPath}",
+                    "エクスポート", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                return;
+
             try
             {
                 if (writeCsv)
-                    SpectrumPredictionExporter.WriteCsv(outputPath, _currentBatch);
+                    SpectrumPredictionExporter.WriteCsv(outputPath, _currentBatch, appendCsv);
                 else
                     SpectrumPredictionExporter.WriteReport(outputPath, _currentBatch);
             }

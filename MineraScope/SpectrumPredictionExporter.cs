@@ -12,7 +12,8 @@ namespace MineraScope
         private const string Divider = "────────────────────────";
 
         // 260620Claude: ブロック2列(項目名,値)の CSV。Excel で縦のブロックとして読める形にし、スペクトル間は空行で区切る。
-        public static void WriteCsv(string path, SpectrumPredictionBatch batch)
+        // 260629Codex: append=true keeps existing CSV history and adds this export batch at the end.
+        public static void WriteCsv(string path, SpectrumPredictionBatch batch, bool append = false)
         {
             var sb = new StringBuilder();
             bool first = true;
@@ -33,7 +34,15 @@ namespace MineraScope
                     AppendRow(sb, row.Label, row.Value);
             }
 
-            File.WriteAllText(path, sb.ToString(), Utf8Bom);
+            // 260629Codex: Existing CSV exports receive the next batch after a blank row for Excel-friendly separation.
+            string content = sb.ToString();
+            if (append && File.Exists(path) && new FileInfo(path).Length > 0)
+            {
+                File.AppendAllText(path, "\r\n" + content, Utf8Bom);
+                return;
+            }
+
+            File.WriteAllText(path, content, Utf8Bom);
         }
 
         // 260621Codex: Keep report block separation consistent in one place.

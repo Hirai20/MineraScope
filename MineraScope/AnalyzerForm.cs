@@ -509,7 +509,15 @@ namespace MineraScope
             graphControl1.LabelY = "Counts";
             graphControl1.UnitY = "";
             graphControl1.GraphTitle = $"{fileName} [{rangeLabel}] {binningLabel}";
-            graphControl1.Profile = CreateSpectrumProfile(spectrum);
+
+            // 260626Claude: 分類モデルの前処理を読み、学習時と同じ低エネルギーマスクをクリック分析にも自動適用する。
+            //   preprocessing.json が無い既存モデルは None = マスク無しで従来どおり。
+            // 260630Claude: マスクあり(NoCarbon)モデルでは表示スペクトルにも同じマスクを掛け、C 領域が実際に
+            //   ゼロ化されているのを目視確認できるようにする。表示前に前処理を読む必要があるので順序を入れ替えた。
+            var preprocessing = string.IsNullOrWhiteSpace(modelPath)
+                ? SpectrumPreprocessing.None
+                : SpectrumPreprocessing.LoadFromModelFolder(Path.Combine(modelPath, "AllMinerals_Classification"));
+            graphControl1.Profile = CreateSpectrumProfile(spectrum, preprocessing);
             graphControl1.Refresh();
 
             if (string.IsNullOrWhiteSpace(modelPath) || string.IsNullOrWhiteSpace(modelName))
@@ -518,9 +526,6 @@ namespace MineraScope
                 return;
             }
 
-            // 260626Claude: 分類モデルの前処理を読み、学習時と同じ低エネルギーマスクをクリック分析にも自動適用する。
-            //   preprocessing.json が無い既存モデルは None = マスク無しで従来どおり。
-            var preprocessing = SpectrumPreprocessing.LoadFromModelFolder(Path.Combine(modelPath, "AllMinerals_Classification"));
             float[]? normalizedSpectrum = SpectrumDataLoader.CreateNormalizedSpectrum(spectrum, preprocessing);
             if (normalizedSpectrum is null)
             {
@@ -599,11 +604,19 @@ namespace MineraScope
         }
 
         // 260519Codex: クリックされた1ピクセルの全チャンネルカウントを GraphControl 用 Profile に変換します。
-        private static Profile CreateSpectrumProfile(PtsPixelSpectrum spectrum)
+        // 260630Claude: 低エネルギーマスクありの前処理では、マスク範囲の表示カウントも 0 にして実際のモデル入力と一致させる。
+        private static Profile CreateSpectrumProfile(PtsPixelSpectrum spectrum, SpectrumPreprocessing preprocessing)
         {
+            int maskCount = preprocessing.HasLowEnergyMask
+                ? Math.Min(preprocessing.MaskChannelCount, spectrum.ChannelCount)
+                : 0;
+
             var points = new List<PointD>(spectrum.ChannelCount);
             for (int channel = 0; channel < spectrum.ChannelCount; channel++)
-                points.Add(new PointD(spectrum.GetEnergy(channel), spectrum.GetCount(channel)));
+            {
+                double count = channel < maskCount ? 0 : spectrum.GetCount(channel);
+                points.Add(new PointD(spectrum.GetEnergy(channel), count));
+            }
 
             return new Profile(points);
         }
