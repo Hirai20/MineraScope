@@ -33,9 +33,10 @@ namespace MineraScope
                     yield return new(SpectrumBlockRowKind.Field, "Top-1 candidate", $"{classification.PredictedMineral} ({FormatPercent(classification.Confidence)}%)");
                     if (!string.IsNullOrWhiteSpace(classification.NearestKnownMineral))
                         yield return new(SpectrumBlockRowKind.Field, "Nearest known", classification.NearestKnownMineral);
-                    if (classification.UnknownScore.HasValue && classification.UnknownThreshold.HasValue)
-                        yield return new(SpectrumBlockRowKind.Field, "Unknown score", $"{FormatScore(classification.UnknownScore.Value)} / {FormatScore(classification.UnknownThreshold.Value)}");
                 }
+                // 260703Claude: 距離スコアは既知判定でも出力し、未学習検知の距離分布 (箱ひげ図) を全スペクトルで解析できるようにする。
+                if (classification.UnknownScore.HasValue && classification.UnknownThreshold.HasValue)
+                    yield return new(SpectrumBlockRowKind.Field, "Unknown score", $"{FormatScore(classification.UnknownScore.Value)} / {FormatScore(classification.UnknownThreshold.Value)}");
             }
 
             if (item.Endmembers.Count > 0)
