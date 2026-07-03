@@ -50,6 +50,7 @@ namespace MineraScope
     internal sealed class GeneratorFormUserSettings
     {
         public string DetectorName { get; set; } = string.Empty;
+        public DetectorProfile? DetectorProfile { get; set; }
         public string ModelName { get; set; } = string.Empty;
         public double TargetSpectrumCount { get; set; }
         public double ParallelCount { get; set; }
@@ -66,5 +67,8 @@ namespace MineraScope
         public double CarbonThickness { get; set; }
         // 260622Claude: カーボン蒸着膜厚を spectrum ごとに振るばらつき幅 (%)。旧設定ファイルに無いとき (JSON 欠落時) は既定 20 を保つ。
         public double CarbonThicknessJitterPercent { get; set; } = 20;
+
+        public DetectorProfile GetDetectorProfile() =>
+            MineraScope.DetectorProfile.CreateWithDefaults(DetectorProfile, DetectorName);
     }
 }

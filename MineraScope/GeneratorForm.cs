@@ -42,6 +42,8 @@ namespace MineraScope
         public (string ElementName, double Weight)[][] Atoms1;
         public (string Name, double Mol)[] Atoms2;
         public string DetectorName;
+        [MemoryPackIgnore]
+        public DetectorProfile DetectorProfile;
         //　カーボン蒸着厚　（nm）
         public double CarbonCoatThickness;
         // 260622Claude: カーボン蒸着厚を spectrum ごとに ±x% 振る幅 (0 で無効)。既知範囲を広げるための生成時ばらつき。
@@ -84,6 +86,8 @@ namespace MineraScope
         private readonly SimulationExecutionService _simulationExecutionService;
         // 260511Codex: キャリブレーション画面は閉じても破棄せず、入力値を保持するため 1 インスタンスだけ持ちます。
         private readonly EdxCalibrationForm _edxCalibrationForm;
+        // 260626Codex: Detector physics travels with generation requests without adding detector-editing UI to GeneratorForm.
+        private DetectorProfile _detectorProfile = DetectorProfile.CreateLegacyTest();
         // 260513Codex: DTSA-II spectrum 生成だけを中止するため、学習処理とは別の CTS を持ちます。
         // 260514Codex: DTSA-II spectrum 生成とモデル作成は別々の CTS を持ち、同じ中止ボタンから現在の処理だけ止めます。
         private CancellationTokenSource _simulationCancellationTokenSource;
@@ -159,10 +163,14 @@ namespace MineraScope
         private void LoadUserSettings()
         {
             if (!FormUserSettingsStore.Exists(UserSettingsFileName))
+            {
+                _detectorProfile = DetectorProfile.CreateLegacyTest(textBoxDetectorName.Text);
                 return;
+            }
 
             var settings = FormUserSettingsStore.Load<GeneratorFormUserSettings>(UserSettingsFileName);
-            textBoxDetectorName.Text = settings.DetectorName;
+            _detectorProfile = settings.GetDetectorProfile();
+            textBoxDetectorName.Text = _detectorProfile.Name;
             textBoxModelName.Text = settings.ModelName;
             numericBoxSpectraPerMineral.Value = settings.TargetSpectrumCount;
             numericBoxParallel.Value = settings.ParallelCount;
@@ -182,11 +190,13 @@ namespace MineraScope
         // 260507Codex: 次回起動で戻す対象を明示し、CheckedListBox のチェック状態は保存しません。
         internal void SaveUserSettings()
         {
+            var detectorProfile = ReadDetectorProfileFromUi();
             FormUserSettingsStore.Save(
                 UserSettingsFileName,
                 new GeneratorFormUserSettings
                 {
-                    DetectorName = textBoxDetectorName.Text,
+                    DetectorName = detectorProfile.Name,
+                    DetectorProfile = detectorProfile,
                     ModelName = textBoxModelName.Text,
                     TargetSpectrumCount = numericBoxSpectraPerMineral.Value,
                     ParallelCount = numericBoxParallel.Value,
@@ -221,6 +231,13 @@ namespace MineraScope
         }
 
         // 260513Codex: 詳細設定は最初から下部ドロワー内にあるため、初期状態は非表示と高さ 0 にそろえます。
+        private DetectorProfile ReadDetectorProfileFromUi()
+        {
+            var profile = _detectorProfile.Clone();
+            profile.Name = textBoxDetectorName.Text.Trim();
+            return DetectorProfile.CreateWithDefaults(profile);
+        }
+
         private void ConfigureBottomDrawerInitialState()
         {
             groupBoxAdvancedSettings.Dock = DockStyle.Fill;
@@ -308,7 +325,7 @@ namespace MineraScope
                 // 260511Codex: Designer 改名後もモデル保存フォルダ名として画面のモデル名を渡します。
                 textBoxModelName.Text.Trim(),
                 new SemEdxCondition(
-                    textBoxDetectorName.Text.Trim(),
+                    ReadDetectorProfileFromUi(),
                     numericBoxCarbonThickness.Value,
                     numericBoxBeamEnergy.Value,
                     numericBoxLiveTime.Value,
@@ -356,6 +373,13 @@ namespace MineraScope
 
             if (requireDtsaPath && string.IsNullOrWhiteSpace(request.Paths.DtsaFolder))
                 return "DTSA-II のフォルダを指定してください。";
+
+            // 260626Codex: Fail early when the selected folder is not the dtsa2.msi install root.
+            string dtsaValidationError = requireDtsaPath
+                ? DtsaMsiInstallation.GetValidationError(request.Paths.DtsaFolder)
+                : null;
+            if (dtsaValidationError is not null)
+                return dtsaValidationError;
 
             return string.Empty;
         }

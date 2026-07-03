@@ -141,16 +141,8 @@ namespace MineraScope
             SimulationJobProgress progress,
             CancellationToken cancellationToken)
         {
-            ProcessStartInfo startInfo = new()
-            {
-                FileName = "cmd.exe",
-                Arguments = $"/c java-runtime\\bin\\java -jar dtsa2-15.1.44.jar -- --script \"{job.ScriptPath}\"",
-                WorkingDirectory = job.DtsaFolder,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
+            // 260626Codex: Launch the dtsa2.msi app image directly in no-GUI mode while keeping stdout markers redirected.
+            ProcessStartInfo startInfo = DtsaMsiInstallation.CreateStartInfo(job.DtsaFolder, job.ScriptPath);
 
             using Process process = new()
             {

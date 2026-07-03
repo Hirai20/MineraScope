@@ -43,6 +43,7 @@ namespace MineraScope
                 "MineraScope",
                 "PythonScripts");
             Directory.CreateDirectory(scriptOutput);
+            DetectorProfile detectorProfile = generator.GetDetectorProfile();
 
             string assemblyPath = Path.GetDirectoryName(Assembly.GetEntryAssembly()?.Location) ?? AppContext.BaseDirectory;
             var allSolutions = new MineralDatabaseRepository(assemblyPath).Load();
@@ -65,11 +66,11 @@ namespace MineraScope
                 new ModelCreationPaths(
                     outputFolder.Trim(),
                     scriptOutput,
-                    (formMain.DtsaPath ?? string.Empty).Trim(),
+                    DtsaMsiInstallation.UseDefaultIfBlank(formMain.DtsaPath),
                     (formMain.ModelPath ?? string.Empty).Trim()),
                 generator.ModelName.Trim(),
                 new SemEdxCondition(
-                    generator.DetectorName.Trim(),
+                    detectorProfile,
                     generator.CarbonThickness,
                     generator.BeamEnergy,
                     generator.LiveTime,
@@ -92,9 +93,13 @@ namespace MineraScope
             Log($"minerals={selectedSolutions.Length} ({string.Join(", ", selectedSolutions.Select(s => s.Name))})");
             Log($"target={request.Simulation.TargetSpectrumCount} resolutionStep={request.Simulation.ResolutionStep.ToString(CultureInfo.InvariantCulture)} parallel={request.Simulation.ParallelCount} carbonJitter%={request.Simulation.CarbonThicknessJitterPercent.ToString(CultureInfo.InvariantCulture)}");
 
-            if (!dryRun && string.IsNullOrWhiteSpace(request.Paths.DtsaFolder))
+            // 260626Codex: Match the GUI-side dtsa2.msi validation before reserving/running spectra.
+            string? dtsaValidationError = dryRun
+                ? null
+                : DtsaMsiInstallation.GetValidationError(request.Paths.DtsaFolder);
+            if (dtsaValidationError is not null)
             {
-                Log("ERROR: DTSA-II path is empty in FormMainSettings.json. Abort.");
+                Log($"ERROR: {dtsaValidationError} Abort.");
                 return;
             }
 

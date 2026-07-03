@@ -19,8 +19,9 @@ namespace MineraScope
         public List<EndmemberConditionSnapshot> Endmembers { get; set; } = [];
         public List<string> Constraints { get; set; } = [];
         public double CompositionResolution { get; set; }
-        public SemEdxCondition SemEdxCondition { get; set; } = new(string.Empty, 0, 0, 0, 0);
-        public string DtsaGenerationSchema { get; set; } = "dtsa2-emsa-v1";
+        public SemEdxCondition SemEdxCondition { get; set; } = new(DetectorProfile.CreateLegacyTest(), 0, 0, 0, 0);
+        // 260626Codex: Detector profile fields are part of generation identity; legacy unknown-detector pools should not be auto-reused.
+        public string DtsaGenerationSchema { get; set; } = "dtsa2-emsa-v2-detector-profile";
     }
 
     // 260507Codex: 端成分名と式を conditionKey と manifest の両方で同じ形に保ちます。

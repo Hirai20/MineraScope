@@ -154,6 +154,13 @@ namespace MineraScope
             // 260430Codex: 空欄の EDX/教師データ保存先はユーザーごとの Documents 配下へ初期化します。
             if (string.IsNullOrWhiteSpace(EdxOutputPath))
                 EdxOutputPath = DefaultStoragePaths.TrainingDataFolder;
+
+            // 260626Codex: Show dtsa2.msi's per-user install root only when no saved/user path exists.
+            if (string.IsNullOrWhiteSpace(DtsaPath))
+                DtsaPath = DtsaMsiInstallation.DefaultFolder;
+
+            labelPathDTSA.Text = "DTSA-IIパス(msi既定)";
+            textBoxPathDTSA.PlaceholderText = "dtsa2.msi の既定インストール先。別の場所なら変更可";
         }
 
         private void textBoxlPathSaveModel_TextChanged(object sender, EventArgs e)

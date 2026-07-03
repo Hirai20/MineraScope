@@ -15,7 +15,36 @@ namespace MineraScope
         double CarbonCoatThickness,
         double BeamEnergy,
         double LiveTime,
-        double ProbeCurrent);
+        double ProbeCurrent)
+    {
+        public DetectorProfile? DetectorProfile { get; init; } = MineraScope.DetectorProfile.CreateLegacyTest(DetectorName);
+
+        // 260626Codex: System.Text.Json needs an unambiguous constructor when reading manifests with the added detector profile field.
+        public SemEdxCondition()
+            : this(string.Empty, 0, 0, 0, 0)
+        {
+        }
+
+        // 260626Codex: New callers pass the editable detector profile while the old DetectorName field remains for JSON compatibility.
+        public SemEdxCondition(
+            DetectorProfile detectorProfile,
+            double carbonCoatThickness,
+            double beamEnergy,
+            double liveTime,
+            double probeCurrent)
+            : this(
+                MineraScope.DetectorProfile.CreateWithDefaults(detectorProfile).Name,
+                carbonCoatThickness,
+                beamEnergy,
+                liveTime,
+                probeCurrent)
+        {
+            DetectorProfile = MineraScope.DetectorProfile.CreateWithDefaults(detectorProfile);
+        }
+
+        public DetectorProfile GetDetectorProfile() =>
+            MineraScope.DetectorProfile.CreateWithDefaults(DetectorProfile, DetectorName);
+    }
 
     // 260507Codex: target は学習に使用したい件数、parallel は不足分生成のジョブ分割数として扱います。
     // 260622Claude: CarbonThicknessJitterPercent は生成時にカーボン蒸着膜厚を spectrum ごとへ ±x% 振る幅 (0 で無効)。conditionKey には含めない。

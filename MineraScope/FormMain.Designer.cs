@@ -293,7 +293,6 @@
             textBoxPathDTSA.Name = "textBoxPathDTSA";
             textBoxPathDTSA.Size = new Size(155, 23);
             textBoxPathDTSA.TabIndex = 0;
-            textBoxPathDTSA.Text = "C:\\Users\\mineral\\AppData\\Local\\NIST\\NIST DTSA-II Oberon 2026-01-07";
             // 
             // labelPathDTSA
             // 
