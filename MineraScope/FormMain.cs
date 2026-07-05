@@ -593,8 +593,6 @@ namespace MineraScope
                 // 260620Claude: 「ファイルの種類」で CSV か TXT を選ぶ。選択は FilterIndex で判定する。
                 Filter = "CSV (*.csv)|*.csv|TXT (*.txt)|*.txt",
                 FilterIndex = 1,
-                // 260629Codex: Existing CSV files are append targets, so the app handles replace prompts after the dialog.
-                OverwritePrompt = false,
                 FileName = SpectrumPredictionExporter.BuildDefaultFileName(_currentBatch.ModelName, _droppedRawPaths)
             };
             if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -607,18 +605,12 @@ namespace MineraScope
             // 260621Codex: The dialog writes one selected format, so keep one output path instead of a list.
             bool writeCsv = dialog.FilterIndex == 1;
             string outputPath = basePath + (writeCsv ? ".csv" : ".txt");
-            // 260629Codex: CSV exports append to existing files; TXT reports keep the old replace behavior.
-            bool appendCsv = writeCsv && File.Exists(outputPath);
-            if (!writeCsv && File.Exists(outputPath) &&
-                MessageBox.Show(
-                    $"既存のTXTファイルを上書きしますか？\r\n\r\n{outputPath}",
-                    "エクスポート", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
-                return;
 
+            // 260705Codex: CSV exports use the normal SaveFileDialog overwrite flow again.
             try
             {
                 if (writeCsv)
-                    SpectrumPredictionExporter.WriteCsv(outputPath, _currentBatch, appendCsv);
+                    SpectrumPredictionExporter.WriteCsv(outputPath, _currentBatch);
                 else
                     SpectrumPredictionExporter.WriteReport(outputPath, _currentBatch);
             }
