@@ -136,7 +136,10 @@ namespace MineraScope
                 MineralGroupName = mineralGroupName,
                 Atoms1 = atoms,
                 DetectorName = semEdxCondition.DetectorName,
+                DetectorProfile = semEdxCondition.GetDetectorProfile(),
                 CarbonCoatThickness = semEdxCondition.CarbonCoatThickness,
+                // 260622Claude: 膜厚は conditionKey 用の基準値のまま渡し、ばらつき幅は別フィールドで script generator に渡す。
+                CarbonCoatThicknessJitterPercent = simulation.CarbonThicknessJitterPercent,
                 BeamEnergy = semEdxCondition.BeamEnergy,
                 Division = (int)(simulation.ResolutionStep * 100),
                 LiveTime = semEdxCondition.LiveTime,

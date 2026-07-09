@@ -12,6 +12,7 @@ namespace MineraScope
         string ModelOutputFolder,
         IReadOnlyList<SpectrumTrainingPool> TrainingPools,
         ModelTrainingSettings Settings,
+        DetectorProfile DetectorProfile,
         // 260619Codex: Store overwrite consent in the plan so workflow callers cannot replace models accidentally.
         bool AllowOverwriteExistingModel);
 
@@ -46,7 +47,12 @@ namespace MineraScope
                 : request.Paths.ModelOutputFolder;
             string modelOutputFolder = Path.Combine(modelRootFolder, request.ModelName);
 
-            return new ModelTrainingPlan(modelOutputFolder, trainingPools, request.Training, allowOverwriteExistingModel);
+            return new ModelTrainingPlan(
+                modelOutputFolder,
+                trainingPools,
+                request.Training,
+                request.SemEdxCondition.GetDetectorProfile(),
+                allowOverwriteExistingModel);
         }
 
         // 260514Codex: target 未設定や pool 不足は学習開始前に止めます。
@@ -95,9 +101,11 @@ namespace MineraScope
                     plan.Settings.BatchSize,
                     plan.Settings.EarlyStoppingPatience,
                     plan.Settings.ValidationSplit,
+                    plan.Settings.UnknownDistanceScale,
                     temporaryOutputFolder,
                     progress,
                     cancellationToken);
+                WriteDetectorMetadata(plan.DetectorProfile, temporaryOutputFolder);
 
                 cancellationToken.ThrowIfCancellationRequested();
                 PromoteTemporaryFolder(temporaryOutputFolder, plan.ModelOutputFolder, plan.AllowOverwriteExistingModel);
@@ -117,6 +125,17 @@ namespace MineraScope
                 }
 
                 throw;
+            }
+        }
+
+        // 260626Codex: Record the detector profile beside trained artifacts so later predictions can trace training spectra.
+        private static void WriteDetectorMetadata(DetectorProfile detectorProfile, string modelRootFolder)
+        {
+            detectorProfile.WriteToModelFolder(modelRootFolder);
+            foreach (string modelFolder in Directory.EnumerateDirectories(modelRootFolder))
+            {
+                if (File.Exists(Path.Combine(modelFolder, "modelType.txt")))
+                    detectorProfile.WriteToModelFolder(modelFolder);
             }
         }
 

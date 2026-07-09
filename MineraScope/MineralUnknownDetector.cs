@@ -53,14 +53,17 @@ namespace MineraScope
 
         public int LabelCount => _means.Length;
 
+        // 260622Claude: radiusExpansion は UI の「既知と認める距離の倍率」から渡る。不正値 (1 未満や NaN) は既定値へフォールバックする。
         public static MineralUnknownDetector Build(
             Model model,
             NDArray xTrain,
             NDArray yTrain,
             NDArray xValidation,
             NDArray yValidation,
+            double radiusExpansion,
             CancellationToken cancellationToken)
         {
+            double resolvedRadiusExpansion = radiusExpansion >= 1d ? radiusExpansion : DefaultThresholdRadiusExpansion;
             var extractor = DenseClassificationFeatureExtractor.FromWeights(model.get_weights());
             float[,] trainEmbeddings = extractor.TransformFlat(xTrain.ToArray<float>(), (int)xTrain.shape[0]);
             int[] trainLabels = yTrain.ToArray<int>();
@@ -68,7 +71,7 @@ namespace MineraScope
                 trainEmbeddings,
                 trainLabels,
                 DefaultThresholdQuantile,
-                DefaultThresholdRadiusExpansion,
+                resolvedRadiusExpansion,
                 cancellationToken);
 
             float[,] calibrationEmbeddings = xValidation.shape[0] > 0
@@ -82,7 +85,7 @@ namespace MineraScope
                 calibrationEmbeddings,
                 calibrationLabels,
                 DefaultThresholdQuantile,
-                DefaultThresholdRadiusExpansion,
+                resolvedRadiusExpansion,
                 cancellationToken));
             return detector;
         }

@@ -55,12 +55,14 @@
             checkedListBoxMinerals = new CheckedListBox();
             groupBoxAdvancedSettings = new GroupBox();
             groupBoxModelSettings = new GroupBox();
+            numericBoxUnknownDistanceScale = new Crystallography.Controls.NumericBox();
             flowLayoutPanelModelSettings = new FlowLayoutPanel();
             numericBoxEpochs = new Crystallography.Controls.NumericBox();
             numericBoxBatchSize = new Crystallography.Controls.NumericBox();
             numericBoxEarlyStopping = new Crystallography.Controls.NumericBox();
             numericBoxValidationSplit = new Crystallography.Controls.NumericBox();
             groupBoxSpectrumSettings = new GroupBox();
+            numericBoxcarbonrandam = new Crystallography.Controls.NumericBox();
             flowLayoutPanelSpectrumSettings = new FlowLayoutPanel();
             numericBoxSpectraPerMineral = new Crystallography.Controls.NumericBox();
             numericBoxResolution = new Crystallography.Controls.NumericBox();
@@ -396,15 +398,17 @@
             // 
             groupBoxAdvancedSettings.Controls.Add(groupBoxModelSettings);
             groupBoxAdvancedSettings.Controls.Add(groupBoxSpectrumSettings);
-            groupBoxAdvancedSettings.Location = new Point(0, 3);
+            groupBoxAdvancedSettings.Dock = DockStyle.Fill;
+            groupBoxAdvancedSettings.Location = new Point(0, 0);
             groupBoxAdvancedSettings.Name = "groupBoxAdvancedSettings";
-            groupBoxAdvancedSettings.Size = new Size(946, 113);
+            groupBoxAdvancedSettings.Size = new Size(949, 129);
             groupBoxAdvancedSettings.TabIndex = 43;
             groupBoxAdvancedSettings.TabStop = false;
             groupBoxAdvancedSettings.Text = "詳細設定";
             // 
             // groupBoxModelSettings
             // 
+            groupBoxModelSettings.Controls.Add(numericBoxUnknownDistanceScale);
             groupBoxModelSettings.Controls.Add(flowLayoutPanelModelSettings);
             groupBoxModelSettings.Location = new Point(465, 22);
             groupBoxModelSettings.Name = "groupBoxModelSettings";
@@ -412,6 +416,29 @@
             groupBoxModelSettings.TabIndex = 109;
             groupBoxModelSettings.TabStop = false;
             groupBoxModelSettings.Text = "モデル訓練詳細";
+            // 
+            // numericBoxUnknownDistanceScale
+            // 
+            numericBoxUnknownDistanceScale.BackColor = Color.Transparent;
+            numericBoxUnknownDistanceScale.DecimalPlaces = 2;
+            numericBoxUnknownDistanceScale.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxUnknownDistanceScale.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxUnknownDistanceScale.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxUnknownDistanceScale.HeaderText = "未知判定の距離倍率";
+            numericBoxUnknownDistanceScale.Location = new Point(0, 50);
+            numericBoxUnknownDistanceScale.Margin = new Padding(0);
+            numericBoxUnknownDistanceScale.Maximum = 3D;
+            numericBoxUnknownDistanceScale.MaximumSize = new Size(1000, 28);
+            numericBoxUnknownDistanceScale.Minimum = 0.5D;
+            numericBoxUnknownDistanceScale.MinimumSize = new Size(1, 18);
+            numericBoxUnknownDistanceScale.Name = "numericBoxUnknownDistanceScale";
+            numericBoxUnknownDistanceScale.RadianValue = 0.026179938779914941D;
+            numericBoxUnknownDistanceScale.ShowUpDown = true;
+            numericBoxUnknownDistanceScale.Size = new Size(164, 26);
+            numericBoxUnknownDistanceScale.SmartIncrement = true;
+            numericBoxUnknownDistanceScale.TabIndex = 104;
+            numericBoxUnknownDistanceScale.ValueFontSize = 9F;
+            numericBoxUnknownDistanceScale.Value = 1.5D;
             // 
             // flowLayoutPanelModelSettings
             // 
@@ -518,6 +545,7 @@
             // 
             // groupBoxSpectrumSettings
             // 
+            groupBoxSpectrumSettings.Controls.Add(numericBoxcarbonrandam);
             groupBoxSpectrumSettings.Controls.Add(flowLayoutPanelSpectrumSettings);
             groupBoxSpectrumSettings.Location = new Point(3, 22);
             groupBoxSpectrumSettings.Name = "groupBoxSpectrumSettings";
@@ -526,6 +554,29 @@
             groupBoxSpectrumSettings.TabStop = false;
             groupBoxSpectrumSettings.Text = "EDXスペクトル生成詳細";
             // 
+            // numericBoxcarbonrandam
+            // 
+            numericBoxcarbonrandam.BackColor = Color.Transparent;
+            numericBoxcarbonrandam.DecimalPlaces = 0;
+            numericBoxcarbonrandam.Font = new Font("Yu Gothic UI", 9F);
+            numericBoxcarbonrandam.FooterFont = new Font("Yu Gothic UI", 9F);
+            numericBoxcarbonrandam.HeaderFont = new Font("Yu Gothic UI", 9F);
+            numericBoxcarbonrandam.HeaderText = "蒸着膜厚のばらつき(%)";
+            numericBoxcarbonrandam.Location = new Point(6, 52);
+            numericBoxcarbonrandam.Margin = new Padding(0);
+            numericBoxcarbonrandam.Maximum = 100000D;
+            numericBoxcarbonrandam.MaximumSize = new Size(1000, 28);
+            numericBoxcarbonrandam.Minimum = 0D;
+            numericBoxcarbonrandam.MinimumSize = new Size(1, 18);
+            numericBoxcarbonrandam.Name = "numericBoxcarbonrandam";
+            numericBoxcarbonrandam.RadianValue = 0.17453292519943295D;
+            numericBoxcarbonrandam.ShowUpDown = true;
+            numericBoxcarbonrandam.Size = new Size(161, 26);
+            numericBoxcarbonrandam.SmartIncrement = true;
+            numericBoxcarbonrandam.TabIndex = 116;
+            numericBoxcarbonrandam.ValueFontSize = 9F;
+            numericBoxcarbonrandam.Value = 10D;
+            // 
             // flowLayoutPanelSpectrumSettings
             // 
             flowLayoutPanelSpectrumSettings.AutoSize = true;
@@ -533,7 +584,7 @@
             flowLayoutPanelSpectrumSettings.Controls.Add(numericBoxSpectraPerMineral);
             flowLayoutPanelSpectrumSettings.Controls.Add(numericBoxResolution);
             flowLayoutPanelSpectrumSettings.Controls.Add(numericBoxParallel);
-            flowLayoutPanelSpectrumSettings.Location = new Point(6, 26);
+            flowLayoutPanelSpectrumSettings.Location = new Point(5, 21);
             flowLayoutPanelSpectrumSettings.Name = "flowLayoutPanelSpectrumSettings";
             flowLayoutPanelSpectrumSettings.Size = new Size(386, 28);
             flowLayoutPanelSpectrumSettings.TabIndex = 115;
@@ -622,15 +673,17 @@
             // 
             panelModelLog.Controls.Add(labelModelLog);
             panelModelLog.Controls.Add(textBoxModelLog);
-            panelModelLog.Location = new Point(228, 556);
+            panelModelLog.Dock = DockStyle.Bottom;
+            panelModelLog.Location = new Point(3, 556);
             panelModelLog.Name = "panelModelLog";
-            panelModelLog.Size = new Size(444, 142);
+            panelModelLog.Size = new Size(959, 162);
             panelModelLog.TabIndex = 107;
             // 
             // labelModelLog
             // 
             labelModelLog.AutoSize = true;
-            labelModelLog.Location = new Point(189, 18);
+            labelModelLog.Dock = DockStyle.Top;
+            labelModelLog.Location = new Point(0, 0);
             labelModelLog.Margin = new Padding(2, 0, 2, 0);
             labelModelLog.Name = "labelModelLog";
             labelModelLog.Size = new Size(49, 15);
@@ -639,11 +692,12 @@
             // 
             // textBoxModelLog
             // 
-            textBoxModelLog.Location = new Point(3, 36);
+            textBoxModelLog.Dock = DockStyle.Bottom;
+            textBoxModelLog.Location = new Point(0, 38);
             textBoxModelLog.Multiline = true;
             textBoxModelLog.Name = "textBoxModelLog";
             textBoxModelLog.ScrollBars = ScrollBars.Both;
-            textBoxModelLog.Size = new Size(438, 95);
+            textBoxModelLog.Size = new Size(959, 124);
             textBoxModelLog.TabIndex = 0;
             // 
             // buttonAllSelect
@@ -732,7 +786,7 @@
             groupBoxModelCreation.Dock = DockStyle.Fill;
             groupBoxModelCreation.Location = new Point(3, 3);
             groupBoxModelCreation.Name = "groupBoxModelCreation";
-            groupBoxModelCreation.Size = new Size(990, 721);
+            groupBoxModelCreation.Size = new Size(965, 721);
             groupBoxModelCreation.TabIndex = 88;
             groupBoxModelCreation.TabStop = false;
             groupBoxModelCreation.Text = "モデル作成";
@@ -745,22 +799,24 @@
             tableLayoutPanelMain.Controls.Add(panelCommandBar, 0, 2);
             tableLayoutPanelMain.Controls.Add(panelBottomDrawer, 0, 3);
             tableLayoutPanelMain.Controls.Add(groupBoxMineral, 0, 1);
-            tableLayoutPanelMain.Location = new Point(15, 22);
+            tableLayoutPanelMain.Dock = DockStyle.Fill;
+            tableLayoutPanelMain.Location = new Point(3, 19);
             tableLayoutPanelMain.Name = "tableLayoutPanelMain";
             tableLayoutPanelMain.RowCount = 4;
             tableLayoutPanelMain.RowStyles.Add(new RowStyle());
             tableLayoutPanelMain.RowStyles.Add(new RowStyle());
             tableLayoutPanelMain.RowStyles.Add(new RowStyle());
             tableLayoutPanelMain.RowStyles.Add(new RowStyle());
-            tableLayoutPanelMain.Size = new Size(955, 528);
+            tableLayoutPanelMain.Size = new Size(959, 699);
             tableLayoutPanelMain.TabIndex = 104;
             // 
             // groupBoxEDXSettings
             // 
             groupBoxEDXSettings.Controls.Add(flowLayoutPanelEDXSettings);
+            groupBoxEDXSettings.Dock = DockStyle.Fill;
             groupBoxEDXSettings.Location = new Point(3, 3);
             groupBoxEDXSettings.Name = "groupBoxEDXSettings";
-            groupBoxEDXSettings.Size = new Size(949, 52);
+            groupBoxEDXSettings.Size = new Size(953, 52);
             groupBoxEDXSettings.TabIndex = 99;
             groupBoxEDXSettings.TabStop = false;
             groupBoxEDXSettings.Text = "SEM-EDX条件";
@@ -776,7 +832,7 @@
             flowLayoutPanelEDXSettings.Dock = DockStyle.Fill;
             flowLayoutPanelEDXSettings.Location = new Point(3, 19);
             flowLayoutPanelEDXSettings.Name = "flowLayoutPanelEDXSettings";
-            flowLayoutPanelEDXSettings.Size = new Size(943, 30);
+            flowLayoutPanelEDXSettings.Size = new Size(947, 30);
             flowLayoutPanelEDXSettings.TabIndex = 108;
             // 
             // panelDetectorName
@@ -838,7 +894,7 @@
             numericBoxCarbonThickness.Font = new Font("Yu Gothic UI", 9F);
             numericBoxCarbonThickness.FooterFont = new Font("Yu Gothic UI", 9F);
             numericBoxCarbonThickness.HeaderFont = new Font("Yu Gothic UI", 9F);
-            numericBoxCarbonThickness.HeaderText = "カーボン蒸着の厚さ(nm)";
+            numericBoxCarbonThickness.HeaderText = "カーボン蒸着の厚さ(μm)";
             numericBoxCarbonThickness.Location = new Point(540, 0);
             numericBoxCarbonThickness.Margin = new Padding(0);
             numericBoxCarbonThickness.MaximumSize = new Size(1000, 28);
@@ -861,9 +917,10 @@
             panelCommandBar.Controls.Add(checkBoxAdvanced);
             panelCommandBar.Controls.Add(buttonModelTrain);
             panelCommandBar.Controls.Add(buttonRunSpectrumGeneration);
+            panelCommandBar.Dock = DockStyle.Fill;
             panelCommandBar.Location = new Point(3, 349);
             panelCommandBar.Name = "panelCommandBar";
-            panelCommandBar.Size = new Size(949, 32);
+            panelCommandBar.Size = new Size(953, 32);
             panelCommandBar.TabIndex = 108;
             // 
             // buttonCancel
@@ -929,9 +986,10 @@
             groupBoxMineral.Controls.Add(groupBoxMineralInfo);
             groupBoxMineral.Controls.Add(checkedListBoxMinerals);
             groupBoxMineral.Controls.Add(flowLayoutPanelMineralActions);
+            groupBoxMineral.Dock = DockStyle.Fill;
             groupBoxMineral.Location = new Point(3, 61);
             groupBoxMineral.Name = "groupBoxMineral";
-            groupBoxMineral.Size = new Size(949, 282);
+            groupBoxMineral.Size = new Size(953, 282);
             groupBoxMineral.TabIndex = 98;
             groupBoxMineral.TabStop = false;
             groupBoxMineral.Text = "計算対象";
@@ -949,7 +1007,7 @@
             flowLayoutPanelMineralActions.Dock = DockStyle.Top;
             flowLayoutPanelMineralActions.Location = new Point(3, 19);
             flowLayoutPanelMineralActions.Name = "flowLayoutPanelMineralActions";
-            flowLayoutPanelMineralActions.Size = new Size(943, 31);
+            flowLayoutPanelMineralActions.Size = new Size(947, 31);
             flowLayoutPanelMineralActions.TabIndex = 103;
             // 
             // buttonAllDelete
@@ -983,7 +1041,7 @@
             statusStrip1.Items.AddRange(new ToolStripItem[] { toolStripProgressBar1, toolStripStatusLabel1 });
             statusStrip1.Location = new Point(3, 724);
             statusStrip1.Name = "statusStrip1";
-            statusStrip1.Size = new Size(990, 22);
+            statusStrip1.Size = new Size(965, 22);
             statusStrip1.TabIndex = 89;
             statusStrip1.Text = "statusStrip1";
             // 
@@ -1002,7 +1060,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(996, 749);
+            ClientSize = new Size(971, 749);
             Controls.Add(groupBoxModelCreation);
             Controls.Add(statusStrip1);
             Margin = new Padding(3, 2, 3, 2);
@@ -1123,6 +1181,8 @@
         private FlowLayoutPanel flowLayoutPanelModelSettings;
         private FlowLayoutPanel flowLayoutPanelEDXSettings;
         private Button buttonCancel;
+        private Crystallography.Controls.NumericBox numericBoxUnknownDistanceScale;
+        private Crystallography.Controls.NumericBox numericBoxcarbonrandam;
     }
 }
 

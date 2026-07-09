@@ -50,17 +50,25 @@ namespace MineraScope
     internal sealed class GeneratorFormUserSettings
     {
         public string DetectorName { get; set; } = string.Empty;
+        public DetectorProfile? DetectorProfile { get; set; }
         public string ModelName { get; set; } = string.Empty;
         public double TargetSpectrumCount { get; set; }
         public double ParallelCount { get; set; }
         public double Resolution { get; set; }
         public double Epochs { get; set; }
         public double BatchSize { get; set; }
+        // 260622Claude: 旧設定ファイルにこのフィールドが無いとき (JSON 欠落時) は既定 1.5 を保つ (既知で Unknown が出ないラインを探す出発点)。
+        public double UnknownDistanceScale { get; set; } = 1.5;
         public double EarlyStopping { get; set; }
         public double ValidationSplit { get; set; }
         public double ProbeCurrent { get; set; }
         public double LiveTime { get; set; }
         public double BeamEnergy { get; set; }
         public double CarbonThickness { get; set; }
+        // 260622Claude: カーボン蒸着膜厚を spectrum ごとに振るばらつき幅 (%)。旧設定ファイルに無いとき (JSON 欠落時) は既定 20 を保つ。
+        public double CarbonThicknessJitterPercent { get; set; } = 20;
+
+        public DetectorProfile GetDetectorProfile() =>
+            MineraScope.DetectorProfile.CreateWithDefaults(DetectorProfile, DetectorName);
     }
 }

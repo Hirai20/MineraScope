@@ -33,6 +33,7 @@ namespace MineraScope
                     AppendRow(sb, row.Label, row.Value);
             }
 
+            // 260705Codex: Keep CSV export as one overwrite operation; history append mode is intentionally removed.
             File.WriteAllText(path, sb.ToString(), Utf8Bom);
         }
 

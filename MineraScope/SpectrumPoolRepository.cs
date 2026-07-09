@@ -167,20 +167,56 @@ namespace MineraScope
             SpectrumGenerationConditionSnapshot requestedCondition,
             SpectrumGenerationConditionSnapshot manifestCondition) =>
             SameText(requestedCondition.MineralName, manifestCondition.MineralName)
-            && SameText(requestedCondition.DtsaGenerationSchema, manifestCondition.DtsaGenerationSchema)
+            && IsGenerationSchemaCompatible(requestedCondition.DtsaGenerationSchema, manifestCondition.DtsaGenerationSchema)
             && SameDouble(requestedCondition.CompositionResolution, manifestCondition.CompositionResolution)
             && SameSemEdxCondition(requestedCondition.SemEdxCondition, manifestCondition.SemEdxCondition)
             && SameConstraints(requestedCondition.Constraints, manifestCondition.Constraints)
             && SameEndmembers(requestedCondition.Endmembers, manifestCondition.Endmembers);
 
+        // 260628Claude: 旧 v1 pool は検出器プロファイルを persist せず findDetector("test") で生成された。
+        // 実 emsa ヘッダー (ELEVANGLE=35 / AZIMANGLE=90 / XPERCHAN=10 / OFFSET=0 / TDEADLYR=0.2µm / TACTLYR=0.045 / windowless SDWLS) が
+        // v2 既定 "test" プロファイルと一致するため、両 schema を同一条件とみなして再生成なしで再利用する。
+        // 検出器が既定 test と異なる場合は SameSemEdxCondition の SameDetectorProfile が別途弾くので、この緩和は test 既定のときだけ効く。
+        private const string LegacyUnknownDetectorSchema = "dtsa2-emsa-v1";
+        private const string DetectorProfileSchema = "dtsa2-emsa-v2-detector-profile";
+
+        private static bool IsGenerationSchemaCompatible(string? requested, string? manifest) =>
+            SameText(requested, manifest)
+            || IsLegacyTestSchemaPair(requested, manifest)
+            || IsLegacyTestSchemaPair(manifest, requested);
+
+        private static bool IsLegacyTestSchemaPair(string? detectorProfileSchema, string? legacySchema) =>
+            SameText(detectorProfileSchema, DetectorProfileSchema)
+            && SameText(legacySchema, LegacyUnknownDetectorSchema);
+
         private static bool SameSemEdxCondition(SemEdxCondition? left, SemEdxCondition? right) =>
             left is not null
             && right is not null
             && string.Equals(left.DetectorName, right.DetectorName, StringComparison.Ordinal)
+            && SameDetectorProfile(left.GetDetectorProfile(), right.GetDetectorProfile())
             && SameDouble(left.CarbonCoatThickness, right.CarbonCoatThickness)
             && SameDouble(left.BeamEnergy, right.BeamEnergy)
             && SameDouble(left.LiveTime, right.LiveTime)
             && SameDouble(left.ProbeCurrent, right.ProbeCurrent);
+
+        // 260626Codex: Detector physics affects spectra, so reusable pool checks must match every persisted profile field.
+        private static bool SameDetectorProfile(DetectorProfile left, DetectorProfile right) =>
+            SameText(left.Name, right.Name)
+            && left.ChannelCount == right.ChannelCount
+            && SameDouble(left.ChannelWidth, right.ChannelWidth)
+            && SameDouble(left.ZeroOffset, right.ZeroOffset)
+            && SameDouble(left.ResolutionFwhmAtMnKa, right.ResolutionFwhmAtMnKa)
+            && SameDouble(left.DetectorArea, right.DetectorArea)
+            && SameDouble(left.Elevation, right.Elevation)
+            && SameDouble(left.Azimuth, right.Azimuth)
+            && SameDouble(left.SpecimenToDetectorDistance, right.SpecimenToDetectorDistance)
+            && SameDouble(left.OptimalWorkingDistance, right.OptimalWorkingDistance)
+            && SameDouble(left.SiThickness, right.SiThickness)
+            && SameDouble(left.AluminumLayer, right.AluminumLayer)
+            && SameDouble(left.GoldLayer, right.GoldLayer)
+            && SameDouble(left.NickelLayer, right.NickelLayer)
+            && SameDouble(left.DeadLayer, right.DeadLayer)
+            && left.Window == right.Window;
 
         private static bool SameConstraints(List<string>? left, List<string>? right)
         {

@@ -3,6 +3,8 @@
 
 bin/
 obj/
+# 260625Claude: 配布用の self-contained publish 出力はリポジトリ管理外にする。
+/publish/
 
 *.user
 *.suo

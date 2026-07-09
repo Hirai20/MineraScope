@@ -154,6 +154,13 @@ namespace MineraScope
             // 260430Codex: 空欄の EDX/教師データ保存先はユーザーごとの Documents 配下へ初期化します。
             if (string.IsNullOrWhiteSpace(EdxOutputPath))
                 EdxOutputPath = DefaultStoragePaths.TrainingDataFolder;
+
+            // 260626Codex: Show dtsa2.msi's per-user install root only when no saved/user path exists.
+            if (string.IsNullOrWhiteSpace(DtsaPath))
+                DtsaPath = DtsaMsiInstallation.DefaultFolder;
+
+            labelPathDTSA.Text = "DTSA-IIパス(msi既定)";
+            textBoxPathDTSA.PlaceholderText = "dtsa2.msi の既定インストール先。別の場所なら変更可";
         }
 
         private void textBoxlPathSaveModel_TextChanged(object sender, EventArgs e)
@@ -435,8 +442,30 @@ namespace MineraScope
                 _profileCache[filePath] = profile;
             }
 
-            graphControl1.Profile = profile;
+            // 260630Claude: キャッシュは生プロファイルのまま保持し、表示時に選択モデルのマスクを掛けたコピーを描く。
+            //   モデルを切り替えても再キャッシュ無しで反映でき、エクスポート等の生データ参照とも分離できる。
+            graphControl1.Profile = ApplyDisplayMask(profile);
             graphControl1.Refresh();
+        }
+
+        // 260630Claude: マスクあり(NoCarbon)モデル選択時は、表示スペクトルの低エネルギー範囲(先頭チャンネル)も 0 にして、
+        //   C 領域が実際にゼロ化されているのを目視確認できるようにする。マスク無し/モデル未選択なら生プロファイルをそのまま返す。
+        //   マスクはチャンネル番号基準(=点の並び順)なので、モデル入力 (ZeroLeadingChannels) と同じ範囲が 0 になる。
+        private Profile ApplyDisplayMask(Profile rawProfile)
+        {
+            string modelPath = SelectedModelPath;
+            var preprocessing = string.IsNullOrWhiteSpace(modelPath)
+                ? SpectrumPreprocessing.None
+                : SpectrumPreprocessing.LoadFromModelFolder(Path.Combine(modelPath, "AllMinerals_Classification"));
+            if (!preprocessing.HasLowEnergyMask)
+                return rawProfile;
+
+            int maskCount = Math.Min(preprocessing.MaskChannelCount, rawProfile.Pt.Count);
+            var points = new List<PointD>(rawProfile.Pt.Count);
+            for (int i = 0; i < rawProfile.Pt.Count; i++)
+                points.Add(i < maskCount ? new PointD(rawProfile.Pt[i].X, 0) : rawProfile.Pt[i]);
+
+            return new Profile { Pt = points };
         }
 
         // 260427Codex: EMSA/MSA の Y データを読み、ヘッダーがあればエネルギー軸へ変換します。
@@ -576,6 +605,8 @@ namespace MineraScope
             // 260621Codex: The dialog writes one selected format, so keep one output path instead of a list.
             bool writeCsv = dialog.FilterIndex == 1;
             string outputPath = basePath + (writeCsv ? ".csv" : ".txt");
+
+            // 260705Codex: CSV exports use the normal SaveFileDialog overwrite flow again.
             try
             {
                 if (writeCsv)
