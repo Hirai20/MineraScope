@@ -781,8 +781,7 @@ namespace MineraScope
                 (semCenter.X + 0.5) / binSize - 0.5,
                 (semCenter.Y + 0.5) / binSize - 0.5);
             double mapZoom = semZoom * binSize;
-            // 260604Codex: SEM-aligned map zoom can exceed the viewer's default cap when binning is large.
-            scalablePictureBoxMap.MaxZoom = Math.Max(scalablePictureBoxMap.MaxZoom, mapZoom);
+            // 260710Codex: Upstream ScalablePictureBox now owns the zoom cap, so synchronized zoom is applied directly.
             scalablePictureBoxMap.ZoomAndCenter = (mapZoom, mapCenter);
         }
 

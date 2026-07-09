@@ -446,7 +446,7 @@
             numericBoxEpochs.Size = new Size(102, 26);
             numericBoxEpochs.SmartIncrement = true;
             numericBoxEpochs.TabIndex = 104;
-            numericBoxEpochs.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEpochs.ValueFontSize = 9F;
             numericBoxEpochs.Value = 500D;
             // 
             // numericBoxBatchSize
@@ -468,7 +468,7 @@
             numericBoxBatchSize.Size = new Size(104, 26);
             numericBoxBatchSize.SmartIncrement = true;
             numericBoxBatchSize.TabIndex = 105;
-            numericBoxBatchSize.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBatchSize.ValueFontSize = 9F;
             numericBoxBatchSize.Value = 16D;
             // 
             // numericBoxEarlyStopping
@@ -490,7 +490,7 @@
             numericBoxEarlyStopping.Size = new Size(102, 26);
             numericBoxEarlyStopping.SmartIncrement = true;
             numericBoxEarlyStopping.TabIndex = 106;
-            numericBoxEarlyStopping.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxEarlyStopping.ValueFontSize = 9F;
             numericBoxEarlyStopping.Value = 10D;
             // 
             // numericBoxValidationSplit
@@ -513,7 +513,7 @@
             numericBoxValidationSplit.Size = new Size(161, 26);
             numericBoxValidationSplit.SmartIncrement = true;
             numericBoxValidationSplit.TabIndex = 93;
-            numericBoxValidationSplit.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxValidationSplit.ValueFontSize = 9F;
             numericBoxValidationSplit.Value = 20D;
             // 
             // groupBoxSpectrumSettings
@@ -557,7 +557,7 @@
             numericBoxSpectraPerMineral.Size = new Size(170, 26);
             numericBoxSpectraPerMineral.SmartIncrement = true;
             numericBoxSpectraPerMineral.TabIndex = 106;
-            numericBoxSpectraPerMineral.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxSpectraPerMineral.ValueFontSize = 9F;
             numericBoxSpectraPerMineral.Value = 1000D;
             // 
             // numericBoxResolution
@@ -579,7 +579,7 @@
             numericBoxResolution.Size = new Size(134, 26);
             numericBoxResolution.SmartIncrement = true;
             numericBoxResolution.TabIndex = 106;
-            numericBoxResolution.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxResolution.ValueFontSize = 9F;
             numericBoxResolution.Value = 10D;
             numericBoxResolution.ValueChanged += numericBoxResolution_ValueChanged;
             // 
@@ -603,7 +603,7 @@
             numericBoxParallel.Size = new Size(82, 28);
             numericBoxParallel.SmartIncrement = true;
             numericBoxParallel.TabIndex = 114;
-            numericBoxParallel.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxParallel.ValueFontSize = 9F;
             numericBoxParallel.Value = 1D;
             // 
             // buttonCalibration
@@ -687,7 +687,7 @@
             numericBoxProbeCurrent.Size = new Size(138, 26);
             numericBoxProbeCurrent.SmartIncrement = true;
             numericBoxProbeCurrent.TabIndex = 104;
-            numericBoxProbeCurrent.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxProbeCurrent.ValueFontSize = 9F;
             numericBoxProbeCurrent.Value = 0.5D;
             // 
             // numericBoxLiveTime
@@ -709,7 +709,7 @@
             numericBoxLiveTime.Size = new Size(136, 26);
             numericBoxLiveTime.SmartIncrement = true;
             numericBoxLiveTime.TabIndex = 105;
-            numericBoxLiveTime.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxLiveTime.ValueFontSize = 9F;
             numericBoxLiveTime.Value = 120D;
             // 
             // buttonDelete
@@ -828,7 +828,7 @@
             numericBoxBeamEnergy.Size = new Size(138, 26);
             numericBoxBeamEnergy.SmartIncrement = true;
             numericBoxBeamEnergy.TabIndex = 104;
-            numericBoxBeamEnergy.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxBeamEnergy.ValueFontSize = 9F;
             numericBoxBeamEnergy.Value = 20D;
             // 
             // numericBoxCarbonThickness
@@ -850,7 +850,7 @@
             numericBoxCarbonThickness.Size = new Size(199, 26);
             numericBoxCarbonThickness.SmartIncrement = true;
             numericBoxCarbonThickness.TabIndex = 104;
-            numericBoxCarbonThickness.TextFont = new Font("Yu Gothic UI", 9F);
+            numericBoxCarbonThickness.ValueFontSize = 9F;
             numericBoxCarbonThickness.Value = 0.02D;
             // 
             // panelCommandBar
