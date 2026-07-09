@@ -88,7 +88,8 @@ namespace MineraScope
         }
 
         // 260430Codex: 2048 点スペクトルの読み込みと正規化を学習・予測で共通利用します。
-        public static float[]? LoadNormalizedSpectrum(string filePath)
+        // 260626Claude: preprocessing 未指定は None = 従来どおりマスク無し正規化。予測経路はモデルの前処理を渡す。
+        public static float[]? LoadNormalizedSpectrum(string filePath, SpectrumPreprocessing? preprocessing = null)
         {
             if (!File.Exists(filePath))
                 return null;
@@ -100,7 +101,7 @@ namespace MineraScope
             if (values is null)
                 return null;
 
-            NormalizeSpectrum(values);
+            NormalizeSpectrum(values, preprocessing ?? SpectrumPreprocessing.None);
             return values;
         }
 
@@ -126,7 +127,8 @@ namespace MineraScope
         }
 
         // 260521Codex: Converts one PTS pixel spectrum into the same normalized 2048 point input used by trained models.
-        public static float[]? CreateNormalizedSpectrum(PtsPixelSpectrum spectrum)
+        // 260626Claude: preprocessing 未指定は None。PTS クリック予測はモデルの前処理を渡す。
+        public static float[]? CreateNormalizedSpectrum(PtsPixelSpectrum spectrum, SpectrumPreprocessing? preprocessing = null)
         {
             if (spectrum.ChannelCount != SpectrumLength)
                 return null;
@@ -135,21 +137,27 @@ namespace MineraScope
             for (int channel = 0; channel < SpectrumLength; channel++)
                 values[channel] = spectrum.GetCount(channel);
 
-            NormalizeSpectrum(values);
+            NormalizeSpectrum(values, preprocessing ?? SpectrumPreprocessing.None);
             return values;
         }
 
         // 260526Claude: ブロックカウントを batch 行列の指定行へ max 正規化して書き込む。全ゼロなら false（未判定扱い）。
         // 除算の仕方を CreateNormalizedSpectrum と揃え、同一カウントならクリック側とビット一致する正規化にする。
-        public static bool NormalizeInto(ReadOnlySpan<int> counts, float[,] destination, int row)
+        // 260626Claude: preprocessing=None なら従来どおり。pre はマスク範囲を max 探索から除外、post は全ch max。
+        //   いずれもマスク範囲は出力 0。preprocessing 未指定は None なので PTS マップの既定挙動は不変。
+        public static bool NormalizeInto(ReadOnlySpan<int> counts, float[,] destination, int row, SpectrumPreprocessing? preprocessing = null)
         {
             ArgumentNullException.ThrowIfNull(destination);
 
             if (counts.Length != SpectrumLength)
                 throw new ArgumentException($"{SpectrumLength} 点のスペクトルだけを正規化できます。", nameof(counts));
 
+            var pp = preprocessing ?? SpectrumPreprocessing.None;
+            int maskCount = pp.HasLowEnergyMask ? Math.Min(pp.MaskChannelCount, counts.Length) : 0;
+            int maxSearchStart = pp.HasLowEnergyMask && pp.MaskBeforeNormalize ? maskCount : 0;
+
             int max = 0;
-            for (int i = 0; i < counts.Length; i++)
+            for (int i = maxSearchStart; i < counts.Length; i++)
                 if (counts[i] > max)
                     max = counts[i];
 
@@ -158,16 +166,18 @@ namespace MineraScope
 
             float maxValue = max;
             for (int i = 0; i < counts.Length; i++)
-                destination[row, i] = counts[i] / maxValue;
+                destination[row, i] = i < maskCount ? 0f : counts[i] / maxValue;
 
             return true;
         }
 
         // 260514Codex: spectrum 1 ファイルの読み込み前後をキャンセル確認の最小単位としてそろえます。
+        // 260626Claude: 学習側も preprocessing を中核 normalize まで素通しする。未指定は None。
         private static float[]? LoadNormalizedSpectrumWithCancellation(
             string filePath,
             CancellationToken cancellationToken,
-            NormalizedSpectrumCache? cache = null)
+            NormalizedSpectrumCache? cache = null,
+            SpectrumPreprocessing? preprocessing = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (cache?.TryGet(filePath, out var cachedData) == true)
@@ -176,7 +186,7 @@ namespace MineraScope
                 return cachedData;
             }
 
-            var data = LoadNormalizedSpectrum(filePath);
+            var data = LoadNormalizedSpectrum(filePath, preprocessing);
             if (data is not null)
                 cache?.StoreIfNeeded(filePath, data);
 
@@ -185,14 +195,22 @@ namespace MineraScope
         }
 
         // 260430Codex: 最大値が 0 以下のスペクトルはそのまま返し、ゼロ除算を避けます。
-        private static void NormalizeSpectrum(float[] values)
+        // 260626Claude: pre は max 正規化の前に低エネルギーを 0 化(基準が C コンタミに引っ張られない)、post は正規化後に 0 化(ablation)。
+        //   preprocessing=None なら従来どおり全ch max 正規化のみ。
+        private static void NormalizeSpectrum(float[] values, SpectrumPreprocessing preprocessing)
         {
+            if (preprocessing.HasLowEnergyMask && preprocessing.MaskBeforeNormalize)
+                preprocessing.ZeroLeadingChannels(values);
+
             float max = values.Max();
             if (max <= 0)
                 return;
 
             for (int i = 0; i < values.Length; i++)
                 values[i] /= max;
+
+            if (preprocessing.HasLowEnergyMask && !preprocessing.MaskBeforeNormalize)
+                preprocessing.ZeroLeadingChannels(values);
         }
 
         // 260430Codex: MSA/EMSA の数値行だけを NDArray に変換します。
@@ -223,7 +241,8 @@ namespace MineraScope
         public static (NDArray Spectra, List<string> Labels, ClassificationLoadStats Stats) LoadClassificationData(
             IReadOnlyList<SpectrumTrainingPool> trainingPools,
             CancellationToken cancellationToken = default,
-            NormalizedSpectrumCache? cache = null)
+            NormalizedSpectrumCache? cache = null,
+            SpectrumPreprocessing? preprocessing = null)
         {
             var samples = trainingPools
                 .SelectMany(pool => pool.Samples.Select(sample => new ClassificationLoadSample(sample, pool.MineralName)))
@@ -231,7 +250,7 @@ namespace MineraScope
             var labels = new List<string>(samples.Length);
             int parallelDegree = GetClassificationLoadParallelDegree(samples.Length);
 
-            var loadedSpectra = LoadClassificationSpectraInParallel(samples, parallelDegree, cancellationToken);
+            var loadedSpectra = LoadClassificationSpectraInParallel(samples, parallelDegree, cancellationToken, preprocessing);
             var spectraList = new List<float[]>(samples.Length);
             var spectraToCache = cache is null ? null : new List<(string FilePath, float[] Values)>();
 
@@ -271,7 +290,8 @@ namespace MineraScope
         public static (NDArray Spectra, NDArray Labels, Dictionary<string, int>? ComponentIndex) LoadRegressionData(
             SpectrumTrainingPool trainingPool,
             CancellationToken cancellationToken = default,
-            NormalizedSpectrumCache? cache = null)
+            NormalizedSpectrumCache? cache = null,
+            SpectrumPreprocessing? preprocessing = null)
         {
             if (trainingPool.EndmemberNames.Count == 0)
                 return (np.zeros(new Shape(0, SpectrumLength)), np.zeros(new Shape(0, 0)), null);
@@ -294,7 +314,7 @@ namespace MineraScope
 
             foreach (var sample in trainingPool.Samples)
             {
-                var data = LoadNormalizedSpectrumWithCancellation(sample.FilePath, cancellationToken, cache);
+                var data = LoadNormalizedSpectrumWithCancellation(sample.FilePath, cancellationToken, cache, preprocessing);
                 if (data == null)
                     continue;
 
@@ -322,10 +342,12 @@ namespace MineraScope
         }
 
         // 260607Codex: Keep the parser unchanged while overlapping the many small classification file opens.
+        // 260626Claude: preprocessing を各並列読み込みへ素通しする。未指定は None。
         private static float[]?[] LoadClassificationSpectraInParallel(
             IReadOnlyList<ClassificationLoadSample> samples,
             int parallelDegree,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            SpectrumPreprocessing? preprocessing = null)
         {
             var loadedSpectra = new float[]?[samples.Count];
             if (samples.Count == 0)
@@ -344,7 +366,9 @@ namespace MineraScope
                     options.CancellationToken.ThrowIfCancellationRequested();
                     loadedSpectra[index] = LoadNormalizedSpectrumWithCancellation(
                         samples[index].Sample.FilePath,
-                        options.CancellationToken);
+                        options.CancellationToken,
+                        cache: null,
+                        preprocessing: preprocessing);
                 });
             }
             catch (AggregateException ex) when (ex.InnerExceptions.Count == 1)
