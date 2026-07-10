@@ -33,7 +33,8 @@ namespace MineraScope
         private readonly Dictionary<(Point Pixel, int BinSize, int? LeadingSweepCount), PtsPixelSpectrum> _pixelSpectrumCache = [];
 
         // 260522Codex: Keep the first binning candidates small enough for experiments while covering low-count spectra.
-        private static readonly int[] BinningSizes = [3, 5, 7, 10, 20];
+        // 260710Codex: Include small bins so mineral maps can be generated with finer spatial resolutions.
+        private static readonly int[] BinningSizes = [1, 2, 3, 4, 5, 7, 8, 10, 20];
 
         // 260522Codex: Default to 10x10 as the first low-count classification baseline.
         private const int DefaultBinningSize = 10;
