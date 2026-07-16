@@ -159,7 +159,8 @@ namespace MineraScope
             if (string.IsNullOrWhiteSpace(DtsaPath))
                 DtsaPath = DtsaMsiInstallation.DefaultFolder;
 
-            labelPathDTSA.Text = "DTSA-IIパス(msi既定)";
+            // 260716Codex: msi の既定インストール先を示す補足は、変更後のパスにも残るため表示しない。
+            labelPathDTSA.Text = "DTSA-IIパス";
             textBoxPathDTSA.PlaceholderText = "dtsa2.msi の既定インストール先。別の場所なら変更可";
         }
 
