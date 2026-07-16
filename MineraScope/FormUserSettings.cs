@@ -46,6 +46,12 @@ namespace MineraScope
         public string DtsaPath { get; set; } = string.Empty;
     }
 
+    // 260716Claude: AnalyzerForm ではマッピングモデルの選択だけを保存し、PTS 表示やマップ結果は保存しません。
+    internal sealed class AnalyzerFormUserSettings
+    {
+        public string SelectedMappingModelName { get; set; } = string.Empty;
+    }
+
     // 260507Codex: GeneratorForm では生成・EDX・学習設定だけを保存し、鉱物詳細やログは保存しません。
     internal sealed class GeneratorFormUserSettings
     {

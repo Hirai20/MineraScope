@@ -113,6 +113,8 @@ namespace MineraScope
         {
             // 260508Codex: GeneratorForm が非表示のままでも、アプリ終了時に現在値を保存します。
             GeneratorForm?.SaveUserSettings();
+            // 260716Claude: AnalyzerForm も同様に、非表示のままのアプリ終了時にマッピングモデル選択を保存する。
+            AnalyzerForm?.SaveUserSettings();
 
             FormUserSettingsStore.Save(
                 UserSettingsFileName,

@@ -15,6 +15,12 @@ namespace MineraScope
         // 260522Codex: 共有モデルカタログ。代入時に購読し、以後はカタログの更新通知だけで一覧を同期します。
         private ModelCatalog? _modelCatalog;
 
+        // 260716Claude: AnalyzerForm の設定ファイル名を保存・復元で共有する。
+        private const string UserSettingsFileName = "AnalyzerFormSettings.json";
+
+        // 260716Claude: モデル一覧の構築後に前回選択していたマッピングモデル名を復元する。
+        private readonly string _savedSelectedModelName;
+
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         internal ModelCatalog ModelCatalog
         {
@@ -85,6 +91,8 @@ namespace MineraScope
         public AnalyzerForm()
         {
             InitializeComponent();
+            // 260716Claude: 前回選択したマッピングモデル名を復元する (ModelCatalog 代入時の一覧構築で使う)。
+            _savedSelectedModelName = FormUserSettingsStore.Load<AnalyzerFormUserSettings>(UserSettingsFileName).SelectedMappingModelName;
             InitializeBinningOptions();
             InitializeSweepOptions(0);
             // 260526Claude: 待機状態（マッピング有効・中止無効）を初期化する。
@@ -178,6 +186,11 @@ namespace MineraScope
             if (_modelCatalog is null)
                 return;
 
+            // 260716Claude: コンボが未選択の初回だけ前回保存のモデル名へ復元する。以降は preferred / 現在選択が優先される
+            //   (Populate 内で previousSelection が使われる) ため、ユーザーの選び直しを上書きしない。
+            if (string.IsNullOrWhiteSpace(preferredModelName) && comboBoxMappingModellFolder.SelectedItem is null)
+                preferredModelName = _savedSelectedModelName;
+
             ModelComboBinder.Populate(comboBoxMappingModellFolder, _modelCatalog.ModelNames, preferredModelName);
         }
 
@@ -185,7 +198,19 @@ namespace MineraScope
         {
             e.Cancel = true;
             Visible = false;
+
+            // 260716Claude: 閉じる (非表示) 操作でもマッピングモデルの選択を保存し、次回起動時に復元できるようにする。
+            SaveUserSettings();
         }
+
+        // 260716Claude: 次回起動時に戻すのはマッピングモデルの選択だけ。アプリ終了時は FormMain からも呼ばれる。
+        internal void SaveUserSettings() =>
+            FormUserSettingsStore.Save(
+                UserSettingsFileName,
+                new AnalyzerFormUserSettings
+                {
+                    SelectedMappingModelName = comboBoxMappingModellFolder.SelectedItem as string ?? string.Empty
+                });
 
         // 260519Codex: .pts ドロップ時は SEM画像だけを読み込み、EDXスペクトルはクリック時に1ピクセルだけ読みます。
         private async void AnalyzerForm_DragDrop(object? sender, DragEventArgs e)
