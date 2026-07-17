@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -32,6 +33,11 @@ namespace MineraScope
 
             var progressScope = new SimulationProgressScope(plan, progress);
             var results = new List<SimulationExecutionResult>();
+            // 260717Claude: run 単位の永続ログ。GUI/headless どちらでも RunAsync 起点で必ず 1 ファイル残し、
+            //   実行後に失敗原因 (watchdog kill・stderr) を追跡できるようにする。
+            var runLog = SimulationRunLog.CreateForRun();
+            var runStopwatch = Stopwatch.StartNew();
+            runLog.WriteLine($"run start: batches={progressScope.BatchCount}, jobs={progressScope.TotalJobCount}, spectra={progressScope.TotalSpectrumCount}");
 
             for (int batchIndex = 0; batchIndex < plan.Batches.Count; batchIndex++)
             {
@@ -43,11 +49,18 @@ namespace MineraScope
                 ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchStarted, "開始");
 
                 var batchResults = await Task.WhenAll(batch.Jobs.Select(job =>
-                    ExecuteJobAsync(job, batch.SolutionName, batchNumber, progressScope, cancellationToken)));
+                    ExecuteJobAsync(job, batch.SolutionName, batchNumber, progressScope, runLog, cancellationToken)));
                 results.AddRange(batchResults);
 
                 ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchCompleted, "完了");
             }
+
+            // 260717Claude: run 全体の要約。中断時も途中までの結果件数が残る。
+            int succeeded = results.Count(r => !r.IsCanceled && r.ExitCode == 0 && r.ExceptionMessage is null);
+            int canceled = results.Count(r => r.IsCanceled);
+            runLog.WriteLine(
+                $"run end: jobs={results.Count}/{progressScope.TotalJobCount}, succeeded={succeeded}, failed={results.Count - succeeded - canceled}, canceled={canceled}, " +
+                $"savedSpectra={progressScope.CompletedSpectrumCount}/{progressScope.TotalSpectrumCount}, elapsed={SimulationRunLog.FormatSeconds(runStopwatch.Elapsed)}");
 
             return results;
         }
@@ -77,6 +90,7 @@ namespace MineraScope
             string solutionName,
             int batchIndex,
             SimulationProgressScope progressScope,
+            SimulationRunLog runLog,
             CancellationToken cancellationToken)
         {
             var progress = new SimulationJobProgress(progressScope, job, solutionName, batchIndex);
@@ -90,7 +104,8 @@ namespace MineraScope
                 Directory.CreateDirectory(job.Property.OutputFolder);
                 DeleteReservedOutputFiles(job.Reservations);
 
-                var attempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 1, progress, cancellationToken);
+                var attempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 1, progress, runLog, cancellationToken);
+                LogAttemptResult(runLog, solutionName, job, attempt);
                 var result = ConvertToExecutionResult(job, attempt);
                 progress.CompleteUnreportedSuccessfulSpectra(result);
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
@@ -98,12 +113,15 @@ namespace MineraScope
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                runLog.WriteLine($"job canceled before start: solution={solutionName} script={Path.GetFileName(job.ScriptPath)}");
                 var result = CreateCanceledResult(job, string.Empty, string.Empty);
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
             }
             catch (Exception ex)
             {
+                // 260717Claude: attempt 前のジョブ準備 (出力フォルダ作成・予約ファイル削除) の失敗もログへ残す。
+                runLog.WriteLine($"job setup failed: solution={solutionName} script={Path.GetFileName(job.ScriptPath)} detail={SimulationRunLog.Flatten(ex.Message)}");
                 var result = new SimulationExecutionResult(
                     job.Reservations,
                     ExitCode: -1,
@@ -113,6 +131,32 @@ namespace MineraScope
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
             }
+        }
+
+        // 260717Claude: attempt 要約は常に 1 行。失敗 attempt (キャンセル除く) だけ stdout/stderr 全文を証跡として残す。
+        //   成功 attempt の全文を書かないことでログ肥大を防ぐ (要件定義で確定した方針)。
+        private static void LogAttemptResult(
+            SimulationRunLog runLog,
+            string solutionName,
+            SimulationExecutionJob job,
+            SimulationProcessAttemptResult attempt)
+        {
+            string script = Path.GetFileName(job.ScriptPath);
+            string pidText = attempt.ProcessId?.ToString(CultureInfo.InvariantCulture) ?? "-";
+            string detailText = attempt.FailureDetail is null
+                ? string.Empty
+                : $" detail={SimulationRunLog.Flatten(attempt.FailureDetail)}";
+            runLog.WriteLine(
+                $"attempt: solution={solutionName} script={script} attempt={attempt.AttemptNumber} pid={pidText} " +
+                $"outcome={attempt.Outcome} exit={attempt.ExitCode} reserved={job.Reservations.Count} saved={attempt.SavedSpectrumFiles.Count} " +
+                $"elapsed={SimulationRunLog.FormatSeconds(attempt.Elapsed)}{detailText}");
+
+            if (attempt.Outcome is SimulationAttemptOutcome.Succeeded or SimulationAttemptOutcome.Canceled)
+                return;
+
+            string context = $"{script} attempt={attempt.AttemptNumber} pid={pidText}";
+            runLog.WriteBlock($"stdout: {context}", attempt.StandardOutput);
+            runLog.WriteBlock($"stderr: {context}", attempt.StandardError);
         }
 
         // 260717Claude: attempt 結果を manifest 更新側が読む既存形式へ変換する。判定規則は従来と同一

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -60,6 +61,7 @@ namespace MineraScope
             SimulationExecutionJob job,
             int attemptNumber,
             SimulationJobProgress progress,
+            SimulationRunLog runLog,
             CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -76,7 +78,7 @@ namespace MineraScope
                     SimulationExecutionProgressKind.ScriptWritten,
                     $"script 作成: {Path.GetFileName(job.ScriptPath)}");
 
-                return await RunProcessAsync(job, attemptNumber, progress, stopwatch, cancellationToken);
+                return await RunProcessAsync(job, attemptNumber, progress, runLog, stopwatch, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -110,6 +112,7 @@ namespace MineraScope
             SimulationExecutionJob job,
             int attemptNumber,
             SimulationJobProgress progress,
+            SimulationRunLog runLog,
             Stopwatch stopwatch,
             CancellationToken cancellationToken)
         {
@@ -135,7 +138,9 @@ namespace MineraScope
             var outputMonitorTask = MonitorOutputFilesAsync(job, progress, savedFiles, activity, outputMonitorCts.Token);
             var standardOutputTask = ReadStandardOutputAsync(process, progress, savedFiles, activity);
             var standardErrorTask = process.StandardError.ReadToEndAsync();
-            var watchdogTask = WatchDtsaProcessAsync(process, job, activity, watchdogCts.Token);
+            var watchdogTask = WatchDtsaProcessAsync(process, job, savedFiles, activity, runLog, watchdogCts.Token);
+            // 260717Claude: kill 前後のログで script/pid を対応づける (並行ジョブが混ざっても追える)。
+            string killContext = $"script={Path.GetFileName(job.ScriptPath)} pid={processId?.ToString(CultureInfo.InvariantCulture) ?? "-"}";
 
             try
             {
@@ -146,8 +151,10 @@ namespace MineraScope
                     string? watchdogMessage = await watchdogTask;
                     if (!string.IsNullOrWhiteSpace(watchdogMessage))
                     {
+                        runLog.WriteLine($"kill start: {killContext} reason=watchdog");
                         KillProcessTree(process);
                         await WaitForProcessExitAfterKillAsync(process);
+                        runLog.WriteLine($"kill done: {killContext}");
                         await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
                         await StopWatchdogAsync(watchdogCts, watchdogTask);
                         ReportExistingOutputFiles(job, progress, savedFiles, activity);
@@ -170,8 +177,10 @@ namespace MineraScope
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                runLog.WriteLine($"kill start: {killContext} reason=cancel");
                 KillProcessTree(process);
                 await WaitForProcessExitAfterKillAsync(process);
+                runLog.WriteLine($"kill done: {killContext}");
                 await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
                 await StopWatchdogAsync(watchdogCts, watchdogTask);
                 ReportExistingOutputFiles(job, progress, savedFiles, activity);
@@ -312,7 +321,9 @@ namespace MineraScope
         private static async Task<string?> WatchDtsaProcessAsync(
             Process process,
             SimulationExecutionJob job,
+            SavedSpectrumFileTracker savedFiles,
             SimulationJobActivityTracker activity,
+            SimulationRunLog runLog,
             CancellationToken cancellationToken)
         {
             TimeSpan lastCpuTime = ReadProcessCpuTime(process);
@@ -336,7 +347,15 @@ namespace MineraScope
 
                     TimeSpan idleFor = activity.IdleFor;
                     if (idleFor >= DtsaIdleTimeout)
+                    {
+                        // 260717Claude: 判定時点の状態 (idle 時間・保存本数・直近 CPU delta) を構造化して残し、後から
+                        //   「起動スタックか実行中の停滞か」を切り分けられるようにする。
+                        runLog.WriteLine(
+                            $"watchdog timeout: script={Path.GetFileName(job.ScriptPath)} " +
+                            $"idleFor={SimulationRunLog.FormatSeconds(idleFor)} saved={savedFiles.Count} " +
+                            $"lastCpuDeltaMs={(long)cpuDelta.TotalMilliseconds}");
                         return $"DTSA-II watchdog timeout: no stdout marker, output file, or CPU progress for {FormatTimeSpan(DtsaIdleTimeout)}. script={Path.GetFileName(job.ScriptPath)}";
+                    }
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -428,6 +447,16 @@ namespace MineraScope
             {
                 lock (_sync)
                     return _files.Add(fileName);
+            }
+
+            // 260717Claude: watchdog ログ用の保存済み本数。判定と snapshot は別ロック取得だが、ログ表示用途なので十分。
+            public int Count
+            {
+                get
+                {
+                    lock (_sync)
+                        return _files.Count;
+                }
             }
 
             public IReadOnlySet<string> CreateSnapshot()
