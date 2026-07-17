@@ -11,9 +11,8 @@ namespace MineraScope
             WriteIndented = true
         };
 
-        private static string SettingsFolder => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MineraScope");
+        // 260717Codex: Share the application settings root with the mineral color palette store.
+        private static string SettingsFolder => DefaultStoragePaths.SettingsFolder;
 
         public static T Load<T>(string fileName)
             where T : new()

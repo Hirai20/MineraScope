@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -108,6 +109,127 @@ namespace MineraScope
             WriteRgb24Image(path, pixels, width, height, ImageFormat.Png);
         }
 
+        // 260717Codex: Render the current on-screen legend as a publication-friendly white-background PNG.
+        public static void WriteLegendPng(string path, MineralMapImage image, int totalBlockCount)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            ArgumentNullException.ThrowIfNull(image);
+
+            const int padding = 12;
+            const int rowHeight = 28;
+            const int swatchSize = 18;
+            const int textGap = 8;
+            // 260717Codex: Windows Forms supplies this system font for the lifetime of the process.
+            Font font = SystemFonts.MessageBoxFont!;
+            int textWidth;
+            using (var measurementBitmap = new Bitmap(1, 1))
+            {
+                // 260717Codex: Measure at the same DPI used by the final legend so long mineral names are not clipped.
+                measurementBitmap.SetResolution(144, 144);
+                using Graphics measurement = Graphics.FromImage(measurementBitmap);
+                textWidth = image.Legend.Count == 0
+                    ? 0
+                    : (int)Math.Ceiling(image.Legend.Max(entry =>
+                        measurement.MeasureString(FormatLegendText(entry, totalBlockCount), font).Width));
+            }
+
+            int width = Math.Max(320, padding * 2 + swatchSize + textGap + textWidth);
+            int height = Math.Max(rowHeight, padding * 2 + image.Legend.Count * rowHeight);
+            using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            bitmap.SetResolution(144, 144);
+            using Graphics graphics = Graphics.FromImage(bitmap);
+            graphics.Clear(Color.White);
+            graphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+
+            for (int i = 0; i < image.Legend.Count; i++)
+            {
+                MineralMapLegendEntry entry = image.Legend[i];
+                int top = padding + i * rowHeight;
+                var swatch = new Rectangle(padding, top + (rowHeight - swatchSize) / 2, swatchSize, swatchSize);
+                using (var brush = new SolidBrush(entry.Color))
+                    graphics.FillRectangle(brush, swatch);
+                graphics.DrawRectangle(Pens.Gray, swatch);
+                using var textBrush = new SolidBrush(Color.Black);
+                graphics.DrawString(
+                    FormatLegendText(entry, totalBlockCount),
+                    font,
+                    textBrush,
+                    padding + swatchSize + textGap,
+                    top + (rowHeight - font.Height) / 2f);
+            }
+
+            bitmap.Save(path, ImageFormat.Png);
+        }
+
+        // 260717Codex: Export one CSV row per displayed legend category with exact RGB, count, percentage, and assignment source.
+        public static void WriteLegendCsv(string path, MineralMapImage image, int totalBlockCount)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            ArgumentNullException.ThrowIfNull(image);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("display_order,category,mineral_name,hex,r,g,b,block_count,percentage,assignment");
+            for (int i = 0; i < image.Legend.Count; i++)
+            {
+                MineralMapLegendEntry entry = image.Legend[i];
+                double percentage = CalculatePercentage(entry.BlockCount, totalBlockCount);
+                sb.Append(i.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(EscapeCsv(GetLegendCategory(entry))).Append(',')
+                    .Append(EscapeCsv(entry.MineralName)).Append(',')
+                    .Append(ToHex(entry.Color)).Append(',')
+                    .Append(entry.Color.R.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(entry.Color.G.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(entry.Color.B.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(entry.BlockCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(percentage.ToString("F6", CultureInfo.InvariantCulture)).Append(',')
+                    .AppendLine(entry.Assignment.ToString());
+            }
+
+            File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+        }
+
+        // 260717Codex: Preserve the displayed palette, map conditions, and every mineral aggregated into Other for reproducibility.
+        public static void WriteLegendJson(
+            string path,
+            MineralMapImage image,
+            PtsClassificationMapResult map)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            ArgumentNullException.ThrowIfNull(image);
+            ArgumentNullException.ThrowIfNull(map);
+
+            var document = new
+            {
+                version = 1,
+                ptsFile = Path.GetFileName(map.PtsFilePath),
+                modelName = map.ModelName,
+                binSize = map.BinSize,
+                leadingSweepCount = map.LeadingSweepCount,
+                gridWidth = map.GridWidth,
+                gridHeight = map.GridHeight,
+                totalBlockCount = map.BlockCount,
+                legend = image.Legend.Select((entry, index) => new
+                {
+                    displayOrder = index,
+                    category = GetLegendCategory(entry),
+                    mineralName = entry.MineralName,
+                    color = new { hex = ToHex(entry.Color), r = entry.Color.R, g = entry.Color.G, b = entry.Color.B },
+                    blockCount = entry.BlockCount,
+                    percentage = CalculatePercentage(entry.BlockCount, map.BlockCount),
+                    assignment = entry.Assignment.ToString()
+                }),
+                otherMembers = image.OtherMembers.Select(entry => new
+                {
+                    mineralName = entry.MineralName,
+                    blockCount = entry.BlockCount,
+                    percentage = CalculatePercentage(entry.BlockCount, map.BlockCount)
+                })
+            };
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            File.WriteAllText(path, JsonSerializer.Serialize(document, options), new UTF8Encoding(false));
+        }
+
         // 260623Claude: 出力軸 (targetSize 画素) の各座標が属するブロック index を最近傍で割り付ける。FOV が同一であることが前提。
         private static int[] BuildAxisBlockMap(int targetSize, int gridSize)
         {
@@ -187,16 +309,43 @@ namespace MineraScope
             Directory.CreateDirectory(outputDirectory);
             int width = TargetWidth;
             int height = TargetHeight;
-            string suffix = SweepSuffix(map.LeadingSweepCount);
+            // 260717Codex: Include every analysis condition that can otherwise overwrite a different map in the same folder.
+            string exportStem = BuildExportStem(map);
 
+            // 260717Codex: Retain the legacy common file and add a condition-specific copy for non-overwriting reproducibility.
             WriteClassesCsv(Path.Combine(outputDirectory, "classes.csv"), labelNames);
-            WriteRgbMapPng(Path.Combine(outputDirectory, $"pred_rgb_{suffix}.png"), mapImage, map, width, height);
+            WriteClassesCsv(Path.Combine(outputDirectory, $"classes_{exportStem}.csv"), labelNames);
+            WriteRgbMapPng(Path.Combine(outputDirectory, $"pred_rgb_{exportStem}.png"), mapImage, map, width, height);
             WriteLabelTiff(
-                Path.Combine(outputDirectory, $"pred_label_{suffix}.tif"),
+                Path.Combine(outputDirectory, $"pred_label_{exportStem}.tif"),
                 BuildLabelMap(map, width, height),
                 width,
                 height);
-            WriteMetadataJson(Path.Combine(outputDirectory, $"metadata_{suffix}.json"), map, width, height);
+            WriteMetadataJson(Path.Combine(outputDirectory, $"metadata_{exportStem}.json"), map, width, height);
+            WriteLegendPng(Path.Combine(outputDirectory, $"legend_{exportStem}.png"), mapImage, map.BlockCount);
+            WriteLegendCsv(Path.Combine(outputDirectory, $"legend_{exportStem}.csv"), mapImage, map.BlockCount);
+            WriteLegendJson(Path.Combine(outputDirectory, $"legend_{exportStem}.json"), mapImage, map);
+        }
+
+        // 260717Codex: Build a deterministic filename stem from PTS, model, binning, and sweep conditions.
+        private static string BuildExportStem(PtsClassificationMapResult map)
+        {
+            string ptsName = SanitizeFileNamePart(Path.GetFileNameWithoutExtension(map.PtsFilePath), "pts");
+            string modelName = SanitizeFileNamePart(map.ModelName, "model");
+            string binSize = map.BinSize.ToString("D2", CultureInfo.InvariantCulture);
+            return $"{ptsName}_{modelName}_bin{binSize}_{SweepSuffix(map.LeadingSweepCount)}";
+        }
+
+        // 260717Codex: Replace only characters Windows disallows while retaining readable PTS and model names.
+        private static string SanitizeFileNamePart(string? value, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return fallback;
+
+            var invalid = Path.GetInvalidFileNameChars().ToHashSet();
+            string sanitized = new(value.Trim().Select(character => invalid.Contains(character) ? '_' : character).ToArray());
+            sanitized = sanitized.Trim().TrimEnd('.');
+            return sanitized.Length == 0 ? fallback : sanitized;
         }
 
         // 260623Claude: スイープ依存ファイルのサフィックス (例: sweep05)。全スイープ読みは sweepAll。0 埋め2桁、超過時は桁数が増える。
@@ -270,6 +419,32 @@ namespace MineraScope
                 bitmap.UnlockBits(data);
             }
         }
+
+        // 260717Codex: Match the on-screen legend's mineral-name and whole-map percentage format.
+        private static string FormatLegendText(MineralMapLegendEntry entry, int totalBlockCount)
+            => string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}: {1:F2}%",
+                entry.MineralName,
+                CalculatePercentage(entry.BlockCount, totalBlockCount));
+
+        // 260717Codex: Use all map blocks as the shared denominator for UI and exported legends.
+        private static double CalculatePercentage(int blockCount, int totalBlockCount)
+            => totalBlockCount > 0 ? blockCount * 100.0 / totalBlockCount : 0;
+
+        // 260717Codex: Give fixed aggregate rows explicit machine-readable category names.
+        private static string GetLegendCategory(MineralMapLegendEntry entry)
+        {
+            if (entry.IsOther)
+                return "Other";
+            if (entry.IsUnclassified)
+                return "Unclassified";
+            return entry.Assignment == MineralColorAssignment.Fixed ? "Unknown" : "Mineral";
+        }
+
+        // 260717Codex: Record the exact opaque RGB color in a common publication-tool format.
+        private static string ToHex(Color color)
+            => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
 
         // 260623Claude: 鉱物名にカンマや引用符が含まれても CSV を壊さないよう最小限のクォートを行う。
         private static string EscapeCsv(string value)

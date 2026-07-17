@@ -38,6 +38,9 @@ namespace MineraScope
         // 260522Codex: Cache clicked spectra by pixel and binning size so experiments do not reuse another bin.
         private readonly Dictionary<(Point Pixel, int BinSize, int? LeadingSweepCount), PtsPixelSpectrum> _pixelSpectrumCache = [];
 
+        // 260716Claude: 最後にグラフ表示したスペクトルを CSV エクスポート用に保持する（SEM クリック・マップクリック共通）。
+        private (PtsPixelSpectrum Spectrum, string FileName)? _lastDisplayedSpectrum;
+
         // 260522Codex: Keep the first binning candidates small enough for experiments while covering low-count spectra.
         // 260710Codex: Include small bins so mineral maps can be generated with finer spatial resolutions.
         private static readonly int[] BinningSizes = [1, 2, 3, 4, 5, 7, 8, 10, 20];
@@ -78,8 +81,16 @@ namespace MineraScope
         private int _mapBuildVersion;
         private CancellationTokenSource? _mapClassificationCancellation;
 
+        // 260716Claude: SEM⇔マップ viewport の相互同期用。ZoomAndCenter 設定は相手側の DrawingAreaChanged を
+        //   無条件に発火させるため、このフラグで逆流 (無限再帰) を止める。
+        private bool _isSyncingViewports;
+
         // 260528Claude: 凡例ハイライト用に colorizer 出力を保持。palette だけ差し替えて bitmap を作り直すための源データ。
         private MineralMapImage? _mapImage;
+
+        // 260717Codex: Keep one global mineral-name palette alive across PTS drops and mapping-condition changes.
+        private readonly MineralColorPalette _mineralColorPalette;
+        private string? _mineralColorPaletteLoadWarning;
 
         // 260528Codex: Keep legend highlighting independent from ListBox.SelectedIndex timing.
         private int _highlightLegendIndex = -1;
@@ -91,6 +102,8 @@ namespace MineraScope
         public AnalyzerForm()
         {
             InitializeComponent();
+            // 260717Codex: Load persisted colors before any map can register its TOP20 minerals.
+            _mineralColorPalette = MineralColorPalette.Load(out _mineralColorPaletteLoadWarning);
             // 260716Claude: 前回選択したマッピングモデル名を復元する (ModelCatalog 代入時の一覧構築で使う)。
             _savedSelectedModelName = FormUserSettingsStore.Load<AnalyzerFormUserSettings>(UserSettingsFileName).SelectedMappingModelName;
             InitializeBinningOptions();
@@ -204,13 +217,45 @@ namespace MineraScope
         }
 
         // 260716Claude: 次回起動時に戻すのはマッピングモデルの選択だけ。アプリ終了時は FormMain からも呼ばれる。
-        internal void SaveUserSettings() =>
+        // 260717Codex: Save both UI selection and dirty mineral colors on hide or application shutdown.
+        internal void SaveUserSettings()
+        {
             FormUserSettingsStore.Save(
                 UserSettingsFileName,
                 new AnalyzerFormUserSettings
                 {
                     SelectedMappingModelName = comboBoxMappingModellFolder.SelectedItem as string ?? string.Empty
                 });
+
+            SaveMineralColorPalette();
+        }
+
+        // 260717Codex: Report persistence failures because silently losing fixed publication colors would be misleading.
+        private void SaveMineralColorPalette()
+        {
+            if (_mineralColorPalette.TrySave(out string? error))
+                return;
+
+            MessageBox.Show(
+                $"鉱物色設定を保存できませんでした。\r\n{error}",
+                "鉱物色設定",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+
+        // 260717Codex: Delay a corrupt-palette warning until the user actually starts mineral mapping.
+        private void ShowMineralColorPaletteLoadWarning()
+        {
+            if (string.IsNullOrWhiteSpace(_mineralColorPaletteLoadWarning))
+                return;
+
+            MessageBox.Show(
+                _mineralColorPaletteLoadWarning,
+                "鉱物色設定",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            _mineralColorPaletteLoadWarning = null;
+        }
 
         // 260519Codex: .pts ドロップ時は SEM画像だけを読み込み、EDXスペクトルはクリック時に1ピクセルだけ読みます。
         private async void AnalyzerForm_DragDrop(object? sender, DragEventArgs e)
@@ -502,14 +547,37 @@ namespace MineraScope
         }
 
         // 260523Codex: Draw the actual clamped binning rectangle on the SEM image after a pixel is selected.
+        // 260716Claude: SEM クリック・マップクリック共通の選択枠表示に統合。矩形は表示系の「整数座標=ピクセル中心」
+        //   に合わせてピクセル端 (-0.5) 基準へ修正し、マップ側にも同じ範囲の黄枠を映す。
         private void ShowBinningArea(PtsPixelSpectrum pixelSpectrum)
         {
             scalablePictureBoxSEM.AreaRectangle = new RectangleD(
-                pixelSpectrum.BinLeft,
-                pixelSpectrum.BinTop,
+                pixelSpectrum.BinLeft - 0.5,
+                pixelSpectrum.BinTop - 0.5,
                 pixelSpectrum.BinRight - pixelSpectrum.BinLeft + 1,
                 pixelSpectrum.BinBottom - pixelSpectrum.BinTop + 1);
             scalablePictureBoxSEM.ShowAreaRectangle = true;
+            SyncMapAreaToSem();
+        }
+
+        // 260716Claude: SEM 側の黄枠 (SEM ピクセル座標) をマップのブロック座標へ変換し、同じ位置に表示する。
+        //   端座標の変換は viewport 同期と同じ式 (map = (sem + 0.5) / bin - 0.5)。マップ未作成時は何もしない。
+        private void SyncMapAreaToSem()
+        {
+            if (_classificationMap is null || _mapPseudoBitmap is null)
+                return;
+
+            int binSize = _classificationMap.BinSize;
+            if (binSize <= 0)
+                return;
+
+            RectangleD semRect = scalablePictureBoxSEM.AreaRectangle;
+            scalablePictureBoxMap.AreaRectangle = new RectangleD(
+                (semRect.X + 0.5) / binSize - 0.5,
+                (semRect.Y + 0.5) / binSize - 0.5,
+                semRect.Width / binSize,
+                semRect.Height / binSize);
+            scalablePictureBoxMap.ShowAreaRectangle = scalablePictureBoxSEM.ShowAreaRectangle;
         }
 
         // 260526Claude: コンボで選択中のマッピングモデルのパスと名前を返す（SEM クリックとマッピング開始で共有）。
@@ -529,6 +597,9 @@ namespace MineraScope
         {
             string binningLabel = $"{spectrum.RequestedBinSize}×{spectrum.RequestedBinSize}";
             string rangeLabel = $"X {spectrum.BinLeft}-{spectrum.BinRight}, Y {spectrum.BinTop}-{spectrum.BinBottom}";
+
+            // 260716Claude: CSV エクスポート対象として、表示した生スペクトルをそのまま保持する。
+            _lastDisplayedSpectrum = (spectrum, fileName);
 
             graphControl1.LabelX = "Energy";
             graphControl1.UnitX = "keV";
@@ -653,6 +724,9 @@ namespace MineraScope
             if (IsInteractiveClassificationBusy)
                 return;
 
+            // 260717Codex: Warn before an empty fallback palette can assign replacement colors.
+            ShowMineralColorPaletteLoadWarning();
+
             if (string.IsNullOrWhiteSpace(_currentPtsFilePath))
             {
                 MessageBox.Show("先にPTSファイルを読み込んでください。", "鉱物マッピング", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -685,12 +759,8 @@ namespace MineraScope
                 if (buildVersion != _mapBuildVersion || !string.Equals(_currentPtsFilePath, filePath, StringComparison.Ordinal))
                     return;
 
-                MineralMapImage image = MineralMapColorizer.Build(result);
-                _classificationMap = result;
-                // 260528Claude: 凡例選択時の palette 差し替えに使う源データ。ShowMapLegend の Items.Clear で rebuild が走るので Set より前に必須。
-                _mapImage = image;
-                SetMapPseudoBitmap(CreateMapPseudoBitmap(image));
-                ShowMapLegend(image, result);
+                // 260717Codex: Resolve and display colors only after stale-map checks pass.
+                ApplyMineralMap(result);
                 SetMappingStatus(string.Empty, 0);
             }
             catch (OperationCanceledException)
@@ -744,6 +814,8 @@ namespace MineraScope
             try
             {
                 await Task.Run(() => MineralMapImageExporter.ExportCurrentView(outputDir, map, image, map.LabelNames));
+                // 260717Codex: A successful export is a persistence boundary for newly assigned or manually changed colors.
+                SaveMineralColorPalette();
                 SetMappingStatus($"エクスポート完了: {outputDir}", 0);
             }
             catch (Exception ex)
@@ -753,6 +825,44 @@ namespace MineraScope
             finally
             {
                 UseWaitCursor = false;
+            }
+        }
+
+        // 260716Claude: 最後にグラフ表示したスペクトル（SEM/マップクリック）を、マスク適用前の生カウントで CSV 出力する（Designer で Click を接続）。
+        private void exportSpectrumCsvToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (_lastDisplayedSpectrum is not { } last)
+            {
+                MessageBox.Show(
+                    "エクスポートできるスペクトルがありません。先に SEM 画像かマップをクリックしてスペクトルを表示してください。",
+                    "スペクトルCSV出力", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var (spectrum, fileName) = last;
+
+            using var dialog = new SaveFileDialog
+            {
+                Filter = "CSV (*.csv)|*.csv",
+                // 260716Claude: グラフタイトルと同じ視野情報（範囲・ビニング）を既定名に残す。
+                FileName = $"{Path.GetFileNameWithoutExtension(fileName)}_X{spectrum.BinLeft}-{spectrum.BinRight}_Y{spectrum.BinTop}-{spectrum.BinBottom}_bin{spectrum.RequestedBinSize}"
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+
+            try
+            {
+                SpectrumCsvExporter.Write(
+                    dialog.FileName,
+                    "Energy (keV)",
+                    Enumerable.Range(0, spectrum.ChannelCount)
+                        .Select(channel => (spectrum.GetEnergy(channel), (double)spectrum.GetCount(channel))));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"エクスポートに失敗しました。\r\n{ex.Message}",
+                    "スペクトルCSV出力", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
 
@@ -794,22 +904,44 @@ namespace MineraScope
             };
         }
 
+        // 260717Codex: Rebuild map pixels and legend from the same persisted palette after classification or a manual color edit.
+        private void ApplyMineralMap(PtsClassificationMapResult result)
+        {
+            MineralMapImage image = MineralMapColorizer.Build(result, _mineralColorPalette);
+            _classificationMap = result;
+            _mapImage = image;
+            SetMapPseudoBitmap(CreateMapPseudoBitmap(image));
+            ShowMapLegend(image, result);
+        }
+
         // 260526Claude: scalablePictureBox1 のマップ画像を差し替え、置き換え前の PseudoBitmap を破棄する。
         private void SetMapPseudoBitmap(PseudoBitmap? mapImage)
         {
-            ReplacePseudoBitmap(scalablePictureBoxMap, ref _mapPseudoBitmap, mapImage);
+            // 260716Claude: bitmap 差し替えはマップ viewport をリセットし DrawingAreaChanged を発火するため、
+            //   リセット値が SEM 側へ逆流しないようガードして差し替える。
+            _isSyncingViewports = true;
+            try { ReplacePseudoBitmap(scalablePictureBoxMap, ref _mapPseudoBitmap, mapImage); }
+            finally { _isSyncingViewports = false; }
             // 260604Codex: Map bitmap rebuilds reset its own viewport, so restore the SEM-aligned view immediately.
             SyncMapViewToSem(scalablePictureBoxSEM.Zoom, scalablePictureBoxSEM.Center);
+            // 260716Claude: ReplacePseudoBitmap が消した黄枠も SEM 側から復元する（凡例ハイライトの rebuild 後や
+            //   マップ新規作成後も、直前のクリック位置が両画像に出続ける）。
+            SyncMapAreaToSem();
         }
 
         // 260604Codex: Designer-connected SEM viewport changes drive the mineral map viewport.
         private void scalablePictureBoxSEM_DrawingAreaChanged(object sender, double zoom, PointD center)
             => SyncMapViewToSem(zoom, center);
 
+        // 260716Claude: Designer-connected map viewport changes drive the SEM viewport (SyncMapViewToSem の逆方向)。
+        private void scalablePictureBoxMap_DrawingAreaChanged(object sender, double zoom, PointD center)
+            => SyncSemViewToMap(zoom, center);
+
         // 260604Codex: Convert SEM image coordinates into mineral-map block coordinates for synchronized viewing.
         private void SyncMapViewToSem(double semZoom, PointD semCenter)
         {
-            if (_classificationMap is null || _semPseudoBitmap is null || _mapPseudoBitmap is null || semCenter.IsNaN)
+            // 260716Claude: 相互同期化に伴い、同期中の再入は止める。
+            if (_isSyncingViewports || _classificationMap is null || _semPseudoBitmap is null || _mapPseudoBitmap is null || semCenter.IsNaN)
                 return;
 
             int binSize = _classificationMap.BinSize;
@@ -821,7 +953,28 @@ namespace MineraScope
                 (semCenter.Y + 0.5) / binSize - 0.5);
             double mapZoom = semZoom * binSize;
             // 260710Codex: Upstream ScalablePictureBox now owns the zoom cap, so synchronized zoom is applied directly.
-            scalablePictureBoxMap.ZoomAndCenter = (mapZoom, mapCenter);
+            _isSyncingViewports = true;
+            try { scalablePictureBoxMap.ZoomAndCenter = (mapZoom, mapCenter); }
+            finally { _isSyncingViewports = false; }
+        }
+
+        // 260716Claude: マップのブロック座標を SEM ピクセル座標へ逆変換し、SEM viewport を追従させる。
+        private void SyncSemViewToMap(double mapZoom, PointD mapCenter)
+        {
+            if (_isSyncingViewports || _classificationMap is null || _semPseudoBitmap is null || _mapPseudoBitmap is null || mapCenter.IsNaN)
+                return;
+
+            int binSize = _classificationMap.BinSize;
+            if (binSize <= 0 || mapZoom <= 0)
+                return;
+
+            var semCenter = new PointD(
+                (mapCenter.X + 0.5) * binSize - 0.5,
+                (mapCenter.Y + 0.5) * binSize - 0.5);
+            double semZoom = mapZoom / binSize;
+            _isSyncingViewports = true;
+            try { scalablePictureBoxSEM.ZoomAndCenter = (semZoom, semCenter); }
+            finally { _isSyncingViewports = false; }
         }
 
         // 260528Claude: 凡例選択状態に合わせてマップ palette を作り直す。Values と CategoryCount は変えず palette だけ差し替える。
@@ -919,7 +1072,8 @@ namespace MineraScope
             if (readVersion != _spectrumReadVersion || spectrum is null)
                 return;
 
-            ShowMapBlockArea(block);
+            // 260716Claude: spectrum の Bin 範囲はブロックの SEM ピクセル座標なので、SEM クリックと同じ経路で両画像に黄枠を出す。
+            ShowBinningArea(spectrum);
             await DisplaySpectrumAndClassifyAsync(spectrum, map.ModelPath, map.ModelName, Path.GetFileName(filePath), readVersion, block);
         }
 
@@ -979,14 +1133,6 @@ namespace MineraScope
         private static string FormatPercent(float confidence)
             => (confidence * 100).ToString("F2", CultureInfo.InvariantCulture);
 
-        // 260526Claude: クリックしたブロックをマップ側 (scalablePictureBox1) に枠表示する（案2 なので格子座標で 1×1）。
-        private void ShowMapBlockArea(Point block)
-        {
-            // 260527Codex: Center the 1x1 selection on the displayed map pixel instead of starting at its center.
-            scalablePictureBoxMap.AreaRectangle = new RectangleD(block.X - 0.5, block.Y - 0.5, 1, 1);
-            scalablePictureBoxMap.ShowAreaRectangle = true;
-        }
-
         // 260526Claude: 凡例 (MeasureLegendMaxWidth と listBoxLegend_DrawItem) のレイアウト定数。両者がドリフトしないよう1か所に集約。
         private const int LegendPadding = 2;
         private const int LegendTextGap = 6;
@@ -1021,6 +1167,17 @@ namespace MineraScope
         // 260528Codex: SelectedIndex can already be updated here, so the highlight state must not depend on it.
         private void listBoxLegend_MouseDown(object sender, MouseEventArgs e)
         {
+            // 260717Codex: Right-click selects the target row for the Designer-owned color-edit context menu.
+            if (e.Button == MouseButtons.Right)
+            {
+                int contextIndex = listBoxLegend.IndexFromPoint(e.Location);
+                listBoxLegend.SelectedIndex = contextIndex;
+                changeLegendColorToolStripMenuItem.Enabled =
+                    contextIndex >= 0 &&
+                    listBoxLegend.Items[contextIndex] is MineralMapLegendEntry { Assignment: not MineralColorAssignment.Fixed };
+                return;
+            }
+
             if (e.Button != MouseButtons.Left)
                 return;
 
@@ -1038,6 +1195,30 @@ namespace MineraScope
         // 260528Codex: Native selection is visual noise only now; the MouseDown handler owns map highlight changes.
         private void listBoxLegend_SelectedIndexChanged(object sender, EventArgs e)
             => listBoxLegend.Invalidate();
+
+        // 260717Codex: Apply a user-selected RGB color only to the chosen mineral and refresh the current map immediately.
+        private void changeLegendColorToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            if (_classificationMap is null ||
+                listBoxLegend.SelectedItem is not MineralMapLegendEntry entry ||
+                entry.Assignment == MineralColorAssignment.Fixed)
+            {
+                return;
+            }
+
+            using var dialog = new ColorDialog
+            {
+                AnyColor = true,
+                Color = entry.Color,
+                FullOpen = true,
+                SolidColorOnly = true
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+
+            _mineralColorPalette.SetManualColor(entry.MineralName, dialog.Color);
+            ApplyMineralMap(_classificationMap);
+        }
 
         private void listBoxLegend_DrawItem(object sender, DrawItemEventArgs e)
         {

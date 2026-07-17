@@ -28,6 +28,10 @@
         /// </summary>
         private void InitializeComponent()
         {
+            // 260717Codex: Designer-owned legend menu keeps static component disposal and event wiring in one place.
+            components = new System.ComponentModel.Container();
+            contextMenuStripLegend = new ContextMenuStrip(components);
+            changeLegendColorToolStripMenuItem = new ToolStripMenuItem();
             listBoxLegend = new ListBox();
             buttonCancelMap = new Button();
             scalablePictureBoxMap = new Crystallography.Controls.ScalablePictureBox();
@@ -58,6 +62,7 @@
             trackBarBrightness = new TrackBar();
             labelBrightness = new Label();
             exportMapToolStripMenuItem = new ToolStripMenuItem();
+            contextMenuStripLegend.SuspendLayout();
             flowLayoutPanelBinning.SuspendLayout();
             flowLayoutPanelModellFolder.SuspendLayout();
             menuStrip1.SuspendLayout();
@@ -73,6 +78,8 @@
             // 
             // listBoxLegend
             // 
+            // 260717Codex: Right-clicking a legend row offers manual color editing without changing left-click highlighting.
+            listBoxLegend.ContextMenuStrip = contextMenuStripLegend;
             listBoxLegend.DrawMode = DrawMode.OwnerDrawFixed;
             listBoxLegend.FormattingEnabled = true;
             listBoxLegend.HorizontalScrollbar = true;
@@ -84,6 +91,19 @@
             listBoxLegend.DrawItem += listBoxLegend_DrawItem;
             listBoxLegend.SelectedIndexChanged += listBoxLegend_SelectedIndexChanged;
             listBoxLegend.MouseDown += listBoxLegend_MouseDown;
+            //
+            // contextMenuStripLegend
+            //
+            contextMenuStripLegend.Items.AddRange(new ToolStripItem[] { changeLegendColorToolStripMenuItem });
+            contextMenuStripLegend.Name = "contextMenuStripLegend";
+            contextMenuStripLegend.Size = new Size(137, 26);
+            //
+            // changeLegendColorToolStripMenuItem
+            //
+            changeLegendColorToolStripMenuItem.Name = "changeLegendColorToolStripMenuItem";
+            changeLegendColorToolStripMenuItem.Size = new Size(136, 22);
+            changeLegendColorToolStripMenuItem.Text = "色を変更...";
+            changeLegendColorToolStripMenuItem.Click += changeLegendColorToolStripMenuItem_Click;
             // 
             // buttonCancelMap
             // 
@@ -451,6 +471,7 @@
             FormClosing += AnalyzerForm_FormClosing;
             DragDrop += AnalyzerForm_DragDrop;
             DragEnter += AnalyzerForm_DragEnter;
+            contextMenuStripLegend.ResumeLayout(false);
             flowLayoutPanelBinning.ResumeLayout(false);
             flowLayoutPanelBinning.PerformLayout();
             flowLayoutPanelModellFolder.ResumeLayout(false);
@@ -505,5 +526,8 @@
         private Label label1;
         private ComboBox comboBox1;
         private ToolStripMenuItem exportMapToolStripMenuItem;
+        // 260717Codex: Static legend color editing components are owned by the Designer container.
+        private ContextMenuStrip contextMenuStripLegend;
+        private ToolStripMenuItem changeLegendColorToolStripMenuItem;
     }
 }
