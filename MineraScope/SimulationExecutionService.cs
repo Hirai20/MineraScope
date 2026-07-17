@@ -109,7 +109,8 @@ namespace MineraScope
 
                 var attempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 1, progress, runLog, launchGate, cancellationToken);
                 LogAttemptResult(runLog, solutionName, job, attempt);
-                var result = ConvertToExecutionResult(job, attempt);
+                attempt = await RetryStartupTimeoutOnceAsync(job, solutionName, attempt, progress, runLog, launchGate, cancellationToken);
+                var result = ConvertToExecutionResult(job, attempt, runLog);
                 progress.CompleteUnreportedSuccessfulSpectra(result);
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
@@ -154,7 +155,10 @@ namespace MineraScope
                 $"outcome={attempt.Outcome} exit={attempt.ExitCode} reserved={job.Reservations.Count} saved={attempt.SavedSpectrumFiles.Count} " +
                 $"elapsed={SimulationRunLog.FormatSeconds(attempt.Elapsed)}{detailText}");
 
-            if (attempt.Outcome is SimulationAttemptOutcome.Succeeded or SimulationAttemptOutcome.Canceled)
+            // 260717Claude: attempt 2 は成功時も全文を残す (リトライで復旧したケースの検証に使う。要件定義で確定)。
+            bool dumpOutput = attempt.AttemptNumber > 1
+                || attempt.Outcome is not (SimulationAttemptOutcome.Succeeded or SimulationAttemptOutcome.Canceled);
+            if (!dumpOutput)
                 return;
 
             string context = $"{script} attempt={attempt.AttemptNumber} pid={pidText}";
@@ -162,11 +166,58 @@ namespace MineraScope
             runLog.WriteBlock($"stderr: {context}", attempt.StandardError);
         }
 
+        // 260717Claude: 起動フェーズ watchdog timeout の 1 回だけの自動リトライ境界。対象は
+        //   StartupTimeout・保存 0 本 (kill 後の最終ディスクスキャン済み snapshot で判定)・attempt 1・未キャンセルの全成立時のみ。
+        //   attempt 2 は予約ファイルの初期削除を行わないため、起動直前に再スキャンして遅延出現ファイルが 1 件でもあれば
+        //   partial save とみなしてリトライを中止し、保存済み snapshot へ反映する (attempt 1 由来の出力を消さない保証)。
+        private async Task<SimulationProcessAttemptResult> RetryStartupTimeoutOnceAsync(
+            SimulationExecutionJob job,
+            string solutionName,
+            SimulationProcessAttemptResult attempt,
+            SimulationJobProgress progress,
+            SimulationRunLog runLog,
+            SimulationLaunchGate launchGate,
+            CancellationToken cancellationToken)
+        {
+            if (attempt.Outcome != SimulationAttemptOutcome.StartupTimeout ||
+                attempt.AttemptNumber != 1 ||
+                attempt.SavedSpectrumFiles.Count > 0 ||
+                cancellationToken.IsCancellationRequested)
+            {
+                return attempt;
+            }
+
+            string script = Path.GetFileName(job.ScriptPath);
+            string[] lateSavedFiles = job.Reservations
+                .Where(reservation => File.Exists(Path.Combine(reservation.PoolFolder, reservation.FileName)))
+                .Select(reservation => reservation.FileName)
+                .ToArray();
+            if (lateSavedFiles.Length > 0)
+            {
+                runLog.WriteLine($"retry aborted: script={script} reason=late output files detected ({lateSavedFiles.Length})");
+                var merged = new HashSet<string>(attempt.SavedSpectrumFiles, StringComparer.OrdinalIgnoreCase);
+                foreach (string fileName in lateSavedFiles)
+                {
+                    merged.Add(fileName);
+                    progress.ReportSpectrumSaved(fileName);
+                }
+
+                return attempt with { SavedSpectrumFiles = merged };
+            }
+
+            runLog.WriteLine($"retry: solution={solutionName} script={script} reason=StartupTimeout attempt=2");
+            var secondAttempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 2, progress, runLog, launchGate, cancellationToken);
+            LogAttemptResult(runLog, solutionName, job, secondAttempt);
+            return secondAttempt;
+        }
+
         // 260717Claude: attempt 結果を manifest 更新側が読む既存形式へ変換する。判定規則は従来と同一
-        //   (watchdog/起動失敗は ExceptionMessage 有り、キャンセルは IsCanceled、正常系は ExitCode のみで判定)。
+        //   (キャンセルは IsCanceled、正常系は ExitCode のみで判定)。最終失敗の ExceptionMessage には
+        //   構造化種別と run ログファイル名の prefix を必ず付け、manifest の FailureReason から証跡へ辿れるようにする。
         private static SimulationExecutionResult ConvertToExecutionResult(
             SimulationExecutionJob job,
-            SimulationProcessAttemptResult attempt) =>
+            SimulationProcessAttemptResult attempt,
+            SimulationRunLog runLog) =>
             attempt.Outcome switch
             {
                 SimulationAttemptOutcome.Canceled => new SimulationExecutionResult(
@@ -177,23 +228,32 @@ namespace MineraScope
                     ExceptionMessage: null,
                     IsCanceled: true,
                     SavedSpectrumFiles: attempt.SavedSpectrumFiles),
-                SimulationAttemptOutcome.StartupTimeout
-                    or SimulationAttemptOutcome.RunningIdleTimeout
-                    or SimulationAttemptOutcome.LaunchFailed => new SimulationExecutionResult(
+                SimulationAttemptOutcome.Succeeded => new SimulationExecutionResult(
                     job.Reservations,
                     attempt.ExitCode,
                     attempt.StandardOutput,
                     attempt.StandardError,
-                    ExceptionMessage: attempt.FailureDetail,
+                    ExceptionMessage: null,
                     SavedSpectrumFiles: attempt.SavedSpectrumFiles),
                 _ => new SimulationExecutionResult(
                     job.Reservations,
                     attempt.ExitCode,
                     attempt.StandardOutput,
                     attempt.StandardError,
-                    ExceptionMessage: null,
+                    ExceptionMessage: BuildFailureExceptionMessage(attempt, runLog),
                     SavedSpectrumFiles: attempt.SavedSpectrumFiles)
             };
+
+        // 260717Claude: FailureReason の先頭 prefix。1,000 文字への切り詰めは末尾側で行われるため prefix は必ず残る。
+        //   詳細は watchdog/例外メッセージを優先し、無ければ stderr/stdout、それも無ければ exit code を残す。
+        private static string BuildFailureExceptionMessage(SimulationProcessAttemptResult attempt, SimulationRunLog runLog)
+        {
+            string detail = attempt.FailureDetail
+                ?? (!string.IsNullOrWhiteSpace(attempt.StandardError) ? attempt.StandardError
+                    : !string.IsNullOrWhiteSpace(attempt.StandardOutput) ? attempt.StandardOutput
+                    : $"DTSA-II exit code {attempt.ExitCode}");
+            return $"[{attempt.Outcome}] log={runLog.FileName}; {detail}";
+        }
 
         // 260513Codex: 再生成時に同じ fileName を使うため、実行直前に対象 spectrum ファイルだけを消します。
         private static void DeleteReservedOutputFiles(IReadOnlyList<SpectrumSimulationReservation> reservations)
