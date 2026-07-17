@@ -36,6 +36,8 @@ namespace MineraScope
             // 260717Claude: run 単位の永続ログ。GUI/headless どちらでも RunAsync 起点で必ず 1 ファイル残し、
             //   実行後に失敗原因 (watchdog kill・stderr) を追跡できるようにする。
             var runLog = SimulationRunLog.CreateForRun();
+            // 260717Claude: 起動ゲートは run 単位で共有し、batch をまたいでも Process.Start の最小間隔を保つ。
+            var launchGate = new SimulationLaunchGate();
             var runStopwatch = Stopwatch.StartNew();
             runLog.WriteLine($"run start: batches={progressScope.BatchCount}, jobs={progressScope.TotalJobCount}, spectra={progressScope.TotalSpectrumCount}");
 
@@ -49,7 +51,7 @@ namespace MineraScope
                 ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchStarted, "開始");
 
                 var batchResults = await Task.WhenAll(batch.Jobs.Select(job =>
-                    ExecuteJobAsync(job, batch.SolutionName, batchNumber, progressScope, runLog, cancellationToken)));
+                    ExecuteJobAsync(job, batch.SolutionName, batchNumber, progressScope, runLog, launchGate, cancellationToken)));
                 results.AddRange(batchResults);
 
                 ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchCompleted, "完了");
@@ -91,6 +93,7 @@ namespace MineraScope
             int batchIndex,
             SimulationProgressScope progressScope,
             SimulationRunLog runLog,
+            SimulationLaunchGate launchGate,
             CancellationToken cancellationToken)
         {
             var progress = new SimulationJobProgress(progressScope, job, solutionName, batchIndex);
@@ -104,7 +107,7 @@ namespace MineraScope
                 Directory.CreateDirectory(job.Property.OutputFolder);
                 DeleteReservedOutputFiles(job.Reservations);
 
-                var attempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 1, progress, runLog, cancellationToken);
+                var attempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 1, progress, runLog, launchGate, cancellationToken);
                 LogAttemptResult(runLog, solutionName, job, attempt);
                 var result = ConvertToExecutionResult(job, attempt);
                 progress.CompleteUnreportedSuccessfulSpectra(result);

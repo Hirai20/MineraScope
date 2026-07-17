@@ -34,6 +34,34 @@ namespace MineraScope
         TimeSpan Elapsed,
         IReadOnlySet<string> SavedSpectrumFiles);
 
+    // 260717Claude: run 内の Process.Start を一定間隔に間引く起動ゲート。20 JVM のほぼ同時ブートによる
+    //   DTSA-II 内部共有リソース (Derby 等) の起動競合スタックを避けるのが目的で、起動後の実行は並列のまま。
+    //   待機者はセマフォで直列に並び、先頭が間隔分の Delay を消化してから次へ許可を回す (キャンセル可能)。
+    internal sealed class SimulationLaunchGate
+    {
+        private static readonly TimeSpan LaunchInterval = TimeSpan.FromSeconds(2);
+
+        private readonly SemaphoreSlim _semaphore = new(1, 1);
+        private DateTime _nextAllowedUtc = DateTime.MinValue;
+
+        public async Task WaitForLaunchSlotAsync(CancellationToken cancellationToken)
+        {
+            await _semaphore.WaitAsync(cancellationToken);
+            try
+            {
+                var now = DateTime.UtcNow;
+                if (now < _nextAllowedUtc)
+                    await Task.Delay(_nextAllowedUtc - now, cancellationToken);
+
+                _nextAllowedUtc = DateTime.UtcNow + LaunchInterval;
+            }
+            finally
+            {
+                _semaphore.Release();
+            }
+        }
+    }
+
     // 260717Claude: DTSA-II 外部プロセスの単一 attempt 実行 (script 作成→起動→監視→watchdog→結果生成) を担当する。
     //   ジョブ単位の判断 (予約ファイルの初期削除、attempt 間リトライ、SimulationExecutionResult への変換) は
     //   SimulationExecutionService 側に置き、attempt の内側だけをこのクラスに閉じ込める。
@@ -62,6 +90,7 @@ namespace MineraScope
             int attemptNumber,
             SimulationJobProgress progress,
             SimulationRunLog runLog,
+            SimulationLaunchGate launchGate,
             CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -78,7 +107,7 @@ namespace MineraScope
                     SimulationExecutionProgressKind.ScriptWritten,
                     $"script 作成: {Path.GetFileName(job.ScriptPath)}");
 
-                return await RunProcessAsync(job, attemptNumber, progress, runLog, stopwatch, cancellationToken);
+                return await RunProcessAsync(job, attemptNumber, progress, runLog, launchGate, stopwatch, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -113,9 +142,15 @@ namespace MineraScope
             int attemptNumber,
             SimulationJobProgress progress,
             SimulationRunLog runLog,
+            SimulationLaunchGate launchGate,
             Stopwatch stopwatch,
             CancellationToken cancellationToken)
         {
+            // 260717Claude: 起動ゲートで Process.Start だけを間引く (実行は並列のまま)。待ち時間はログで検証できるよう残す。
+            var staggerStopwatch = Stopwatch.StartNew();
+            await launchGate.WaitForLaunchSlotAsync(cancellationToken);
+            long staggerWaitMs = staggerStopwatch.ElapsedMilliseconds;
+
             // 260626Codex: Launch the dtsa2.msi app image directly in no-GUI mode while keeping stdout markers redirected.
             ProcessStartInfo startInfo = DtsaMsiInstallation.CreateStartInfo(job.DtsaFolder, job.ScriptPath);
 
@@ -126,6 +161,9 @@ namespace MineraScope
 
             process.Start();
             int? processId = TryGetProcessId(process);
+            runLog.WriteLine(
+                $"process start: script={Path.GetFileName(job.ScriptPath)} attempt={attemptNumber} " +
+                $"pid={processId?.ToString(CultureInfo.InvariantCulture) ?? "-"} staggerWaitMs={staggerWaitMs}");
             progress.ReportJobProgress(SimulationExecutionProgressKind.ProcessStarted, "DTSA-II process 起動");
             // 260606Claude: 保存完了マーカーのファイル名をここに集め、ジョブ全体の成否とは別に「保存できた spectrum」を結果へ渡します。
             // 260717Claude: stdout 読み取りタスクとファイルポーリングタスクが同時に触るため、lock 付き tracker で同期する
