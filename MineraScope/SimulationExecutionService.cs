@@ -50,8 +50,11 @@ namespace MineraScope
                 int batchNumber = batchIndex + 1;
                 ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchStarted, "開始");
 
+                // 260717Claude: GUI は UI スレッドから RunAsync を await するため、job 本体 (500ms のファイルポーリングや
+                //   失敗時の stdout 全文ログ書き込み) の継続が UI コンテキストへ戻らないよう Task.Run で切り離す。
+                //   UI 更新は Progress<T> が生成元 (UI) スレッドへ post するので従来どおり安全。
                 var batchResults = await Task.WhenAll(batch.Jobs.Select(job =>
-                    ExecuteJobAsync(job, batch.SolutionName, batchNumber, progressScope, runLog, launchGate, cancellationToken)));
+                    Task.Run(() => ExecuteJobAsync(job, batch.SolutionName, batchNumber, progressScope, runLog, launchGate, cancellationToken))));
                 results.AddRange(batchResults);
 
                 ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchCompleted, "完了");
@@ -118,20 +121,28 @@ namespace MineraScope
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 runLog.WriteLine($"job canceled before start: solution={solutionName} script={Path.GetFileName(job.ScriptPath)}");
-                var result = CreateCanceledResult(job, string.Empty, string.Empty);
+                // 260717Codex: This is the only pre-attempt cancellation result, so construct it at the decision point.
+                var result = new SimulationExecutionResult(
+                    job.Reservations,
+                    ExitCode: -1,
+                    StandardOutput: string.Empty,
+                    StandardError: string.Empty,
+                    ExceptionMessage: null,
+                    IsCanceled: true);
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
             }
             catch (Exception ex)
             {
                 // 260717Claude: attempt 前のジョブ準備 (出力フォルダ作成・予約ファイル削除) の失敗もログへ残す。
+                //   FailureReason から run ログへ辿れるよう、この経路にも種別 prefix を付ける (レビュー指摘)。
                 runLog.WriteLine($"job setup failed: solution={solutionName} script={Path.GetFileName(job.ScriptPath)} detail={SimulationRunLog.Flatten(ex.Message)}");
                 var result = new SimulationExecutionResult(
                     job.Reservations,
                     ExitCode: -1,
                     StandardOutput: string.Empty,
                     StandardError: string.Empty,
-                    ExceptionMessage: ex.Message);
+                    ExceptionMessage: $"[JobSetupFailed] log={runLog.FileName}; {ex.Message}");
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
             }
@@ -179,14 +190,16 @@ namespace MineraScope
             SimulationLaunchGate launchGate,
             CancellationToken cancellationToken)
         {
+            // 260717Codex: Return immediately unless every one-retry condition is satisfied.
             if (attempt.Outcome != SimulationAttemptOutcome.StartupTimeout ||
                 attempt.AttemptNumber != 1 ||
                 attempt.SavedSpectrumFiles.Count > 0 ||
                 cancellationToken.IsCancellationRequested)
-            {
                 return attempt;
-            }
 
+            // 260717Claude: この時点で attempt 1 のプロセスツリーは kill →終了待ち→最終スキャンまで完了しており、
+            //   以後に予約ファイルを書ける主体は存在しない。よってこの決定時点の再スキャンが実質の「起動直前」チェック
+            //   (スタガー待ち中の遅延出現は書き手不在のため起こらない)。
             string script = Path.GetFileName(job.ScriptPath);
             string[] lateSavedFiles = job.Reservations
                 .Where(reservation => File.Exists(Path.Combine(reservation.PoolFolder, reservation.FileName)))
@@ -217,41 +230,38 @@ namespace MineraScope
         private static SimulationExecutionResult ConvertToExecutionResult(
             SimulationExecutionJob job,
             SimulationProcessAttemptResult attempt,
-            SimulationRunLog runLog) =>
-            attempt.Outcome switch
-            {
-                SimulationAttemptOutcome.Canceled => new SimulationExecutionResult(
-                    job.Reservations,
-                    ExitCode: -1,
-                    attempt.StandardOutput,
-                    attempt.StandardError,
-                    ExceptionMessage: null,
-                    IsCanceled: true,
-                    SavedSpectrumFiles: attempt.SavedSpectrumFiles),
-                SimulationAttemptOutcome.Succeeded => new SimulationExecutionResult(
-                    job.Reservations,
-                    attempt.ExitCode,
-                    attempt.StandardOutput,
-                    attempt.StandardError,
-                    ExceptionMessage: null,
-                    SavedSpectrumFiles: attempt.SavedSpectrumFiles),
-                _ => new SimulationExecutionResult(
-                    job.Reservations,
-                    attempt.ExitCode,
-                    attempt.StandardOutput,
-                    attempt.StandardError,
-                    ExceptionMessage: BuildFailureExceptionMessage(attempt, runLog),
-                    SavedSpectrumFiles: attempt.SavedSpectrumFiles)
-            };
+            SimulationRunLog runLog)
+        {
+            // 260717Codex: Build the shared result shape once; only cancellation and failure metadata vary by outcome.
+            bool isCanceled = attempt.Outcome == SimulationAttemptOutcome.Canceled;
+            string? exceptionMessage = attempt.Outcome is SimulationAttemptOutcome.Canceled or SimulationAttemptOutcome.Succeeded
+                ? null
+                : BuildFailureExceptionMessage(attempt, runLog);
+            return new SimulationExecutionResult(
+                job.Reservations,
+                isCanceled ? -1 : attempt.ExitCode,
+                attempt.StandardOutput,
+                attempt.StandardError,
+                exceptionMessage,
+                IsCanceled: isCanceled,
+                SavedSpectrumFiles: attempt.SavedSpectrumFiles);
+        }
 
-        // 260717Claude: FailureReason の先頭 prefix。1,000 文字への切り詰めは末尾側で行われるため prefix は必ず残る。
-        //   詳細は watchdog/例外メッセージを優先し、無ければ stderr/stdout、それも無ければ exit code を残す。
+        // 260717Claude: manifest FailureReason 向けの詳細上限。全文は run ログ側にあるため、ここは要点だけ残す
+        //   (BuildFailureReason は ExceptionMessage を無切り詰めで採用するので、ここで cap しないと manifest が肥大する)。
+        private const int FailureDetailMaxLength = 1000;
+
+        // 260717Claude: FailureReason の先頭 prefix。詳細は watchdog/例外メッセージを優先し、無ければ stderr/stdout、
+        //   それも無ければ exit code を残す。prefix は先頭なので cap 後も必ず残る。
         private static string BuildFailureExceptionMessage(SimulationProcessAttemptResult attempt, SimulationRunLog runLog)
         {
             string detail = attempt.FailureDetail
                 ?? (!string.IsNullOrWhiteSpace(attempt.StandardError) ? attempt.StandardError
                     : !string.IsNullOrWhiteSpace(attempt.StandardOutput) ? attempt.StandardOutput
                     : $"DTSA-II exit code {attempt.ExitCode}");
+            if (detail.Length > FailureDetailMaxLength)
+                detail = detail[..FailureDetailMaxLength];
+
             return $"[{attempt.Outcome}] log={runLog.FileName}; {detail}";
         }
 
@@ -266,20 +276,6 @@ namespace MineraScope
             }
         }
 
-        // 260513Codex: キャンセル結果は Failed と区別し、manifest 側で Pending に戻せる印を付けます。
-        private static SimulationExecutionResult CreateCanceledResult(
-            SimulationExecutionJob job,
-            string standardOutput,
-            string standardError,
-            IReadOnlySet<string>? savedSpectrumFiles = null) =>
-            new(
-                job.Reservations,
-                ExitCode: -1,
-                StandardOutput: standardOutput,
-                StandardError: standardError,
-                ExceptionMessage: null,
-                IsCanceled: true,
-                SavedSpectrumFiles: savedSpectrumFiles);
     }
 
     // 260528Codex: 進捗全体の件数とスレッド間カウンタをまとめ、長い引数リレーを避けます。
@@ -310,8 +306,9 @@ namespace MineraScope
         public int NextJobIndexPreview => Volatile.Read(ref _nextJobIndex);
 
         public int ReserveJobIndex() => Interlocked.Increment(ref _nextJobIndex);
-        public int MarkJobCompleted() => Interlocked.Increment(ref _completedJobCount);
-        public int MarkSpectrumCompleted() => Interlocked.Increment(ref _completedSpectrumCount);
+        // 260717Codex: These increments are notifications; no caller consumes their numeric return values.
+        public void MarkJobCompleted() => Interlocked.Increment(ref _completedJobCount);
+        public void MarkSpectrumCompleted() => Interlocked.Increment(ref _completedSpectrumCount);
 
         public void Report(
             SimulationExecutionProgressKind kind,

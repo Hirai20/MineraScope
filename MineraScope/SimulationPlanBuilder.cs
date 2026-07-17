@@ -87,13 +87,15 @@ namespace MineraScope
             // 260717Claude: 過分割防止。通常実行 (Target 全数) のジョブサイズを基準に、不足分だけの再実行では
             //   ジョブ数を減らして JVM 起動回数を抑える (例: Target=1000, parallel=20 → 標準 50 本。不足 50 本なら
             //   20 ジョブ×2〜3 本ではなく 1 ジョブ×50 本)。全数実行時は従来どおり parallelCount 分割のまま。
-            int standardJobSize = Math.Max(1, (request.Simulation.TargetSpectrumCount + parallelCount - 1) / parallelCount);
+            // 260717Codex: Use the same named ceiling division for standard size and per-group job count.
+            int standardJobSize = Math.Max(1, DivideRoundUp(request.Simulation.TargetSpectrumCount, parallelCount));
             var batches = new List<SimulationExecutionBatch>();
 
             foreach (var group in reservations.GroupBy(item => item.SolutionName))
             {
                 var groupReservations = group.ToArray();
-                int jobCount = Math.Min(parallelCount, (groupReservations.Length + standardJobSize - 1) / standardJobSize);
+                // 260717Codex: Keep the group calculation aligned with the standard job-size calculation above.
+                int jobCount = Math.Min(parallelCount, DivideRoundUp(groupReservations.Length, standardJobSize));
                 var chunks = SplitIntoChunks(groupReservations, jobCount);
                 var jobs = new List<SimulationExecutionJob>(chunks.Length);
                 int index = 0;
@@ -154,6 +156,9 @@ namespace MineraScope
                 OutputFolder = outputFolder,
                 OutputFiles = outputFiles
             };
+
+        // 260717Codex: Name the shared positive-integer ceiling division used by both job-size calculations.
+        private static int DivideRoundUp(int value, int divisor) => (value + divisor - 1) / divisor;
 
         // 260507Codex: index の剰余で分散し、各ジョブの予約数が偏りすぎないようにします。
         public static T[][] SplitIntoChunks<T>(T[] source, int chunkCount) =>

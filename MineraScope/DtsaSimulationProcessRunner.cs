@@ -164,9 +164,12 @@ namespace MineraScope
 
             process.Start();
             int? processId = TryGetProcessId(process);
+            // 260717Codex: Reuse stable process context in the start and kill log entries.
+            string scriptName = Path.GetFileName(job.ScriptPath);
+            string processIdText = processId?.ToString(CultureInfo.InvariantCulture) ?? "-";
             runLog.WriteLine(
-                $"process start: script={Path.GetFileName(job.ScriptPath)} attempt={attemptNumber} " +
-                $"pid={processId?.ToString(CultureInfo.InvariantCulture) ?? "-"} staggerWaitMs={staggerWaitMs}");
+                $"process start: script={scriptName} attempt={attemptNumber} " +
+                $"pid={processIdText} staggerWaitMs={staggerWaitMs}");
             progress.ReportJobProgress(SimulationExecutionProgressKind.ProcessStarted, "DTSA-II process 起動");
             // 260606Claude: 保存完了マーカーのファイル名をここに集め、ジョブ全体の成否とは別に「保存できた spectrum」を結果へ渡します。
             // 260717Claude: stdout 読み取りタスクとファイルポーリングタスクが同時に触るため、lock 付き tracker で同期する
@@ -181,7 +184,27 @@ namespace MineraScope
             var standardErrorTask = process.StandardError.ReadToEndAsync();
             var watchdogTask = WatchDtsaProcessAsync(process, job, savedFiles, activity, runLog, watchdogCts.Token);
             // 260717Claude: kill 前後のログで script/pid を対応づける (並行ジョブが混ざっても追える)。
-            string killContext = $"script={Path.GetFileName(job.ScriptPath)} pid={processId?.ToString(CultureInfo.InvariantCulture) ?? "-"}";
+            string killContext = $"script={scriptName} pid={processIdText}";
+
+            // 260717Codex: Share monitor shutdown, final file detection, and redirected-output collection across every exit path.
+            async Task<(string StandardOutput, string StandardError)> StopMonitoringAndCollectOutputAsync()
+            {
+                await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
+                await StopWatchdogAsync(watchdogCts, watchdogTask);
+                ReportExistingOutputFiles(job, progress, savedFiles, activity);
+                return (
+                    await ReadProcessOutputAsync(standardOutputTask),
+                    await ReadProcessOutputAsync(standardErrorTask));
+            }
+
+            // 260717Codex: Keep paired kill logs identical for watchdog and cancellation paths.
+            async Task KillProcessAndLogAsync(string reason)
+            {
+                runLog.WriteLine($"kill start: {killContext} reason={reason}");
+                KillProcessTree(process);
+                await WaitForProcessExitAfterKillAsync(process);
+                runLog.WriteLine($"kill done: {killContext}");
+            }
 
             try
             {
@@ -192,22 +215,20 @@ namespace MineraScope
                     WatchdogTimeoutResult? watchdogTimeout = await watchdogTask;
                     if (watchdogTimeout is not null)
                     {
-                        runLog.WriteLine($"kill start: {killContext} reason=watchdog");
-                        KillProcessTree(process);
-                        await WaitForProcessExitAfterKillAsync(process);
-                        runLog.WriteLine($"kill done: {killContext}");
-                        await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
-                        await StopWatchdogAsync(watchdogCts, watchdogTask);
-                        ReportExistingOutputFiles(job, progress, savedFiles, activity);
-                        string timeoutOutput = await ReadProcessOutputAsync(standardOutputTask);
-                        string timeoutError = await ReadProcessOutputAsync(standardErrorTask);
+                        await KillProcessAndLogAsync("watchdog");
+                        (string timeoutOutput, string timeoutError) = await StopMonitoringAndCollectOutputAsync();
+                        // 260717Claude: watchdog 判定とほぼ同時のユーザーキャンセルはキャンセル扱いを優先し、
+                        //   未保存予約が Failed でなく Pending へ戻るようにする (キャンセル→Pending 復帰の既存規則を守る)。
+                        var outcome = cancellationToken.IsCancellationRequested
+                            ? SimulationAttemptOutcome.Canceled
+                            : watchdogTimeout.Outcome;
                         return new SimulationProcessAttemptResult(
-                            watchdogTimeout.Outcome,
+                            outcome,
                             attemptNumber,
                             ExitCode: -1,
                             timeoutOutput,
                             timeoutError,
-                            watchdogTimeout.Message,
+                            FailureDetail: outcome == SimulationAttemptOutcome.Canceled ? null : watchdogTimeout.Message,
                             processId,
                             stopwatch.Elapsed,
                             savedFiles.CreateSnapshot());
@@ -218,15 +239,8 @@ namespace MineraScope
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                runLog.WriteLine($"kill start: {killContext} reason=cancel");
-                KillProcessTree(process);
-                await WaitForProcessExitAfterKillAsync(process);
-                runLog.WriteLine($"kill done: {killContext}");
-                await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
-                await StopWatchdogAsync(watchdogCts, watchdogTask);
-                ReportExistingOutputFiles(job, progress, savedFiles, activity);
-                string canceledOutput = await ReadProcessOutputAsync(standardOutputTask);
-                string canceledError = await ReadProcessOutputAsync(standardErrorTask);
+                await KillProcessAndLogAsync("cancel");
+                (string canceledOutput, string canceledError) = await StopMonitoringAndCollectOutputAsync();
                 return new SimulationProcessAttemptResult(
                     SimulationAttemptOutcome.Canceled,
                     attemptNumber,
@@ -239,11 +253,7 @@ namespace MineraScope
                     savedFiles.CreateSnapshot());
             }
 
-            await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
-            await StopWatchdogAsync(watchdogCts, watchdogTask);
-            ReportExistingOutputFiles(job, progress, savedFiles, activity);
-            string standardOutput = await ReadProcessOutputAsync(standardOutputTask);
-            string standardError = await ReadProcessOutputAsync(standardErrorTask);
+            (string standardOutput, string standardError) = await StopMonitoringAndCollectOutputAsync();
 
             int exitCode = process.ExitCode;
             return new SimulationProcessAttemptResult(
@@ -390,25 +400,27 @@ namespace MineraScope
                         continue;
                     }
 
-                    bool isStartupPhase = savedFiles.Count == 0;
+                    // 260717Codex: Use one saved-file snapshot for phase selection and the matching timeout log.
+                    int savedFileCount = savedFiles.Count;
+                    bool isStartupPhase = savedFileCount == 0;
                     TimeSpan idleTimeout = isStartupPhase ? DtsaStartupIdleTimeout : DtsaIdleTimeout;
                     TimeSpan idleFor = activity.IdleFor;
-                    if (idleFor >= idleTimeout)
-                    {
-                        var outcome = isStartupPhase
-                            ? SimulationAttemptOutcome.StartupTimeout
-                            : SimulationAttemptOutcome.RunningIdleTimeout;
-                        // 260717Claude: 判定時点の状態 (種別・idle 時間・保存本数・直近 CPU delta) を残し、後から
-                        //   「起動スタックか実行中の停滞か」を切り分けられるようにする。
-                        runLog.WriteLine(
-                            $"watchdog timeout: type={outcome} script={Path.GetFileName(job.ScriptPath)} " +
-                            $"idleFor={SimulationRunLog.FormatSeconds(idleFor)} saved={savedFiles.Count} " +
-                            $"lastCpuDeltaMs={(long)cpuDelta.TotalMilliseconds}");
-                        string phaseText = isStartupPhase ? " before the first spectrum was saved" : string.Empty;
-                        return new WatchdogTimeoutResult(
-                            outcome,
-                            $"DTSA-II watchdog timeout: no stdout marker, output file, or CPU progress for {FormatTimeSpan(idleTimeout)}{phaseText}. script={Path.GetFileName(job.ScriptPath)}");
-                    }
+                    if (idleFor < idleTimeout)
+                        continue;
+
+                    var outcome = isStartupPhase
+                        ? SimulationAttemptOutcome.StartupTimeout
+                        : SimulationAttemptOutcome.RunningIdleTimeout;
+                    // 260717Claude: 判定時点の状態 (種別・idle 時間・保存本数・直近 CPU delta) を残し、後から
+                    //   「起動スタックか実行中の停滞か」を切り分けられるようにする。
+                    runLog.WriteLine(
+                        $"watchdog timeout: type={outcome} script={Path.GetFileName(job.ScriptPath)} " +
+                        $"idleFor={SimulationRunLog.FormatSeconds(idleFor)} saved={savedFileCount} " +
+                        $"lastCpuDeltaMs={(long)cpuDelta.TotalMilliseconds}");
+                    string phaseText = isStartupPhase ? " before the first spectrum was saved" : string.Empty;
+                    return new WatchdogTimeoutResult(
+                        outcome,
+                        $"DTSA-II watchdog timeout: no stdout marker, output file, or CPU progress for {FormatTimeSpan(idleTimeout)}{phaseText}. script={Path.GetFileName(job.ScriptPath)}");
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -452,6 +464,8 @@ namespace MineraScope
                 ? $"{value.TotalMinutes:0.#} minutes"
                 : $"{value.TotalSeconds:0.#} seconds";
 
+        // 260717Claude: Kill 時の Win32Exception (アクセス拒否等) も握り潰す。上へ抜けると LaunchFailed へ誤分類され、
+        //   キャンセル経路では Pending 復帰が Failed に化けるため (レビュー指摘)。
         private static void KillProcessTree(Process process)
         {
             try
@@ -459,7 +473,7 @@ namespace MineraScope
                 if (!process.HasExited)
                     process.Kill(entireProcessTree: true);
             }
-            catch (InvalidOperationException)
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException or AggregateException)
             {
             }
         }

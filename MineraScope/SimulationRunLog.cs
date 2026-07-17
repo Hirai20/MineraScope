@@ -14,22 +14,19 @@ namespace MineraScope
         private readonly object _gate = new();
         private readonly string _logPath;
 
-        private static string LogDirectory => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "MineraScope",
-            "Logs");
-
         private SimulationRunLog(string fileName)
         {
             FileName = fileName;
-            _logPath = Path.Combine(LogDirectory, fileName);
+            // 260717Codex: Reuse the centralized application log folder.
+            _logPath = Path.Combine(DefaultStoragePaths.LogsFolder, fileName);
         }
 
         // 260717Claude: ファイル名 = run ID。manifest の FailureReason からもこの名前で辿れるようにする。
         public string FileName { get; }
 
+        // 260717Claude: 同一秒に複数 run が始まってもファイルが衝突しないよう ms まで含める。
         public static SimulationRunLog CreateForRun() =>
-            new($"simulate-{DateTime.Now.ToString("yyMMdd-HHmmss", CultureInfo.InvariantCulture)}.log");
+            new($"simulate-{DateTime.Now.ToString("yyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)}.log");
 
         // 260717Claude: 経過時間はログ集計しやすい秒表記へ統一する (呼び出し側の補間文字列を culture 非依存に保つ)。
         public static string FormatSeconds(TimeSpan value) =>
@@ -61,7 +58,8 @@ namespace MineraScope
         {
             try
             {
-                Directory.CreateDirectory(LogDirectory);
+                // 260717Codex: Create the centralized log folder before the synchronized append.
+                Directory.CreateDirectory(DefaultStoragePaths.LogsFolder);
                 lock (_gate)
                     File.AppendAllText(_logPath, text, Encoding.UTF8);
             }
