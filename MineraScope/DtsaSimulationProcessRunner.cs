@@ -73,6 +73,9 @@ namespace MineraScope
         private static readonly TimeSpan OutputFilePollInterval = TimeSpan.FromMilliseconds(500);
         // 260629Codex: Treat DTSA-II as stuck only when stdout, files, and CPU are all idle for a while.
         private static readonly TimeSpan DtsaIdleTimeout = TimeSpan.FromMinutes(10);
+        // 260717Claude: 保存 0 本の起動フェーズは短く見切る。正常起動中の JVM は JIT/クラスロードで CPU を使い
+        //   idle 扱いにならないため、3 分間の完全無活動は起動競合スタックとみなして kill →リトライで復旧させる。
+        private static readonly TimeSpan DtsaStartupIdleTimeout = TimeSpan.FromMinutes(3);
         private static readonly TimeSpan DtsaWatchdogPollInterval = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan DtsaCpuActivityThreshold = TimeSpan.FromSeconds(1);
 
@@ -186,8 +189,8 @@ namespace MineraScope
                 var completedTask = await Task.WhenAny(processExitTask, watchdogTask);
                 if (completedTask == watchdogTask)
                 {
-                    string? watchdogMessage = await watchdogTask;
-                    if (!string.IsNullOrWhiteSpace(watchdogMessage))
+                    WatchdogTimeoutResult? watchdogTimeout = await watchdogTask;
+                    if (watchdogTimeout is not null)
                     {
                         runLog.WriteLine($"kill start: {killContext} reason=watchdog");
                         KillProcessTree(process);
@@ -199,12 +202,12 @@ namespace MineraScope
                         string timeoutOutput = await ReadProcessOutputAsync(standardOutputTask);
                         string timeoutError = await ReadProcessOutputAsync(standardErrorTask);
                         return new SimulationProcessAttemptResult(
-                            SimulationAttemptOutcome.RunningIdleTimeout,
+                            watchdogTimeout.Outcome,
                             attemptNumber,
                             ExitCode: -1,
                             timeoutOutput,
                             timeoutError,
-                            watchdogMessage,
+                            watchdogTimeout.Message,
                             processId,
                             stopwatch.Elapsed,
                             savedFiles.CreateSnapshot());
@@ -354,9 +357,13 @@ namespace MineraScope
             }
         }
 
+        // 260717Claude: watchdog の kill 判定結果。フェーズ (起動/実行) ごとの終了種別を呼び出し側へ構造化して返す。
+        private sealed record WatchdogTimeoutResult(SimulationAttemptOutcome Outcome, string Message);
+
         // 260513Codex: キャンセル要求後に残った子プロセスも含めて DTSA-II を止めます。
         // 260629Codex: Kill DTSA-II jobs that stop producing stdout, files, and CPU so the batch can return.
-        private static async Task<string?> WatchDtsaProcessAsync(
+        // 260717Claude: 2 段 watchdog。保存 0 本の起動フェーズは 3 分、1 本以上保存後の実行フェーズは従来の 10 分で見切る。
+        private static async Task<WatchdogTimeoutResult?> WatchDtsaProcessAsync(
             Process process,
             SimulationExecutionJob job,
             SavedSpectrumFileTracker savedFiles,
@@ -383,16 +390,24 @@ namespace MineraScope
                         continue;
                     }
 
+                    bool isStartupPhase = savedFiles.Count == 0;
+                    TimeSpan idleTimeout = isStartupPhase ? DtsaStartupIdleTimeout : DtsaIdleTimeout;
                     TimeSpan idleFor = activity.IdleFor;
-                    if (idleFor >= DtsaIdleTimeout)
+                    if (idleFor >= idleTimeout)
                     {
-                        // 260717Claude: 判定時点の状態 (idle 時間・保存本数・直近 CPU delta) を構造化して残し、後から
+                        var outcome = isStartupPhase
+                            ? SimulationAttemptOutcome.StartupTimeout
+                            : SimulationAttemptOutcome.RunningIdleTimeout;
+                        // 260717Claude: 判定時点の状態 (種別・idle 時間・保存本数・直近 CPU delta) を残し、後から
                         //   「起動スタックか実行中の停滞か」を切り分けられるようにする。
                         runLog.WriteLine(
-                            $"watchdog timeout: script={Path.GetFileName(job.ScriptPath)} " +
+                            $"watchdog timeout: type={outcome} script={Path.GetFileName(job.ScriptPath)} " +
                             $"idleFor={SimulationRunLog.FormatSeconds(idleFor)} saved={savedFiles.Count} " +
                             $"lastCpuDeltaMs={(long)cpuDelta.TotalMilliseconds}");
-                        return $"DTSA-II watchdog timeout: no stdout marker, output file, or CPU progress for {FormatTimeSpan(DtsaIdleTimeout)}. script={Path.GetFileName(job.ScriptPath)}";
+                        string phaseText = isStartupPhase ? " before the first spectrum was saved" : string.Empty;
+                        return new WatchdogTimeoutResult(
+                            outcome,
+                            $"DTSA-II watchdog timeout: no stdout marker, output file, or CPU progress for {FormatTimeSpan(idleTimeout)}{phaseText}. script={Path.GetFileName(job.ScriptPath)}");
                     }
                 }
             }
@@ -406,7 +421,7 @@ namespace MineraScope
             return null;
         }
 
-        private static async Task StopWatchdogAsync(CancellationTokenSource watchdogCancellation, Task<string?> watchdogTask)
+        private static async Task StopWatchdogAsync(CancellationTokenSource watchdogCancellation, Task<WatchdogTimeoutResult?> watchdogTask)
         {
             watchdogCancellation.Cancel();
 
