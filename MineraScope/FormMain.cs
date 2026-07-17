@@ -428,27 +428,35 @@ namespace MineraScope
         // 260620Claude: 指定ファイルの Profile を lazy load + cache してグラフへ表示する。読めない場合は何もしない。
         private void ShowSpectrumProfile(string filePath)
         {
-            if (!_profileCache.TryGetValue(filePath, out var profile))
-            {
-                try
-                {
-                    profile = ReadSpectrumProfile(filePath);
-                }
-                catch
-                {
-                    return;
-                }
-
-                if (profile.Pt.Count == 0)
-                    return;
-
-                _profileCache[filePath] = profile;
-            }
+            if (!TryGetRawProfile(filePath, out var profile))
+                return;
 
             // 260630Claude: キャッシュは生プロファイルのまま保持し、表示時に選択モデルのマスクを掛けたコピーを描く。
             //   モデルを切り替えても再キャッシュ無しで反映でき、エクスポート等の生データ参照とも分離できる。
             graphControl1.Profile = ApplyDisplayMask(profile);
             graphControl1.Refresh();
+        }
+
+        // 260716Claude: 生 Profile の lazy load + cache を表示と CSV エクスポートで共用する。読めない/空なら false。
+        private bool TryGetRawProfile(string filePath, out Profile profile)
+        {
+            if (_profileCache.TryGetValue(filePath, out profile!))
+                return true;
+
+            try
+            {
+                profile = ReadSpectrumProfile(filePath);
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (profile.Pt.Count == 0)
+                return false;
+
+            _profileCache[filePath] = profile;
+            return true;
         }
 
         // 260630Claude: マスクあり(NoCarbon)モデル選択時は、表示スペクトルの低エネルギー範囲(先頭チャンネル)も 0 にして、
@@ -633,6 +641,46 @@ namespace MineraScope
             MessageBox.Show(
                 $"{summary}\r\n\r\n{outputPath}",
                 "エクスポート", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // 260716Claude: 選択中（グラフ表示中）のスペクトル1本を、マスク適用前の生カウントで CSV 出力する（Designer で Click を接続）。
+        private void exportSpectrumCsvToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            string filePath = GetSelectedPredictionFilePath();
+            if (string.IsNullOrEmpty(filePath))
+            {
+                MessageBox.Show(
+                    "エクスポートできるスペクトルがありません。先にスペクトルをドロップしてください。",
+                    "スペクトルCSV出力", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (!TryGetRawProfile(filePath, out var profile))
+            {
+                MessageBox.Show(
+                    $"スペクトルを読み込めませんでした。\r\n{filePath}",
+                    "スペクトルCSV出力", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using var dialog = new SaveFileDialog
+            {
+                Filter = "CSV (*.csv)|*.csv",
+                FileName = Path.GetFileNameWithoutExtension(filePath)
+            };
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+
+            try
+            {
+                SpectrumCsvExporter.Write(dialog.FileName, "Energy (eV)", profile.Pt.Select(p => (p.X, p.Y)));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"エクスポートに失敗しました。\r\n{ex.Message}",
+                    "スペクトルCSV出力", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
     }
