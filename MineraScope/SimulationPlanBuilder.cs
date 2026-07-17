@@ -84,11 +84,17 @@ namespace MineraScope
                 return new SimulationExecutionPlan([]);
 
             int parallelCount = Math.Max(1, request.Simulation.ParallelCount);
+            // 260717Claude: 過分割防止。通常実行 (Target 全数) のジョブサイズを基準に、不足分だけの再実行では
+            //   ジョブ数を減らして JVM 起動回数を抑える (例: Target=1000, parallel=20 → 標準 50 本。不足 50 本なら
+            //   20 ジョブ×2〜3 本ではなく 1 ジョブ×50 本)。全数実行時は従来どおり parallelCount 分割のまま。
+            int standardJobSize = Math.Max(1, (request.Simulation.TargetSpectrumCount + parallelCount - 1) / parallelCount);
             var batches = new List<SimulationExecutionBatch>();
 
             foreach (var group in reservations.GroupBy(item => item.SolutionName))
             {
-                var chunks = SplitIntoChunks(group.ToArray(), parallelCount);
+                var groupReservations = group.ToArray();
+                int jobCount = Math.Min(parallelCount, (groupReservations.Length + standardJobSize - 1) / standardJobSize);
+                var chunks = SplitIntoChunks(groupReservations, jobCount);
                 var jobs = new List<SimulationExecutionJob>(chunks.Length);
                 int index = 0;
 
