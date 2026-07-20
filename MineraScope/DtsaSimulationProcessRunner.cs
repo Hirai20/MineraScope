@@ -187,26 +187,31 @@ namespace MineraScope
             string killContext = $"script={scriptName} pid={processIdText}";
 
             // 260717Codex: Share monitor shutdown, final file detection, and redirected-output collection across every exit path.
-            async Task<(string StandardOutput, string StandardError)> StopMonitoringAndCollectOutputAsync()
+            // 260717Claude: cleanupToken を共有し、kill 待ちと stdout/stderr 収集を合わせて 1 つの上限 (最大 30 秒) に収める。
+            //   kill 失敗でストリームが閉じないケースでも、経路全体が有限時間で戻る (レビュー指摘の直列 90 秒化を回避)。
+            async Task<(string StandardOutput, string StandardError)> StopMonitoringAndCollectOutputAsync(CancellationToken cleanupToken)
             {
                 await StopOutputMonitorAsync(outputMonitorCts, outputMonitorTask);
                 await StopWatchdogAsync(watchdogCts, watchdogTask);
                 ReportExistingOutputFiles(job, progress, savedFiles, activity);
                 return (
-                    await ReadProcessOutputAsync(standardOutputTask),
-                    await ReadProcessOutputAsync(standardErrorTask));
+                    await ReadProcessOutputAsync(standardOutputTask, cleanupToken),
+                    await ReadProcessOutputAsync(standardErrorTask, cleanupToken));
             }
 
             // 260717Codex: Keep paired kill logs identical for watchdog and cancellation paths.
-            // 260717Claude: 上限内に終了しなかった場合は残存の疑いをログへ残す (ジョブ自体は結果生成へ進む)。
-            async Task KillProcessAndLogAsync(string reason)
+            // 260717Claude: kill 待ちと出力収集で 1 つの cleanup 期限を共有する。上限内に終了しなかったら残存の疑いをログへ残す
+            //   (ジョブ自体は結果生成へ進む)。ユーザーキャンセル中でも後片付けは完了させたいので、期限は独立させる。
+            async Task<(string StandardOutput, string StandardError)> KillAndCollectOutputAsync(string reason)
             {
+                using var cleanupCts = new CancellationTokenSource(KillCleanupTimeout);
                 runLog.WriteLine($"kill start: {killContext} reason={reason}");
                 KillProcessTree(process);
-                bool exited = await WaitForProcessExitAfterKillAsync(process);
+                bool exited = await WaitForProcessExitAfterKillAsync(process, cleanupCts.Token);
                 runLog.WriteLine(exited
                     ? $"kill done: {killContext}"
                     : $"kill wait timeout: {killContext} (process may still be alive)");
+                return await StopMonitoringAndCollectOutputAsync(cleanupCts.Token);
             }
 
             try
@@ -218,8 +223,7 @@ namespace MineraScope
                     WatchdogTimeoutResult? watchdogTimeout = await watchdogTask;
                     if (watchdogTimeout is not null)
                     {
-                        await KillProcessAndLogAsync("watchdog");
-                        (string timeoutOutput, string timeoutError) = await StopMonitoringAndCollectOutputAsync();
+                        (string timeoutOutput, string timeoutError) = await KillAndCollectOutputAsync("watchdog");
                         // 260717Claude: watchdog 判定とほぼ同時のユーザーキャンセルはキャンセル扱いを優先し、
                         //   未保存予約が Failed でなく Pending へ戻るようにする (キャンセル→Pending 復帰の既存規則を守る)。
                         var outcome = cancellationToken.IsCancellationRequested
@@ -242,8 +246,7 @@ namespace MineraScope
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                await KillProcessAndLogAsync("cancel");
-                (string canceledOutput, string canceledError) = await StopMonitoringAndCollectOutputAsync();
+                (string canceledOutput, string canceledError) = await KillAndCollectOutputAsync("cancel");
                 return new SimulationProcessAttemptResult(
                     SimulationAttemptOutcome.Canceled,
                     attemptNumber,
@@ -256,7 +259,9 @@ namespace MineraScope
                     savedFiles.CreateSnapshot());
             }
 
-            (string standardOutput, string standardError) = await StopMonitoringAndCollectOutputAsync();
+            // 260717Claude: 正常終了経路はプロセス終了済みで収集は即完了するが、上限は一様に付けておく。
+            using var normalCleanupCts = new CancellationTokenSource(KillCleanupTimeout);
+            (string standardOutput, string standardError) = await StopMonitoringAndCollectOutputAsync(normalCleanupCts.Token);
 
             int exitCode = process.ExitCode;
             return new SimulationProcessAttemptResult(
@@ -483,40 +488,55 @@ namespace MineraScope
 
         // 260717Claude: kill が失敗 (アクセス拒否等) してプロセスが生き残った場合の後片付け上限。
         //   これが無いと終了待ちと stdout 収集が永久に戻らず、キャンセル/watchdog 経路ごとジョブが固まる (レビュー指摘)。
+        //   kill 待ち + stdout + stderr でこの上限を共有し、経路全体が最大 30 秒で戻るようにする。
         private static readonly TimeSpan KillCleanupTimeout = TimeSpan.FromSeconds(30);
 
         // 260513Codex: Kill 後の終了待ちはキャンセルなしで行い、stdout/stderr の後片付けを安定させます。
-        // 260717Claude: 上限付きで待ち、時間切れ (=プロセス残存の疑い) は false を返して呼び出し側でログに残す。
-        private static async Task<bool> WaitForProcessExitAfterKillAsync(Process process)
+        // 260717Claude: 共有 cleanup 期限で待ち、時間切れ (=プロセス残存の疑い) は false を返して呼び出し側でログに残す。
+        //   期限切れで放置される元の WaitForExitAsync は ObserveEventually で観測し、UnobservedTaskException を防ぐ。
+        private static async Task<bool> WaitForProcessExitAfterKillAsync(Process process, CancellationToken cleanupToken)
         {
+            var exitTask = process.WaitForExitAsync();
             try
             {
-                await process.WaitForExitAsync().WaitAsync(KillCleanupTimeout);
+                await exitTask.WaitAsync(cleanupToken);
                 return true;
             }
             catch (InvalidOperationException)
             {
                 return true;
             }
-            catch (TimeoutException)
+            catch (OperationCanceledException)
             {
+                ObserveEventually(exitTask);
                 return false;
             }
         }
 
         // 260513Codex: Kill 後に閉じられたリダイレクト stream の例外は結果反映を邪魔させません。
-        // 260717Claude: プロセスが生き残っていても結果生成へ進めるよう、収集も上限付きで待つ (通常はプロセス終了済みで即返る)。
-        private static async Task<string> ReadProcessOutputAsync(Task<string> outputTask)
+        // 260717Claude: プロセスが生き残っていても結果生成へ進めるよう、共有 cleanup 期限付きで待つ (通常はプロセス終了済みで即返る)。
+        //   期限切れで放置される読み取り Task は後で ObjectDisposedException 等で失敗しうるため ObserveEventually で観測する。
+        private static async Task<string> ReadProcessOutputAsync(Task<string> outputTask, CancellationToken cleanupToken)
         {
             try
             {
-                return await outputTask.WaitAsync(KillCleanupTimeout);
+                return await outputTask.WaitAsync(cleanupToken);
             }
-            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException or TimeoutException)
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException or OperationCanceledException)
             {
+                ObserveEventually(outputTask);
                 return string.Empty;
             }
         }
+
+        // 260717Claude: 上限で待つのを諦めた Task の後発の例外を握って観測済みにし、UnobservedTaskException を防ぐ。
+        //   既に完了/観測済みの Task に付けても無害。
+        private static void ObserveEventually(Task task) =>
+            _ = task.ContinueWith(
+                static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
 
         // 260717Claude: 保存済み spectrum ファイル名の共有集合。stdout 読み取りとファイルポーリングが並行更新するため
         //   lock で同期し、結果へは snapshot を渡す (裸の HashSet 並行 Add による破損・二重報告を防ぐ)。
