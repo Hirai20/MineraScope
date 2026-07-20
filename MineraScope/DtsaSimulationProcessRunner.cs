@@ -198,12 +198,15 @@ namespace MineraScope
             }
 
             // 260717Codex: Keep paired kill logs identical for watchdog and cancellation paths.
+            // 260717Claude: 上限内に終了しなかった場合は残存の疑いをログへ残す (ジョブ自体は結果生成へ進む)。
             async Task KillProcessAndLogAsync(string reason)
             {
                 runLog.WriteLine($"kill start: {killContext} reason={reason}");
                 KillProcessTree(process);
-                await WaitForProcessExitAfterKillAsync(process);
-                runLog.WriteLine($"kill done: {killContext}");
+                bool exited = await WaitForProcessExitAfterKillAsync(process);
+                runLog.WriteLine(exited
+                    ? $"kill done: {killContext}"
+                    : $"kill wait timeout: {killContext} (process may still be alive)");
             }
 
             try
@@ -478,26 +481,38 @@ namespace MineraScope
             }
         }
 
+        // 260717Claude: kill が失敗 (アクセス拒否等) してプロセスが生き残った場合の後片付け上限。
+        //   これが無いと終了待ちと stdout 収集が永久に戻らず、キャンセル/watchdog 経路ごとジョブが固まる (レビュー指摘)。
+        private static readonly TimeSpan KillCleanupTimeout = TimeSpan.FromSeconds(30);
+
         // 260513Codex: Kill 後の終了待ちはキャンセルなしで行い、stdout/stderr の後片付けを安定させます。
-        private static async Task WaitForProcessExitAfterKillAsync(Process process)
+        // 260717Claude: 上限付きで待ち、時間切れ (=プロセス残存の疑い) は false を返して呼び出し側でログに残す。
+        private static async Task<bool> WaitForProcessExitAfterKillAsync(Process process)
         {
             try
             {
-                await process.WaitForExitAsync();
+                await process.WaitForExitAsync().WaitAsync(KillCleanupTimeout);
+                return true;
             }
             catch (InvalidOperationException)
             {
+                return true;
+            }
+            catch (TimeoutException)
+            {
+                return false;
             }
         }
 
         // 260513Codex: Kill 後に閉じられたリダイレクト stream の例外は結果反映を邪魔させません。
+        // 260717Claude: プロセスが生き残っていても結果生成へ進めるよう、収集も上限付きで待つ (通常はプロセス終了済みで即返る)。
         private static async Task<string> ReadProcessOutputAsync(Task<string> outputTask)
         {
             try
             {
-                return await outputTask;
+                return await outputTask.WaitAsync(KillCleanupTimeout);
             }
-            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+            catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException or TimeoutException)
             {
                 return string.Empty;
             }
