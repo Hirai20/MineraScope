@@ -223,6 +223,9 @@ namespace MineraScope
                     WatchdogTimeoutResult? watchdogTimeout = await watchdogTask;
                     if (watchdogTimeout is not null)
                     {
+                        // 260717Claude: watchdog 経路では processExitTask を await せず抜けるため、kill 失敗後に後発 fault しても
+                        //   UnobservedTaskException にならないよう観測しておく (レビュー指摘)。
+                        ObserveEventually(processExitTask);
                         (string timeoutOutput, string timeoutError) = await KillAndCollectOutputAsync("watchdog");
                         // 260717Claude: watchdog 判定とほぼ同時のユーザーキャンセルはキャンセル扱いを優先し、
                         //   未保存予約が Failed でなく Pending へ戻るようにする (キャンセル→Pending 復帰の既存規則を守る)。
