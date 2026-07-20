@@ -28,7 +28,6 @@
         /// </summary>
         private void InitializeComponent()
         {
-            // 260717Codex: Designer-owned legend menu keeps static component disposal and event wiring in one place.
             components = new System.ComponentModel.Container();
             contextMenuStripLegend = new ContextMenuStrip(components);
             changeLegendColorToolStripMenuItem = new ToolStripMenuItem();
@@ -47,6 +46,7 @@
             comboBoxMappingModellFolder = new ComboBox();
             menuStrip1 = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
+            exportMapToolStripMenuItem = new ToolStripMenuItem();
             statusStrip1 = new StatusStrip();
             toolStripProgressBarMapping = new ToolStripProgressBar();
             toolStripStatusLabelMapping = new ToolStripStatusLabel();
@@ -61,7 +61,6 @@
             panelBrightness = new Panel();
             trackBarBrightness = new TrackBar();
             labelBrightness = new Label();
-            exportMapToolStripMenuItem = new ToolStripMenuItem();
             contextMenuStripLegend.SuspendLayout();
             flowLayoutPanelBinning.SuspendLayout();
             flowLayoutPanelModellFolder.SuspendLayout();
@@ -76,9 +75,21 @@
             ((System.ComponentModel.ISupportInitialize)trackBarBrightness).BeginInit();
             SuspendLayout();
             // 
+            // contextMenuStripLegend
+            // 
+            contextMenuStripLegend.Items.AddRange(new ToolStripItem[] { changeLegendColorToolStripMenuItem });
+            contextMenuStripLegend.Name = "contextMenuStripLegend";
+            contextMenuStripLegend.Size = new Size(129, 26);
+            // 
+            // changeLegendColorToolStripMenuItem
+            // 
+            changeLegendColorToolStripMenuItem.Name = "changeLegendColorToolStripMenuItem";
+            changeLegendColorToolStripMenuItem.Size = new Size(128, 22);
+            changeLegendColorToolStripMenuItem.Text = "色を変更...";
+            changeLegendColorToolStripMenuItem.Click += changeLegendColorToolStripMenuItem_Click;
+            // 
             // listBoxLegend
             // 
-            // 260717Codex: Right-clicking a legend row offers manual color editing without changing left-click highlighting.
             listBoxLegend.ContextMenuStrip = contextMenuStripLegend;
             listBoxLegend.DrawMode = DrawMode.OwnerDrawFixed;
             listBoxLegend.FormattingEnabled = true;
@@ -91,19 +102,6 @@
             listBoxLegend.DrawItem += listBoxLegend_DrawItem;
             listBoxLegend.SelectedIndexChanged += listBoxLegend_SelectedIndexChanged;
             listBoxLegend.MouseDown += listBoxLegend_MouseDown;
-            //
-            // contextMenuStripLegend
-            //
-            contextMenuStripLegend.Items.AddRange(new ToolStripItem[] { changeLegendColorToolStripMenuItem });
-            contextMenuStripLegend.Name = "contextMenuStripLegend";
-            contextMenuStripLegend.Size = new Size(137, 26);
-            //
-            // changeLegendColorToolStripMenuItem
-            //
-            changeLegendColorToolStripMenuItem.Name = "changeLegendColorToolStripMenuItem";
-            changeLegendColorToolStripMenuItem.Size = new Size(136, 22);
-            changeLegendColorToolStripMenuItem.Text = "色を変更...";
-            changeLegendColorToolStripMenuItem.Click += changeLegendColorToolStripMenuItem_Click;
             // 
             // buttonCancelMap
             // 
@@ -122,45 +120,30 @@
             scalablePictureBoxMap.AllowDrop = true;
             scalablePictureBoxMap.BackColor = SystemColors.ActiveCaption;
             scalablePictureBoxMap.Dock = DockStyle.Fill;
-            scalablePictureBoxMap.FixZoomAndCenter = false;
-            scalablePictureBoxMap.FocusEventEnabled = false;
-            scalablePictureBoxMap.HorizontalFlip = false;
             scalablePictureBoxMap.Location = new Point(0, 340);
-            scalablePictureBoxMap.ManualSpotMode = false;
             scalablePictureBoxMap.Margin = new Padding(0, 2, 0, 0);
             scalablePictureBoxMap.MouseScaling = true;
             scalablePictureBoxMap.MouseTranslation = true;
             scalablePictureBoxMap.Name = "scalablePictureBoxMap";
-            scalablePictureBoxMap.ShowAreaRectangle = false;
-            scalablePictureBoxMap.ShowRimRentangle = false;
             scalablePictureBoxMap.Size = new Size(448, 336);
             scalablePictureBoxMap.TabIndex = 32;
-            scalablePictureBoxMap.TitleVisible = false;
-            scalablePictureBoxMap.VerticalFlip = false;
             scalablePictureBoxMap.Zoom = 128D;
             scalablePictureBoxMap.MouseUp2 += scalablePictureBoxSEM_MouseUp2;
             scalablePictureBoxMap.MouseDown2 += scalablePictureBoxSEM_MouseDown2;
+            scalablePictureBoxMap.DrawingAreaChanged += scalablePictureBoxMap_DrawingAreaChanged;
             // 
             // scalablePictureBoxSEM
             // 
             scalablePictureBoxSEM.AllowDrop = true;
             scalablePictureBoxSEM.BackColor = SystemColors.ActiveCaption;
             scalablePictureBoxSEM.Dock = DockStyle.Fill;
-            scalablePictureBoxSEM.FixZoomAndCenter = false;
-            scalablePictureBoxSEM.FocusEventEnabled = false;
-            scalablePictureBoxSEM.HorizontalFlip = false;
             scalablePictureBoxSEM.Location = new Point(0, 0);
-            scalablePictureBoxSEM.ManualSpotMode = false;
             scalablePictureBoxSEM.Margin = new Padding(0, 0, 0, 2);
             scalablePictureBoxSEM.MouseScaling = true;
             scalablePictureBoxSEM.MouseTranslation = true;
             scalablePictureBoxSEM.Name = "scalablePictureBoxSEM";
-            scalablePictureBoxSEM.ShowAreaRectangle = false;
-            scalablePictureBoxSEM.ShowRimRentangle = false;
             scalablePictureBoxSEM.Size = new Size(448, 336);
             scalablePictureBoxSEM.TabIndex = 31;
-            scalablePictureBoxSEM.TitleVisible = false;
-            scalablePictureBoxSEM.VerticalFlip = false;
             scalablePictureBoxSEM.Zoom = 128D;
             scalablePictureBoxSEM.MouseUp2 += scalablePictureBoxSEM_MouseUp2;
             scalablePictureBoxSEM.MouseDown2 += scalablePictureBoxSEM_MouseDown2;
@@ -219,51 +202,15 @@
             // 
             // graphControl1
             // 
-            graphControl1.AllowMouseOperation = true;
             graphControl1.AutoScroll = true;
-            graphControl1.AxisLineColor = Color.Gray;
-            graphControl1.AxisTextColor = Color.Black;
-            graphControl1.AxisTextFont = new Font("Segoe UI", 9F);
-            graphControl1.AxisXTextVisible = true;
-            graphControl1.AxisYTextVisible = true;
-            graphControl1.BackgroundColor = Color.White;
-            graphControl1.DivisionLineColor = Color.LightGray;
-            graphControl1.DivisionLineXVisible = true;
-            graphControl1.DivisionLineYVisible = true;
             graphControl1.Dock = DockStyle.Top;
-            graphControl1.FixRangeHorizontal = false;
-            graphControl1.FixRangeVertical = false;
             graphControl1.Font = new Font("Segoe UI Symbol", 9F);
-            graphControl1.GraphTitle = "";
-            graphControl1.IsIntegerX = false;
-            graphControl1.IsIntegerY = false;
-            graphControl1.LabelX = "X:";
-            graphControl1.LabelY = "Y:";
-            graphControl1.LineWidth = 1F;
             graphControl1.Location = new Point(0, 0);
-            graphControl1.LowerX = 0D;
-            graphControl1.LowerY = 0D;
-            graphControl1.MaximalX = 1D;
-            graphControl1.MaximalY = 1D;
-            graphControl1.MinimalX = 0D;
-            graphControl1.MinimalY = 0D;
-            graphControl1.Mode = Crystallography.Controls.GraphControl.DrawingMode.Line;
             graphControl1.MousePositionVisible = true;
-            graphControl1.MousePositionXDigit = -1;
-            graphControl1.MousePositionYDigit = -1;
             graphControl1.Name = "graphControl1";
-            graphControl1.OriginPosition = new Point(40, 20);
             graphControl1.Size = new Size(363, 248);
             graphControl1.TabIndex = 26;
-            graphControl1.UnitX = "";
-            graphControl1.UnitY = "";
             graphControl1.UpperPanelFont = new Font("Segoe UI Symbol", 9F);
-            graphControl1.UpperX = 1D;
-            graphControl1.UpperY = 1D;
-            graphControl1.UseLineWidth = true;
-            graphControl1.VerticalLineColor = Color.Red;
-            graphControl1.XLog = false;
-            graphControl1.YLog = false;
             // 
             // flowLayoutPanelModellFolder
             // 
@@ -309,6 +256,13 @@
             fileToolStripMenuItem.Name = "fileToolStripMenuItem";
             fileToolStripMenuItem.Size = new Size(50, 20);
             fileToolStripMenuItem.Text = "Menu";
+            // 
+            // exportMapToolStripMenuItem
+            // 
+            exportMapToolStripMenuItem.Name = "exportMapToolStripMenuItem";
+            exportMapToolStripMenuItem.Size = new Size(108, 22);
+            exportMapToolStripMenuItem.Text = "Export";
+            exportMapToolStripMenuItem.Click += exportMapToolStripMenuItem_Click;
             // 
             // statusStrip1
             // 
@@ -446,13 +400,6 @@
             labelBrightness.Size = new Size(60, 15);
             labelBrightness.TabIndex = 36;
             labelBrightness.Text = "ブライトネス";
-            // 
-            // exportMapToolStripMenuItem
-            // 
-            exportMapToolStripMenuItem.Name = "exportMapToolStripMenuItem";
-            exportMapToolStripMenuItem.Size = new Size(180, 22);
-            exportMapToolStripMenuItem.Text = "Export";
-            exportMapToolStripMenuItem.Click += exportMapToolStripMenuItem_Click;
             // 
             // AnalyzerForm
             // 
