@@ -1,0 +1,91 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dotnet: restore solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "restore",
+        "MineraScope.sln",
+        // 260818Codex: Restore the x64 solution configuration used for execution.
+        "-p:Platform=x64"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "dotnet: build solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "MineraScope.sln",
+        // 260818Codex: Build Debug|x64 so launch.json never starts the separate Any CPU output.
+        "-p:Platform=x64"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: clean solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "clean",
+        "MineraScope.sln",
+        // 260818Codex: Clean the same x64 configuration produced by the build task.
+        "-p:Platform=x64"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "dotnet: run MineraScope",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "MineraScope\\MineraScope.csproj",
+        // 260818Codex: Avoid dotnet run's -p project alias and pass x64 as an explicit MSBuild property.
+        "--property:Platform=x64"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-cli",
+          "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+          "DOTNET_NOLOGO": "1"
+        }
+      },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}
+

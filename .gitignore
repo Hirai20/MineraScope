@@ -1,0 +1,33 @@
+.vs/
+.vscode/.history/
+
+bin/
+obj/
+# 260625Claude: 配布用の self-contained publish 出力はリポジトリ管理外にする。
+/publish/
+
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+# 260416Codex: Visual Studio project cache files are local-only and should stay untracked.
+*.lscache
+
+.DS_Store
+Thumbs.db
+
+.dotnet-cli/.nuget/
+.dotnet-cli/.dotnet/
+
+# 260416Codex: Codex local instructions file should stay untracked.
+agents.md
+# 260523Claude: Claude Code local instructions file should stay untracked.
+CLAUDE.md
+# 260526Codex: Claude Code local skill files should stay untracked.
+.claude/
+# 260606Claude: Codex MCP bridge config holds a machine-specific path; keep it untracked.
+.mcp.json
+# 260606Claude: launchSettings.json is environment-specific; keep it untracked.
+MineraScope/Properties/launchSettings.json
+# 260622Claude: 個人の勉強用フォルダ (見返し・資料作成用) はリポジトリ管理外にする。
+/勉強用/

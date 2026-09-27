@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "name": "MineraScope",
+      "path": "."
+    },
+    {
+      "name": "Crystallography",
+      "path": "Crystallography"
+    }
+  ],
+  "settings": {
+    "dotnet.defaultSolution": "MineraScope.sln"
+  }
+}
+

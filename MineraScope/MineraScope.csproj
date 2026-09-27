@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+    <AssemblyName>MineraScope</AssemblyName>
+    <Product>MineraScope</Product>
+    <Title>MineraScope</Title>
+    <RootNamespace>MineraScope</RootNamespace>
+    <!-- 260823Claude: x64 単一構成。参照先 (Crystallography / Crystallography.Controls) は x64 専用ビルドで、
+         SciSharp.TensorFlow.Redist も win-x64 しか同梱しないため、32bit として動く構成は元から存在しない。
+         AnyCPU を残すと (1) 出力が bin\Debug と bin\x64\Debug の 2 系統に分かれ、古い方を起動しても気づけない、
+         (2) WinForms Designer が 32bit の DesignToolsServer を起動して x64 依存を読めず、保存時に .Designer.cs から
+         NumericBox / EndmemberControl が消える (ビルドは通るので実行するまで気づけない)。選べなくするのが確実。 -->
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 260724Claude: EDX 検出器キャリブレーション (Rwp 最小化) の最小二乗・NelderMead 用。Crystallography が参照する 6.0.0-beta2 に合わせて NU1605 を回避する。 -->
+    <PackageReference Include="MathNet.Numerics" Version="6.0.0-beta2" />
+    <PackageReference Include="MemoryPack.Streaming" Version="1.21.4" />
+    <PackageReference Include="NumSharp" Version="0.30.0" />
+    <PackageReference Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
+    <PackageReference Include="TensorFlow.Keras" Version="0.15.0" />
+    <PackageReference Include="TensorFlow.NET" Version="0.150.0" />
+    <PackageReference Include="xFunc.Maths" Version="4.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 260728Claude: ScalablePictureBox / GraphControl など Designer 上のコントロールが依存する。260724 の MathNet 追加時に誤って消えていたので復帰。 -->
+    <ProjectReference Include="..\Crystallography.Controls\Crystallography.Controls.csproj" />
+    <ProjectReference Include="..\Crystallography\Crystallography.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="MineralDatabaseOriginal.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
+
