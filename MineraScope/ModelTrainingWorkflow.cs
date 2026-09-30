@@ -248,6 +248,8 @@ namespace MineraScope
         // 260901Codex: 正式フォルダへの昇格が完了した時点でだけ Promoted を返します。
         private ModelTrainingResult Run(ModelTrainingPlan plan, IProgress<TrainingProgress>? progress, CancellationToken cancellationToken)
         {
+            // 260930Codex: Hold the output lease through promotion and abandoned-backup cleanup.
+            using var outputLease = PathOperationLease.Acquire(plan.ModelOutputFolder, "ModelOutput");
             // 260930Codex: Use the committed private staging convention recognized by the model catalog.
             string temporaryOutputFolder = Path.Combine(Path.GetDirectoryName(plan.ModelOutputFolder)!, $".{Guid.NewGuid():N}.tmp");
             _logAction("モデル作成開始");
@@ -348,23 +350,37 @@ namespace MineraScope
             }
         }
 
+        // 260930Claude: ウイルス対策のスキャンや削除保留のハンドルは短時間で解消するため、この待ち時間で足ります。
+        private static readonly int[] FolderDeleteRetryDelaysMilliseconds = [100, 200, 400];
+
         // 260902Codex: 想定内の未昇格でも例外でも、cleanup失敗が本来の結果を上書きしないよう共通化します。
-        private bool TryDeleteTemporaryFolder(string temporaryOutputFolder)
+        // 260930Claude: 一時的なロックは間隔を空けて再試行します。中断要求は見ません。昇格後の後片付けで
+        //   中断例外を投げると、すでに成功した公開が中止されたように見えるためです。
+        private bool TryDeleteTemporaryFolder(string folder)
         {
-            try
+            for (int attempt = 0; ; attempt++)
             {
-                Directory.Delete(temporaryOutputFolder, recursive: true);
-                return true;
-            }
-            catch (DirectoryNotFoundException)
-            {
-                return true;
-            }
-            catch (Exception cleanupException)
-            {
-                _logAction($"仮フォルダの削除に失敗しました: {temporaryOutputFolder}");
-                _logAction(cleanupException.Message);
-                return false;
+                try
+                {
+                    Directory.Delete(folder, recursive: true);
+                    return true;
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    return true;
+                }
+                // 260930Claude: 途中まで消えたフォルダを再試行しても、残りを消すだけなので不整合は起きません。
+                catch (Exception retryable) when (retryable is IOException or UnauthorizedAccessException
+                    && attempt < FolderDeleteRetryDelaysMilliseconds.Length)
+                {
+                    Thread.Sleep(FolderDeleteRetryDelaysMilliseconds[attempt]);
+                }
+                catch (Exception cleanupException)
+                {
+                    _logAction($"不要なフォルダを削除できませんでした。手動で削除してください: {folder}");
+                    _logAction(cleanupException.Message);
+                    return false;
+                }
             }
         }
 
@@ -384,10 +400,9 @@ namespace MineraScope
         {
             _logAction("モデル保存先の仮フォルダを正式フォルダへ昇格します。");
 
-            // 260930Codex: Keep promotion backups distinct from user models named with a .previous suffix.
+            // 260917Codex: An independently named model ending in .previous is not this run's disposable backup.
             string backupOutputFolder = $"{modelOutputFolder}.{Guid.NewGuid():N}.previous";
 
-            bool backupCreated = false;
             if (Directory.Exists(modelOutputFolder))
             {
                 // 260619Codex: Re-check at promotion time so a late-created folder is not overwritten silently.
@@ -396,30 +411,77 @@ namespace MineraScope
 
                 _logAction($"既存モデルを上書きします: {modelOutputFolder}");
                 Directory.Move(modelOutputFolder, backupOutputFolder);
-                backupCreated = true;
             }
 
+            // 260930Claude: 公開の確定だけをロールバックの対象にします。以前は退避先の削除も同じ try にあり、
+            //   削除が途中で失敗すると catch が昇格済みの新モデルを消して、部分削除された旧モデルを戻していました。
             try
             {
                 Directory.Move(temporaryOutputFolder, modelOutputFolder);
-
-                if (backupCreated)
-                    Directory.Delete(backupOutputFolder, recursive: true);
             }
             catch
             {
-                if (backupCreated && Directory.Exists(backupOutputFolder))
-                {
-                    if (Directory.Exists(modelOutputFolder))
-                        Directory.Delete(modelOutputFolder, recursive: true);
-
-                    Directory.Move(backupOutputFolder, modelOutputFolder);
-                }
+                // 260930Claude: 退避先の名前は毎回の GUID を持つので、存在すればこの呼び出しが作ったものです。
+                if (Directory.Exists(backupOutputFolder))
+                    TryRestoreBackup(backupOutputFolder, modelOutputFolder);
 
                 throw;
             }
 
             _logAction($"モデル保存先を昇格しました: {modelOutputFolder}");
+            // 260930Claude: 公開は確定済みなので、ここから先の失敗を公開の失敗へ変えません。
+            //   今回の退避先と、以前の実行が消しきれなかった同名の退避先をまとめて片付けます。
+            DeleteAbandonedBackups(modelOutputFolder);
         }
+
+        // 260930Claude: 昇格に失敗したときだけ呼ぶ復旧。復旧そのものの失敗で元の失敗原因を隠さないよう、
+        //   ここでは退避先を記録するに留め、呼び出し元が元の例外を投げ直します。
+        private void TryRestoreBackup(string backupOutputFolder, string modelOutputFolder)
+        {
+            try
+            {
+                if (Directory.Exists(modelOutputFolder))
+                    Directory.Delete(modelOutputFolder, recursive: true);
+
+                Directory.Move(backupOutputFolder, modelOutputFolder);
+            }
+            catch (Exception restoreException)
+            {
+                _logAction($"既存モデルを復旧できませんでした。退避先を確認してください: {backupOutputFolder}");
+                _logAction(restoreException.Message);
+            }
+        }
+
+        // 260930Claude: 昇格が確定した後の後片付け。呼び出し元へ例外を伝えず、残った場所だけを記録します。
+        //   対象を同じモデル名の退避先に限るので、ModelOutput の path lease が他プロセスとの競合を防ぎます。
+        private void DeleteAbandonedBackups(string modelOutputFolder)
+        {
+            try
+            {
+                string fullPath = Path.GetFullPath(modelOutputFolder);
+                string modelName = Path.GetFileName(fullPath);
+                string? parentFolder = Path.GetDirectoryName(fullPath);
+                if (modelName.Length == 0 || parentFolder is null)
+                    return;
+
+                foreach (string folder in Directory.EnumerateDirectories(parentFolder, $"{modelName}.*"))
+                {
+                    if (IsPromotionBackupName(Path.GetFileName(folder), modelName))
+                        TryDeleteTemporaryFolder(folder);
+                }
+            }
+            catch (Exception cleanupException)
+            {
+                _logAction($"退避フォルダの後片付けに失敗しました: {cleanupException.Message}");
+            }
+        }
+
+        // 260930Claude: PromoteTemporaryFolder が作る `{モデル名}.{GUID}.previous` だけを片付けます。
+        //   GUID を要求するので、利用者が名付けた `sample.previous` は残ります。判定は ModelCatalog.IsTrainingWorkFolder と
+        //   同じ綴りにして、片方だけが work folder とみなす状態を作りません。`.tmp` はモデル名を含まないため対象外です。
+        private static bool IsPromotionBackupName(string folderName, string modelName) =>
+            // 260930Codex: Match the entire model name so model.child backups cannot be deleted by model cleanup.
+            folderName.Split('.') is [.., var id, "previous"] && Guid.TryParseExact(id, "N", out _)
+            && string.Equals(folderName, $"{modelName}.{id}.previous", StringComparison.OrdinalIgnoreCase);
     }
 }

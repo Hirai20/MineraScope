@@ -35,6 +35,8 @@ namespace MineraScope.Tests
 
             List<(string Name, Action Run)> suites =
             [
+                // 260930Codex: Filesystem failure checks verify promotion and backup cleanup without TensorFlow.
+                ("Model promotion and backup cleanup", ModelPromotionTests.Run),
                 // 260930Codex: Catalog refresh hides GUID-qualified work folders while retaining ordinary model names.
                 ("Model catalog staging folders", ModelCatalogTests.Run),
                 // 260930Codex: Ordinary defaults and legacy settings are checked without native TensorFlow.
