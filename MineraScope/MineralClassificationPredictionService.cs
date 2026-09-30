@@ -11,6 +11,8 @@ namespace MineraScope
     internal sealed class MineralClassificationPredictionService
     {
         private string? _loadedClassificationPath;
+        // 260930Codex: The content identity is checked for single predictions and once when a map obtains its labels.
+        private string? _loadedFingerprint;
         private IModel? _classificationModel;
         private string[]? _labelNames;
         // 260622Codex: Optional open-set detector state is cached with the loaded classifier model.
@@ -22,19 +24,21 @@ namespace MineraScope
 
         // 260606Claude: 同期版(SpectrumBatchPredictionWorkflow のバッチ用)。検証と dispatch は PredictAsync に集約し、呼び出し元 BG スレッドをブロックして結果を得る。
         // 260727Claude: 旧コメントの参照先 RunPrediction は削除済み。
-        public MineralClassificationPredictionResult Predict(string modelPath, float[] normalizedSpectrum)
-            => PredictAsync(modelPath, normalizedSpectrum).GetAwaiter().GetResult();
+        // 260930Codex: A fresh multi-file workflow can verify once and keep one revision throughout its batch.
+        public MineralClassificationPredictionResult Predict(string modelPath, float[] normalizedSpectrum, bool verifyModelFiles = true)
+            => PredictAsync(modelPath, normalizedSpectrum, verifyModelFiles: verifyModelFiles).GetAwaiter().GetResult();
 
         // 260606Claude: UI 単発分類用。Task.Run の代わりに専用スレッドへ投げ、UI を塞がず await できるようにする。
         // 260807Claude: detectUnknown は呼び出しごとの引数にする。検知器はモデルキャッシュと同じ寿命の共有フィールドなので、
         //   ここへ状態として持たせるとマップの設定が点分析へ波及する。既定 true で従来の呼び出しは無変更。
-        public Task<MineralClassificationPredictionResult> PredictAsync(string modelPath, float[] normalizedSpectrum, bool detectUnknown = true)
+        // 260930Codex: Single interactive predictions check the selected model before reusing cached weights.
+        public Task<MineralClassificationPredictionResult> PredictAsync(string modelPath, float[] normalizedSpectrum, bool detectUnknown = true, bool verifyModelFiles = true)
         {
             if (normalizedSpectrum.Length != SpectrumDataLoader.SpectrumLength)
                 throw new InvalidOperationException($"{SpectrumDataLoader.SpectrumLength} 点のスペクトルだけを分類できます。");
 
             string classificationPath = GetClassificationPath(modelPath);
-            return TensorFlowExecutor.RunAsync(() => RunLockedWithCacheReset(() => PredictCore(classificationPath, normalizedSpectrum, detectUnknown), "single"));
+            return TensorFlowExecutor.RunAsync(() => RunLockedWithCacheReset(() => PredictCore(classificationPath, normalizedSpectrum, detectUnknown, verifyModelFiles), "single"));
         }
 
         // 260622Codex: 検知器を持たないモデルでは未学習検知を要求されても適用できない。
@@ -43,9 +47,10 @@ namespace MineraScope
         public bool HasUnknownDetector => _unknownDetector is not null && _featureExtractor is not null;
 
         // 260606Claude: TF 本体(load/np.array/Apply/numpy/ToArray/dispose)。必ず専用スレッド上で実行し、戻すのは managed な結果のみ。
-        private MineralClassificationPredictionResult PredictCore(string classificationPath, float[] normalizedSpectrum, bool detectUnknown)
+        private MineralClassificationPredictionResult PredictCore(string classificationPath, float[] normalizedSpectrum, bool detectUnknown, bool verifyModelFiles)
         {
-            EnsureModelLoaded(classificationPath);
+            // 260930Codex: Verification runs on the TensorFlow executor, away from the UI thread.
+            EnsureModelLoaded(classificationPath, verifyModelFiles);
 
             var spectrumReshaped = np.array(normalizedSpectrum).reshape(new Shape(1, SpectrumDataLoader.SpectrumLength));
             try
@@ -149,7 +154,8 @@ namespace MineraScope
 
         private string[] GetLabelNamesCore(string classificationPath)
         {
-            EnsureModelLoaded(classificationPath);
+            // 260930Codex: Map preparation verifies once before the cached model serves all chunks.
+            EnsureModelLoaded(classificationPath, verifyModelFiles: true);
             return (string[])_labelNames!.Clone();
         }
 
@@ -259,9 +265,12 @@ namespace MineraScope
             }
         }
 
-        private void EnsureModelLoaded(string classificationPath)
+        private void EnsureModelLoaded(string classificationPath, bool verifyModelFiles = false)
         {
-            if (_classificationModel is not null && _loadedClassificationPath == classificationPath)
+            // 260930Codex: Keep map chunks on the prepared model; verify the selected model at each operation start.
+            string? fingerprint = verifyModelFiles || _classificationModel is null || _loadedClassificationPath != classificationPath
+                ? ModelArtifactFingerprint.Compute(classificationPath) : _loadedFingerprint;
+            if (_classificationModel is not null && _loadedClassificationPath == classificationPath && _loadedFingerprint == fingerprint)
                 return;
 
             if (!Directory.Exists(classificationPath))
@@ -289,6 +298,8 @@ namespace MineraScope
             // 260622Codex: Load optional open-set metadata after the classifier weights are available.
             LoadUnknownDetector(classificationPath, labelNames.Length);
             _loadedClassificationPath = classificationPath;
+            // 260930Codex: Save the identity of the loaded weights and sidecars together.
+            _loadedFingerprint = fingerprint;
             _modelLoadManagedThreadId = Environment.CurrentManagedThreadId;
             _modelLoadNativeThreadId = TensorFlowPredictionDebugLog.CurrentNativeThreadId;
             TensorFlowPredictionDebugLog.Write("model-load-after", $"path={TensorFlowPredictionDebugLog.Clean(classificationPath)} {GetModelDebugInfo()} labels={labelNames.Length}");
@@ -341,6 +352,8 @@ namespace MineraScope
             TensorFlowPredictionDebugLog.Write("model-cache-reset", $"{GetModelDebugInfo()}");
             TensorFlowRuntimeGate.DisposeIfPossible(_classificationModel);
             _loadedClassificationPath = null;
+            // 260930Codex: A failed load must not retain the previous content identity.
+            _loadedFingerprint = null;
             _classificationModel = null;
             _labelNames = null;
             // 260622Codex: Keep optional open-set cache lifetime identical to the classifier cache.

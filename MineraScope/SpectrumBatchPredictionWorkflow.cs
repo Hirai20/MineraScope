@@ -114,7 +114,8 @@ namespace MineraScope
 
             try
             {
-                var regression = regressionService.Predict(regressionModelPath, spectrum);
+                // 260930Codex: This service is created for this batch, so do not hash the same regressor for every file.
+                var regression = regressionService.Predict(regressionModelPath, spectrum, verifyModelFiles: false);
                 var ratios = regression.Components.ToDictionary(component => component.ComponentName, component => component.Ratio);
                 string formula = MineralFormulaGenerator.Generate(ratios, mineralName, _assemblyPath);
                 return new SpectrumPredictionItem(filePath, null, Path.GetFileName(regressionModelPath), regression.Components, formula, null);
@@ -140,7 +141,8 @@ namespace MineraScope
             MineralClassificationPredictionResult classification;
             try
             {
-                classification = classificationService.Predict(modelPath, spectrum);
+                // 260930Codex: This fresh service loads the saved model once for the entire multi-file operation.
+                classification = classificationService.Predict(modelPath, spectrum, verifyModelFiles: false);
             }
             catch (Exception ex)
             {
@@ -179,7 +181,8 @@ namespace MineraScope
             string regressionPath = candidates[0];
             try
             {
-                var regression = regressionService.Predict(regressionPath, spectrum);
+                // 260930Codex: Keep one loaded regressor revision throughout this batch.
+                var regression = regressionService.Predict(regressionPath, spectrum, verifyModelFiles: false);
                 var ratios = regression.Components.ToDictionary(component => component.ComponentName, component => component.Ratio);
                 string formula = MineralFormulaGenerator.Generate(ratios, predictedMineral, _assemblyPath);
                 return (Path.GetFileName(regressionPath), regression.Components, formula);

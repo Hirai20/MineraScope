@@ -31,3 +31,14 @@ DTSA-IIの計算、TensorFlowの学習、GUI操作、実データでの全工程
 ```powershell
 dotnet run --project MineraScope.Tests -c Debug -p:Platform=x64 --no-build -- --classification-learning-rate-smoke
 ```
+
+## 同名モデルの上書き検証
+
+<!-- 260930Codex: Managed checks detect content changes; the opt-in native check exercises saved weights and map preparation. -->
+通常テストでは、サイズと更新日時が同じファイルの内容変更、付随ファイルの追加・削除を検出できることを確認します。
+
+```powershell
+dotnet run --project MineraScope.Tests -c Debug -p:Platform=x64 --no-build -- --model-refresh-smoke
+```
+
+この追加検証は一時フォルダーの合成モデルだけを使い、分類・定量の同名上書き後の出力変更、未変更モデルの再利用、マップ準備時の更新とブロック処理での再利用を確認します。モデルの内容照合の時間とバイト数も表示します。実測データや保存済みの研究モデルは変更しません。

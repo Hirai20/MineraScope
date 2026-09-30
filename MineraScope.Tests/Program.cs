@@ -6,6 +6,13 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 260930Codex: Opt-in verification uses synthetic saved models to exercise same-path overwrites.
+            if (args.Length == 1 && args[0] == "--model-refresh-smoke")
+            {
+                ModelRefreshTests.RunNativeSmoke();
+                Console.WriteLine("PASS: Overwritten model refresh and unchanged cache reuse");
+                return 0;
+            }
             // 260930Codex: Opt-in native checks exercise the classification optimizer from identical weights.
             if (args.Length == 1 && args[0] == "--classification-learning-rate-smoke")
             {
@@ -30,6 +37,8 @@ namespace MineraScope.Tests
             [
                 // 260930Codex: Ordinary defaults and legacy settings are checked without native TensorFlow.
                 ("Classification learning-rate settings", ClassificationLearningRateTests.Run),
+                // 260930Codex: Filesystem checks do not load the native runtime.
+                ("Saved model content identity", ModelRefreshTests.Run),
                 // 260930Codex: Check four feldspar compositions without loading TensorFlow.
                 ("Feldspar overlap label policy", MineralLabelPolicyTests.Run),
                 ("Composition and time allocation", PlannerTests.Run),

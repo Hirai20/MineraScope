@@ -11,10 +11,13 @@ namespace MineraScope
     {
         // 260522Codex: Cache the loaded model + component order per path so a batch reuses them across files.
         private string? _loadedModelPath;
+        // 260930Codex: Detect same-path replacements of regressor weights or component metadata.
+        private string? _loadedFingerprint;
         private IModel? _model;
         private string[]? _componentNames;
 
-        public MineralRegressionResult Predict(string regressionModelPath, float[] normalizedSpectrum)
+        // 260930Codex: Standalone predictions verify; fresh batch services can hold their loaded revision.
+        public MineralRegressionResult Predict(string regressionModelPath, float[] normalizedSpectrum, bool verifyModelFiles = true)
         {
             if (string.IsNullOrWhiteSpace(regressionModelPath) || !Directory.Exists(regressionModelPath))
                 throw new DirectoryNotFoundException("回帰モデルフォルダが見つかりません。");
@@ -27,17 +30,17 @@ namespace MineraScope
             {
                 lock (TensorFlowRuntimeGate.SyncRoot)
                 {
-                    return PredictCore(regressionModelPath, normalizedSpectrum);
+                    return PredictCore(regressionModelPath, normalizedSpectrum, verifyModelFiles);
                 }
             });
         }
 
         // 260606Claude: TF 本体(load/np.array/Apply/numpy/ToArray/dispose)。必ず専用スレッド上で実行し、戻すのは managed な結果のみ。異常時はキャッシュを破棄して再throw。
-        private MineralRegressionResult PredictCore(string regressionModelPath, float[] normalizedSpectrum)
+        private MineralRegressionResult PredictCore(string regressionModelPath, float[] normalizedSpectrum, bool verifyModelFiles)
         {
             try
             {
-                EnsureModelLoaded(regressionModelPath);
+                EnsureModelLoaded(regressionModelPath, verifyModelFiles);
                 string[] componentNames = _componentNames!;
 
                 var spectrumReshaped = np.array(normalizedSpectrum).reshape(new Shape(1, SpectrumDataLoader.SpectrumLength));
@@ -103,9 +106,12 @@ namespace MineraScope
             return new MineralRegressionResult(components);
         }
 
-        private void EnsureModelLoaded(string regressionModelPath)
+        private void EnsureModelLoaded(string regressionModelPath, bool verifyModelFiles)
         {
-            if (_model is not null && _loadedModelPath == regressionModelPath)
+            // 260930Codex: Verify only the requested regressor; fresh batch services keep one revision for the batch.
+            string? fingerprint = verifyModelFiles || _model is null || _loadedModelPath != regressionModelPath
+                ? ModelArtifactFingerprint.Compute(regressionModelPath) : _loadedFingerprint;
+            if (_model is not null && _loadedModelPath == regressionModelPath && _loadedFingerprint == fingerprint)
                 return;
 
             string componentPath = Path.Combine(regressionModelPath, ModelArtifactPaths.ComponentIndexFileName);
@@ -119,6 +125,8 @@ namespace MineraScope
             _componentNames = componentIndex.OrderBy(pair => pair.Value).Select(pair => pair.Key).ToArray();
             _model = keras.models.load_model(regressionModelPath);
             _loadedModelPath = regressionModelPath;
+            // 260930Codex: Record weights and component metadata as one cached revision.
+            _loadedFingerprint = fingerprint;
         }
     }
 
