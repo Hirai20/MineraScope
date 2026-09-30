@@ -24,6 +24,8 @@ namespace MineraScope
                 ? Directory.GetDirectories(ParentPath)
                     .Select(Path.GetFileName)
                     .Where(name => !string.IsNullOrWhiteSpace(name))
+                    // 260930Codex: Hide only GUID-qualified training staging and promotion backup folders.
+                    .Where(name => !IsTrainingWorkFolder(name!))
                     .OrderBy(name => name)
                     .Select(name => name!)
                     .ToArray()
@@ -31,5 +33,9 @@ namespace MineraScope
 
             Changed?.Invoke(this, new ModelCatalogChangedEventArgs(preferredModelName));
         }
+
+        // 260930Codex: User names such as sample.tmp and sample.previous remain selectable.
+        private static bool IsTrainingWorkFolder(string name) =>
+            name.Split('.') is [.., var id, "tmp" or "previous"] && Guid.TryParseExact(id, "N", out _);
     }
 }

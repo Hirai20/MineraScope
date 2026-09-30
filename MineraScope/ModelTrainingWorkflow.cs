@@ -248,7 +248,8 @@ namespace MineraScope
         // 260901Codex: 正式フォルダへの昇格が完了した時点でだけ Promoted を返します。
         private ModelTrainingResult Run(ModelTrainingPlan plan, IProgress<TrainingProgress>? progress, CancellationToken cancellationToken)
         {
-            string temporaryOutputFolder = $"{plan.ModelOutputFolder}.tmp";
+            // 260930Codex: Use the committed private staging convention recognized by the model catalog.
+            string temporaryOutputFolder = Path.Combine(Path.GetDirectoryName(plan.ModelOutputFolder)!, $".{Guid.NewGuid():N}.tmp");
             _logAction("モデル作成開始");
             _logAction($"保存先（正式）: {plan.ModelOutputFolder}");
             _logAction($"保存先（仮）: {temporaryOutputFolder}");
@@ -383,9 +384,8 @@ namespace MineraScope
         {
             _logAction("モデル保存先の仮フォルダを正式フォルダへ昇格します。");
 
-            string backupOutputFolder = $"{modelOutputFolder}.previous";
-            if (Directory.Exists(backupOutputFolder))
-                Directory.Delete(backupOutputFolder, recursive: true);
+            // 260930Codex: Keep promotion backups distinct from user models named with a .previous suffix.
+            string backupOutputFolder = $"{modelOutputFolder}.{Guid.NewGuid():N}.previous";
 
             bool backupCreated = false;
             if (Directory.Exists(modelOutputFolder))
