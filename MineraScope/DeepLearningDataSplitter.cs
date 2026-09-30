@@ -117,7 +117,8 @@ namespace MineraScope
         }
 
         // 260901Codex: Keep the original classification shuffle byte-for-byte for metadata-free training pools.
-        private static (int[] TrainIndices, int[] TestIndices) CreateLegacySplitIndices(
+        // 260930Codex: The unchanged split indices align alternative labels with ordinary classification inputs.
+        internal static (int[] TrainIndices, int[] TestIndices) CreateLegacySplitIndices(
             int sampleCount,
             float testSize,
             int randomState)

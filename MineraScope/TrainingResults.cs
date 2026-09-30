@@ -25,7 +25,9 @@ namespace MineraScope
         double? ValidationLoss,
         double? ValidationAccuracy,
         double? ValidationMae,
-        string SplitMethod);
+        string SplitMethod,
+        // 260930Codex: Keep strict source-label validation accuracy beside overlap-aware accuracy.
+        double? LegacyValidationAccuracy = null);
 
     // 260906Codex: Keep training settings separate from per-model values because one model-creation run shares them.
     internal sealed record TrainingResultsSpecification(
@@ -101,7 +103,8 @@ namespace MineraScope
                 ToFiniteOrNull(metric.ValidationLoss),
                 ToFiniteOrNull(metric.ValidationAccuracy),
                 ToFiniteOrNull(metric.ValidationMae),
-                metric.SplitMethod);
+                metric.SplitMethod,
+                ToFiniteOrNull(metric.LegacyValidationAccuracy));
 
         private static double? ToFiniteOrNull(double? value) =>
             value is double finite && double.IsFinite(finite) ? finite : null;
@@ -145,6 +148,8 @@ namespace MineraScope
             double? ValidationLoss,
             double? ValidationAccuracy,
             double? ValidationMae,
-            string SplitMethod);
+            string SplitMethod,
+            // 260930Codex: Keep strict source-label validation accuracy beside overlap-aware accuracy.
+        double? LegacyValidationAccuracy = null);
     }
 }

@@ -6,6 +6,13 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 260930Codex: Run the TensorFlow loss and gradient check separately from ordinary tests.
+            if (args.Length == 1 && args[0] == "--feldspar-loss-smoke")
+            {
+                MineralLabelPolicyTests.RunNativeSmoke();
+                Console.WriteLine("PASS: Feldspar partial-label loss and gradient");
+                return 0;
+            }
             if (args.Length != 0 && (args.Length != 2 || args[0] != "--compare-baseline"))
             {
                 Console.Error.WriteLine("Usage: MineraScope.Tests [--compare-baseline <original MineraScope.dll>]");
@@ -14,6 +21,8 @@ namespace MineraScope.Tests
 
             List<(string Name, Action Run)> suites =
             [
+                // 260930Codex: Check four feldspar compositions without loading TensorFlow.
+                ("Feldspar overlap label policy", MineralLabelPolicyTests.Run),
                 ("Composition and time allocation", PlannerTests.Run),
                 ("Pool preview, reuse, cancellation, and recovery", PoolTests.Run),
                 ("Training completeness and provenance", TrainingPoolTests.Run),

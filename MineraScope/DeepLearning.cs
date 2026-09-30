@@ -146,7 +146,9 @@ namespace MineraScope
             string LastEpochMetrics,
             int? BestEpoch,
             double BestValidationLoss,
-            double BestValidationMetric);
+            double BestValidationMetric,
+            // 260930Codex: Preserve strict source-label accuracy beside overlap-aware accuracy.
+            double? LegacyValidationAccuracy = null);
 
         // 260606Claude: 分類1個+回帰N個を1本のバーで表すため、モデル境界とエポックを「モデル均等×エポック比」で 0..1 の全体進捗へ畳み込みます。
         //              EarlyStopping で早期終了しても CompleteModel でその区間を 100% へスナップし、単調増加を保ちます。
@@ -210,13 +212,15 @@ namespace MineraScope
             string operationName,
             Action<string> logAction,
             Action<int>? reportEpoch,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            // 260930Codex: Alternative labels are used only by classification; regression stays unchanged.
+            int[]? trainingAlternatives = null, int[]? validationAlternatives = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             // 260622Claude: 分類・回帰とも v1 Graph/Session 経路で学習する(高速化の本命、eager と統計的同等を実測確認済み)。
             if (operationName.StartsWith("regression", StringComparison.Ordinal))
                 return RunGraphRegressionLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
-            return RunGraphClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
+            return RunGraphClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken, trainingAlternatives, validationAlternatives);
         }
 
         // 260621Claude: 分類の v1-style Graph/Session 学習(高速化の本命)。eager custom loop の per-batch dispatch を畳んで大幅高速化する。
@@ -237,7 +241,8 @@ namespace MineraScope
             string operationName,
             Action<string> logAction,
             Action<int>? reportEpoch,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            int[]? trainingAlternatives, int[]? validationAlternatives)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string op = TensorFlowTrainingDebugLog.Clean(operationName);
@@ -257,6 +262,8 @@ namespace MineraScope
             List<NDArray>? bestWeights = null;
             double bestValLoss = double.PositiveInfinity;
             double bestValAccuracy = 0d;
+            // 260930Codex: Track the original one-label metric at the adopted epoch.
+            double bestLegacyAccuracy = 0d;
             int? bestEpoch = null;
             int wait = 0;
             int completedEpochs = 0;
@@ -272,6 +279,10 @@ namespace MineraScope
                 var dataY = tf.constant(yTrain, dtype: TF_DataType.TF_INT32);
                 var valX = tf.constant(xValidation);
                 var valY = tf.constant(yValidation, dtype: TF_DataType.TF_INT32);
+                // 260930Codex: Keep alternative targets aligned with the original classification split.
+                var dataAlternative = trainingAlternatives is null ? dataY : tf.constant(trainingAlternatives);
+                var valAlternative = validationAlternatives is null ? valY : tf.constant(validationAlternatives);
+                int classCount = (int)initWeights[5].shape[0];
 
                 var W1 = tf.Variable(tf.constant(initWeights[0]), name: "W1");
                 var b1 = tf.Variable(tf.constant(initWeights[1]), name: "b1");
@@ -290,14 +301,16 @@ namespace MineraScope
 
                 var startPh = tf.placeholder(tf.int32, new Shape(Array.Empty<int>()), "start");
                 var idx = tf.range(startPh, tf.add(startPh, tf.constant(batchSize)));
-                var trainLoss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(tf.gather(dataY, idx), Forward(tf.gather(dataX, idx))));
+                // 260930Codex: Sum acceptable class probability for the four feldspar intersections.
+                var trainLoss = tf.reduce_mean(PartialLabelLoss.PerSample(Forward(tf.gather(dataX, idx)), tf.gather(dataY, idx), tf.gather(dataAlternative, idx), classCount));
                 // 260621Claude: Keras Adam と同一の hyperparams(epsilon=1e-7)で minimize し、研究比較の同等性を保つ。
                 var optimizer = new Tensorflow.Train.AdamOptimizer(0.001f, 0.9f, 0.999f, 1e-7f, false, TF_DataType.TF_FLOAT, "Adam");
                 var trainOp = optimizer.minimize(trainLoss);
 
                 var valLogits = Forward(valX);
-                var valLossOp = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(valY, valLogits));
-                var valCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(valLogits, 1), tf.cast(valY, tf.int64)), tf.int32));
+                var valLossOp = tf.reduce_mean(PartialLabelLoss.PerSample(valLogits, valY, valAlternative, classCount));
+                var legacyCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(valLogits, 1), tf.cast(valY, tf.int64)), tf.int32));
+                var valCorrectOp = tf.reduce_sum(tf.cast(PartialLabelLoss.Correct(valLogits, valY, valAlternative), tf.int32));
 
                 // 260621Claude: minimize 後に init を作って Adam の slot variables まで初期化する。
                 var init = tf.global_variables_initializer();
@@ -318,6 +331,7 @@ namespace MineraScope
                     long valStart = Stopwatch.GetTimestamp();
                     double valLoss = sess.run(valLossOp).ToArray<float>()[0];
                     double valAccuracy = valCount > 0 ? sess.run(valCorrectOp).ToArray<int>()[0] / (double)valCount : 0d;
+                    double legacyAccuracy = valCount > 0 ? sess.run(legacyCorrectOp).ToArray<int>()[0] / (double)valCount : 0d;
                     double validationMs = Stopwatch.GetElapsedTime(valStart).TotalMilliseconds;
 
                     bool willStop = false;
@@ -325,6 +339,7 @@ namespace MineraScope
                     {
                         bestValLoss = valLoss;
                         bestValAccuracy = valAccuracy;
+                        bestLegacyAccuracy = legacyAccuracy;
                         bestEpoch = epoch + 1;
                         bestWeights = weightVars.Select(v => sess.run(v.AsTensor())).ToList();
                         wait = 0;
@@ -333,7 +348,7 @@ namespace MineraScope
                         willStop = true;
 
                     // 260622Claude: 学習データ全体の metric はログ専用かつ初回ウォームアップが重いので算出しない。val(=test) のみ毎epoch評価する。
-                    string logs = $"val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)}";
+                    string logs = $"val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},legacy_val_accuracy={FormatMetric(legacyAccuracy)}";
 
                     completedEpochs++;
                     lastEpoch = epoch;
@@ -360,7 +375,7 @@ namespace MineraScope
             if (bestWeights != null)
                 model.set_weights(bestWeights);
             TensorFlowTrainingDebugLog.Write("graph-loop-end", $"operation={op} engine=graph trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
-            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics, bestEpoch, bestValLoss, bestValAccuracy);
+            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics, bestEpoch, bestValLoss, bestValAccuracy, bestLegacyAccuracy);
         }
 
         // 260622Claude: 回帰の v1-style Graph/Session 学習。分類 graph 経路と同形で、loss を MSE・出力を線形(端成分比率)にしたもの。
@@ -912,7 +927,12 @@ namespace MineraScope
             Log("訓練中...");
             var fitTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("fit-start", $"op={op}");
-            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken);
+            // 260930Codex: Derive alternatives from manifest composition and reuse the exact original split indices.
+            var policyClasses = encoder.OrderBy(pair => pair.Value).Select(pair => pair.Key).ToArray();
+            var alternatives = classificationSamples.Select(row => MineralLabelPolicy.AlternativeIndex(row.MineralName, row.Sample.EndmemberFractions, policyClasses)).ToArray();
+            var (trainIndices, testIndices) = DeepLearningDataSplitter.CreateLegacySplitIndices(alternatives.Length, testSplit, DeepLearningDataSplitter.DefaultRandomState);
+            var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken,
+                trainIndices.Select(index => alternatives[index]).ToArray(), testIndices.Select(index => alternatives[index]).ToArray());
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
             // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
@@ -938,6 +958,8 @@ namespace MineraScope
             cancellationToken.ThrowIfCancellationRequested();
             // 260626Claude: 予測時に自動適用するため、分類モデルフォルダにも前処理を記録する。
             preprocessing.WriteToModelFolder(outputPath);
+            // 260930Codex: Mark models trained with the dual-label rule; missing metadata means legacy training.
+            MineralLabelPolicy.WriteTrainingMetadata(outputPath);
             // 260622Codex: Persist optional open-set statistics after the classifier itself is safely saved.
             TrySaveUnknownDetector(model, xTrain, yTrain, xTest, yTest, unknownDistanceScale, outputPath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -958,11 +980,12 @@ namespace MineraScope
                     RequestedEpochs: fitResult.RequestedEpochs,
                     CompletedEpochs: fitResult.CompletedEpochs,
                     BestEpoch: fitResult.BestEpoch,
-                    ValidationLossName: "sparseCategoricalCrossentropy",
+                    ValidationLossName: "partialLabelCrossentropy",
                     ValidationLoss: validationLoss,
                     ValidationAccuracy: validationAccuracy,
                     ValidationMae: null,
-                    SplitMethod: splitMethod)
+                    SplitMethod: splitMethod,
+                    LegacyValidationAccuracy: fitResult.LegacyValidationAccuracy)
             });
         }
 
