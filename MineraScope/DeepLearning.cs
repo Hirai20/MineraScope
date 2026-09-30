@@ -214,13 +214,15 @@ namespace MineraScope
             Action<int>? reportEpoch,
             CancellationToken cancellationToken,
             // 260930Codex: Alternative labels are used only by classification; regression stays unchanged.
-            int[]? trainingAlternatives = null, int[]? validationAlternatives = null)
+            int[]? trainingAlternatives = null, int[]? validationAlternatives = null,
+            // 260930Codex: Classification receives its recorded rate; regression uses its own optimizer.
+            float classificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate)
         {
             cancellationToken.ThrowIfCancellationRequested();
             // 260622Claude: 分類・回帰とも v1 Graph/Session 経路で学習する(高速化の本命、eager と統計的同等を実測確認済み)。
             if (operationName.StartsWith("regression", StringComparison.Ordinal))
                 return RunGraphRegressionLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
-            return RunGraphClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken, trainingAlternatives, validationAlternatives);
+            return RunGraphClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken, trainingAlternatives, validationAlternatives, classificationLearningRate);
         }
 
         // 260621Claude: 分類の v1-style Graph/Session 学習(高速化の本命)。eager custom loop の per-batch dispatch を畳んで大幅高速化する。
@@ -242,7 +244,8 @@ namespace MineraScope
             Action<string> logAction,
             Action<int>? reportEpoch,
             CancellationToken cancellationToken,
-            int[]? trainingAlternatives, int[]? validationAlternatives)
+            int[]? trainingAlternatives, int[]? validationAlternatives,
+            float classificationLearningRate)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string op = TensorFlowTrainingDebugLog.Clean(operationName);
@@ -304,7 +307,8 @@ namespace MineraScope
                 // 260930Codex: Sum acceptable class probability for the four feldspar intersections.
                 var trainLoss = tf.reduce_mean(PartialLabelLoss.PerSample(Forward(tf.gather(dataX, idx)), tf.gather(dataY, idx), tf.gather(dataAlternative, idx), classCount));
                 // 260621Claude: Keras Adam と同一の hyperparams(epsilon=1e-7)で minimize し、研究比較の同等性を保つ。
-                var optimizer = new Tensorflow.Train.AdamOptimizer(0.001f, 0.9f, 0.999f, 1e-7f, false, TF_DataType.TF_FLOAT, "Adam");
+                // 260930Codex: Use the selected classification rate in the graph that updates the weights.
+                var optimizer = new Tensorflow.Train.AdamOptimizer(classificationLearningRate, 0.9f, 0.999f, 1e-7f, false, TF_DataType.TF_FLOAT, "Adam");
                 var trainOp = optimizer.minimize(trainLoss);
 
                 var valLogits = Forward(valX);
@@ -591,8 +595,13 @@ namespace MineraScope
             double unknownDistanceScale,
             string outputPath,
             IProgress<TrainingProgress>? progress = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            // 260930Codex: Direct callers share the ordinary classification default.
+            float classificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate)
         {
+            // 260930Codex: Reject invalid rates before loading spectra or starting TensorFlow.
+            if (!float.IsFinite(classificationLearningRate) || classificationLearningRate <= 0)
+                throw new ArgumentOutOfRangeException(nameof(classificationLearningRate));
             if (!Directory.Exists(outputPath))
             {
                 Log("モデルの保存先を指定してください。");
@@ -638,7 +647,8 @@ namespace MineraScope
                 classificationOutputPath,
                 spectrumCache,
                 reporter.ReportEpoch,
-                cancellationToken);
+                cancellationToken,
+                classificationLearningRate);
             if (classificationResult.Status == DeepLearningTrainingStatus.NotCompleted)
             {
                 TensorFlowTrainingDebugLog.Write(
@@ -853,7 +863,9 @@ namespace MineraScope
             string outputPath,
             SpectrumDataLoader.NormalizedSpectrumCache? spectrumCache,
             Action<int>? reportEpoch,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            // 260930Codex: Pass the actual rate through model setup and graph training.
+            float classificationLearningRate)
         {
             const string op = "classification:AllMinerals";
             var modelTimer = Stopwatch.StartNew();
@@ -918,7 +930,7 @@ namespace MineraScope
             var model = CreateClassificationModel(encoder.Count);
 
             model.compile(
-                optimizer: keras.optimizers.Adam(),
+                optimizer: keras.optimizers.Adam(learning_rate: classificationLearningRate),
                 loss: CreateSparseCategoricalCrossentropy(),
                 metrics: new[] { "accuracy" }
             );
@@ -932,7 +944,8 @@ namespace MineraScope
             var alternatives = classificationSamples.Select(row => MineralLabelPolicy.AlternativeIndex(row.MineralName, row.Sample.EndmemberFractions, policyClasses)).ToArray();
             var (trainIndices, testIndices) = DeepLearningDataSplitter.CreateLegacySplitIndices(alternatives.Length, testSplit, DeepLearningDataSplitter.DefaultRandomState);
             var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken,
-                trainIndices.Select(index => alternatives[index]).ToArray(), testIndices.Select(index => alternatives[index]).ToArray());
+                trainIndices.Select(index => alternatives[index]).ToArray(), testIndices.Select(index => alternatives[index]).ToArray(),
+                classificationLearningRate: classificationLearningRate);
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
             // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");

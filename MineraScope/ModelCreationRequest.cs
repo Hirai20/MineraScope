@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MineraScope
 {
@@ -113,12 +115,68 @@ namespace MineraScope
 
     // 260507Codex: 学習条件は conditionKey から外し、モデル作成時だけ使う設定として分離します。
     // 260622Claude: UnknownDistanceScale は未知判定で既知とみなす距離に掛ける倍率 (大きいほど Unknown を出しにくい)。
+    // 260930Codex: Preserve the historical rate when loading settings written before LearningRate existed.
+    [JsonConverter(typeof(ModelTrainingSettingsJsonConverter))]
     internal sealed record ModelTrainingSettings(
         int Epochs,
         int BatchSize,
         int EarlyStoppingPatience,
         float ValidationSplit,
-        double UnknownDistanceScale);
+        double UnknownDistanceScale)
+    {
+        // 260930Codex: New ordinary classifiers use 1e-4; historical JSON retains 1e-3.
+        public const float DefaultClassificationLearningRate = 1e-4f;
+        internal const float LegacyClassificationLearningRate = 1e-3f;
+        public float LearningRate { get; init; } = DefaultClassificationLearningRate;
+    }
+
+    // 260930Codex: Record the effective rate while accepting the existing Pascal-case and camel-case settings.
+    internal sealed class ModelTrainingSettingsJsonConverter : JsonConverter<ModelTrainingSettings>
+    {
+        public override ModelTrainingSettings Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using JsonDocument document = JsonDocument.ParseValue(ref reader);
+            JsonElement root = document.RootElement;
+            T ReadRequired<T>(string name, Func<JsonElement, T> read) =>
+                TryGetProperty(root, name, out JsonElement property) ? read(property) : default!;
+            var settings = new ModelTrainingSettings(
+                ReadRequired(nameof(ModelTrainingSettings.Epochs), property => property.GetInt32()),
+                ReadRequired(nameof(ModelTrainingSettings.BatchSize), property => property.GetInt32()),
+                ReadRequired(nameof(ModelTrainingSettings.EarlyStoppingPatience), property => property.GetInt32()),
+                ReadRequired(nameof(ModelTrainingSettings.ValidationSplit), property => property.GetSingle()),
+                ReadRequired(nameof(ModelTrainingSettings.UnknownDistanceScale), property => property.GetDouble()));
+            return settings with
+            {
+                LearningRate = TryGetProperty(root, nameof(ModelTrainingSettings.LearningRate), out JsonElement rate)
+                    ? rate.GetSingle() : ModelTrainingSettings.LegacyClassificationLearningRate
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, ModelTrainingSettings value, JsonSerializerOptions options)
+        {
+            string Name(string property) => options.PropertyNamingPolicy?.ConvertName(property) ?? property;
+            writer.WriteStartObject();
+            writer.WriteNumber(Name(nameof(value.Epochs)), value.Epochs);
+            writer.WriteNumber(Name(nameof(value.BatchSize)), value.BatchSize);
+            writer.WriteNumber(Name(nameof(value.EarlyStoppingPatience)), value.EarlyStoppingPatience);
+            writer.WriteNumber(Name(nameof(value.ValidationSplit)), value.ValidationSplit);
+            writer.WriteNumber(Name(nameof(value.UnknownDistanceScale)), value.UnknownDistanceScale);
+            writer.WriteNumber(Name(nameof(value.LearningRate)), value.LearningRate);
+            writer.WriteEndObject();
+        }
+
+        private static bool TryGetProperty(JsonElement root, string name, out JsonElement property)
+        {
+            foreach (JsonProperty candidate in root.EnumerateObject())
+                if (string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    property = candidate.Value;
+                    return true;
+                }
+            property = default;
+            return false;
+        }
+    }
 
     // 260507Codex: モデル作成対象は checkedListBoxMineral のチェック済み SolidSolution だけに統一します。
     // 260901Codex: Optional allocations extend model creation without changing legacy single-time constructors.

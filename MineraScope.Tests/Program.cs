@@ -6,6 +6,13 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 260930Codex: Opt-in native checks exercise the classification optimizer from identical weights.
+            if (args.Length == 1 && args[0] == "--classification-learning-rate-smoke")
+            {
+                ClassificationLearningRateTests.RunNativeSmoke();
+                Console.WriteLine("PASS: Classification learning-rate graph updates");
+                return 0;
+            }
             // 260930Codex: Run the TensorFlow loss and gradient check separately from ordinary tests.
             if (args.Length == 1 && args[0] == "--feldspar-loss-smoke")
             {
@@ -21,6 +28,8 @@ namespace MineraScope.Tests
 
             List<(string Name, Action Run)> suites =
             [
+                // 260930Codex: Ordinary defaults and legacy settings are checked without native TensorFlow.
+                ("Classification learning-rate settings", ClassificationLearningRateTests.Run),
                 // 260930Codex: Check four feldspar compositions without loading TensorFlow.
                 ("Feldspar overlap label policy", MineralLabelPolicyTests.Run),
                 ("Composition and time allocation", PlannerTests.Run),

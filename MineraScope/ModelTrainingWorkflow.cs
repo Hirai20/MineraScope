@@ -124,6 +124,9 @@ namespace MineraScope
         // 260514Codex: target 未設定や pool 不足は学習開始前に止めます。
         public string? Validate(ModelTrainingPlan plan)
         {
+            // 260930Codex: Reject invalid learning rates before training starts.
+            if (!float.IsFinite(plan.Settings.LearningRate) || plan.Settings.LearningRate <= 0)
+                return "分類の学習率は0より大きい有限の値にしてください。";
             if (plan.TrainingPools.Count == 0)
                 return "モデル作成対象の鉱物が選択されていないか、学習可能な spectrum がありません。";
 
@@ -276,7 +279,9 @@ namespace MineraScope
                     plan.Settings.UnknownDistanceScale,
                     temporaryOutputFolder,
                     progress,
-                    cancellationToken);
+                    cancellationToken,
+                    // 260930Codex: Train with the value preserved in this model creation request.
+                    classificationLearningRate: plan.Settings.LearningRate);
                 if (trainingResult.Status == DeepLearningTrainingStatus.NotCompleted)
                 {
                     string failureReason = trainingResult.FailureReason
@@ -315,7 +320,9 @@ namespace MineraScope
                         plan.Settings.EarlyStoppingPatience,
                         plan.Settings.ValidationSplit,
                         DeepLearningDataSplitter.DefaultRandomState,
-                        DeepLearning.EarlyStoppingMonitor),
+                        DeepLearning.EarlyStoppingMonitor,
+                        // 260930Codex: Persist the actual classification optimizer rate with the model.
+                        ClassificationLearningRate: plan.Settings.LearningRate),
                     trainingResult.ModelMetrics);
                 WriteDetectorMetadata(plan.DetectorProfile, temporaryOutputFolder);
 

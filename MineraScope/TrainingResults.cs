@@ -36,7 +36,9 @@ namespace MineraScope
         int EarlyStoppingPatience,
         float ValidationSplit,
         int SplitSeed,
-        string EarlyStoppingMonitor);
+        string EarlyStoppingMonitor,
+        // 260930Codex: Existing callers can adopt the ordinary default; explicit rates are recorded by the workflow.
+        float ClassificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate);
 
     // 260906Codex: Persist one human-readable, versioned record beside the completed model without changing prediction artifacts.
     internal static class TrainingResultsWriter
@@ -76,7 +78,8 @@ namespace MineraScope
                     BatchSize: specification.BatchSize,
                     EarlyStoppingPatience: specification.EarlyStoppingPatience,
                     ValidationSplit: specification.ValidationSplit,
-                    SplitSeed: specification.SplitSeed),
+                    SplitSeed: specification.SplitSeed,
+                    ClassificationLearningRate: specification.ClassificationLearningRate),
                 Models: modelMetrics.Select(ToDocument).ToArray());
 
             Directory.CreateDirectory(modelRootFolder);
@@ -128,7 +131,9 @@ namespace MineraScope
             int BatchSize,
             int EarlyStoppingPatience,
             float ValidationSplit,
-            int SplitSeed);
+            int SplitSeed,
+            // 260930Codex: Make the effective classification rate visible in saved training results.
+            float ClassificationLearningRate);
 
         private sealed record TrainingModelDocument(
             string Target,

@@ -20,3 +20,14 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 検証用スペクトルは各テスト専用の一時フォルダーへ作成し、終了時にそのフォルダーだけを削除します。ユーザーのスペクトルやモデルは使用・変更しません。
 
 DTSA-IIの計算、TensorFlowの学習、GUI操作、実データでの全工程の確認は含みません。
+
+## 分類学習率の検証
+
+<!-- 260930Codex: Native checks are optional and use only synthetic data. -->
+通常の検証では、新規設定の学習率 `0.0001`、過去の設定JSONの `0.001`、明示した値の保存・読込、不正値の拒否、学習結果への記録を確認します。
+
+分類の実際の重み更新を確認する場合は、ビルド後に次を実行します。同じ初期重みと合成スペクトルで、既定値と明示した `0.0001` の結果が一致し、`0.001` の結果と異なることを検証します。
+
+```powershell
+dotnet run --project MineraScope.Tests -c Debug -p:Platform=x64 --no-build -- --classification-learning-rate-smoke
+```
