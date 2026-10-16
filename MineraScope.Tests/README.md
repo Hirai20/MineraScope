@@ -51,3 +51,12 @@ dotnet run --project MineraScope.Tests -c Debug -p:Platform=x64 --no-build -- --
 ```powershell
 dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --spectrum-signal-smoke
 ```
+
+## 分類開始条件の検証
+
+<!-- 261016Codex: 分類の件数・クラス数の検査だけを公開版へ反映する。 -->
+通常テストで異なる鉱物が2種類以上あること、学習側に完全な1バッチを確保できること、検証側が0件でないことを確認します。直接の学習呼び出しが件数不足を拒否し、既存出力を保持することは次の合成データ検証で確認できます。
+
+```powershell
+dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --classification-count-smoke
+```

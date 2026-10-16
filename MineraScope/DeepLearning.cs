@@ -27,7 +27,9 @@ namespace MineraScope
     // 260902Codex: 想定内の学習中止理由を、予期しない例外と分けて workflow へ返します。
     internal enum DeepLearningTrainingFailureKind
     {
-        TrainingDataLoadFailed
+        TrainingDataLoadFailed,
+        // 261016Codex: 分類を更新できない件数では、完了結果を返さない。
+        InsufficientTrainingSamples
     }
 
     // 260902Codex: 学習本体が正常完了したか、想定内の理由で開始前に止まったかを表します。
@@ -919,6 +921,15 @@ namespace MineraScope
             TensorFlowTrainingDebugLog.Write("split-end", $"op={op} train={xTrain.shape[0]} test={xTest.shape[0]} durationMs={splitTimer.ElapsedMilliseconds}");
             Log($"訓練データ: {xTrain.shape[0]}");
             Log($"テストデータ: {xTest.shape[0]}\n");
+
+            // 261016Codex: 直接呼び出しでも、分類モデルの構築前に件数不足を拒否する。
+            string? insufficientReason = TrainingSampleRequirements.GetFailureReason((int)xTrain.shape[0], (int)xTest.shape[0], batchSize);
+            if (insufficientReason is not null)
+            {
+                Log($"分類モデルを作成できません: {insufficientReason}");
+                return DeepLearningTrainingResult.CreateNotCompleted(
+                    DeepLearningTrainingFailureKind.InsufficientTrainingSamples, insufficientReason);
+            }
 
             // 260902Codex: 全ファイル成功後にだけ TensorFlow の状態を初期化し、モデル構築へ進みます。
             TensorFlowTrainingDebugLog.Write("clear-session-before", $"op={op}");

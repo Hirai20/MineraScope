@@ -1053,6 +1053,12 @@ namespace MineraScope
         {
             // 260416Codex: 学習開始も request -> plan -> workflow の流れに揃え、今後の統合実行へつなげます。
             var request = CreateModelCreationRequest();
+            // 261016Codex: データ準備を始める前に分類の最小クラス数を確認する。
+            if (request.SelectedMineralSolutions.Count < 2)
+            {
+                MessageBox.Show(this, "分類する鉱物を2種類以上選択してください。", "モデル作成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             string requestValidationMessage = ValidateModelCreationRequest(request, requireDtsaPath: false);
             if (!string.IsNullOrEmpty(requestValidationMessage))
             {

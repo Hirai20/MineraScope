@@ -28,7 +28,9 @@ namespace MineraScope
     // 260902Codex: UI が想定内の未昇格理由ごとに状態と案内を変えられるよう、理由を型で渡します。
     internal enum ModelTrainingFailureKind
     {
-        TrainingDataLoadFailed
+        TrainingDataLoadFailed,
+        // 261016Codex: 学習不能な件数を読込失敗と区別する。
+        InsufficientTrainingSamples
     }
 
     // 260901Codex: 想定内の未昇格理由と保存済み成果物を例外にせず UI へ返します。
@@ -127,11 +129,23 @@ namespace MineraScope
             // 260930Codex: Reject invalid learning rates before training starts.
             if (!float.IsFinite(plan.Settings.LearningRate) || plan.Settings.LearningRate <= 0)
                 return "分類の学習率は0より大きい有限の値にしてください。";
-            if (plan.TrainingPools.Count == 0)
-                return "モデル作成対象の鉱物が選択されていないか、学習可能な spectrum がありません。";
+            // 261016Codex: 時間別poolの個数ではなく、異なる鉱物クラスを数える。
+            if (plan.TrainingPools.Select(pool => pool.MineralName).Distinct(StringComparer.Ordinal).Count() < 2)
+                return "分類する鉱物を2種類以上選択してください。";
 
             if (plan.TrainingPools.Any(pool => pool.Samples.Count == 0))
                 return "学習可能な spectrum がない鉱物があります。";
+
+            // 261016Codex: 実際の非層化分割と同じ件数で、更新不能な分類器の作成を防ぐ。
+            if (plan.Settings.BatchSize <= 0)
+                return "バッチサイズは1以上にしてください。";
+            if (!float.IsFinite(plan.Settings.ValidationSplit) || plan.Settings.ValidationSplit <= 0 || plan.Settings.ValidationSplit >= 1)
+                return "検証データ割合は0より大きく1より小さい値にしてください。";
+            var (trainingCount, validationCount) = TrainingSampleRequirements.GetSplitCounts(
+                plan.TrainingPools.Sum(pool => pool.Samples.Count), plan.Settings.ValidationSplit);
+            string? countFailure = TrainingSampleRequirements.GetFailureReason(trainingCount, validationCount, plan.Settings.BatchSize);
+            if (countFailure is not null)
+                return $"分類モデルを作成できません: {countFailure}";
 
             return ValidateTrainingSources(plan);
         }
@@ -292,6 +306,8 @@ namespace MineraScope
                     var failureKind = trainingResult.FailureKind switch
                     {
                         DeepLearningTrainingFailureKind.TrainingDataLoadFailed => ModelTrainingFailureKind.TrainingDataLoadFailed,
+                        // 261016Codex: 件数不足でも既存の正式モデルを保持する。
+                        DeepLearningTrainingFailureKind.InsufficientTrainingSamples => ModelTrainingFailureKind.InsufficientTrainingSamples,
                         null => throw new InvalidOperationException("未完了の学習結果に理由種別がありません。"),
                         _ => throw new InvalidOperationException($"未対応の学習失敗理由です: {trainingResult.FailureKind}")
                     };

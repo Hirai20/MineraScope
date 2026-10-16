@@ -6,6 +6,13 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261016Codex: 直接学習の件数不足拒否を、専用の合成入力で確認する。
+            if (args.Length == 1 && args[0] == "--classification-count-smoke")
+            {
+                TrainingSampleRequirementsTests.RunNativeSmoke();
+                Console.WriteLine("PASS: Classification count refusal preserves existing output");
+                return 0;
+            }
             // 261016Codex: 無信号の扱いは、合成ファイルだけを使う任意のネイティブ検証で確認する。
             if (args.Length == 1 && args[0] == "--spectrum-signal-smoke")
             {
@@ -50,6 +57,8 @@ namespace MineraScope.Tests
                 ("Classification learning-rate settings", ClassificationLearningRateTests.Run),
                 // 261016Codex: 前処理記録の互換性と破損拒否を通常テストへ追加する。
                 ("Model preprocessing metadata integrity", SpectrumPreprocessingTests.Run),
+                // 261016Codex: 分類の開始条件はネイティブ学習なしでも検証する。
+                ("Classification training prerequisites", TrainingSampleRequirementsTests.Run),
                 // 260930Codex: Filesystem checks do not load the native runtime.
                 ("Saved model content identity", ModelRefreshTests.Run),
                 // 260930Codex: Check four feldspar compositions without loading TensorFlow.
