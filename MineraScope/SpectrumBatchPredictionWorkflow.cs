@@ -108,9 +108,12 @@ namespace MineraScope
             string filePath,
             SpectrumPreprocessing preprocessing)
         {
-            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath, preprocessing);
+            // 260930Codex: 無信号スペクトルを分類・定量の推論へ渡さない。
+            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath, preprocessing, out bool hasSignal);
             if (spectrum is null)
                 return Failed(filePath, "スペクトルを読み込めませんでした。");
+            if (!hasSignal)
+                return Failed(filePath, NoSignalMessage);
 
             try
             {
@@ -134,9 +137,12 @@ namespace MineraScope
             SpectrumPreprocessing preprocessing,
             Dictionary<string, string[]> regressionFolderCache)
         {
-            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath, preprocessing);
+            // 260930Codex: 無信号スペクトルを分類・定量の推論へ渡さない。
+            float[]? spectrum = SpectrumDataLoader.LoadNormalizedSpectrum(filePath, preprocessing, out bool hasSignal);
             if (spectrum is null)
                 return Failed(filePath, "スペクトルを読み込めませんでした。");
+            if (!hasSignal)
+                return Failed(filePath, NoSignalMessage);
 
             MineralClassificationPredictionResult classification;
             try
@@ -193,6 +199,11 @@ namespace MineraScope
                 return (Path.GetFileName(regressionPath), [], string.Empty);
             }
         }
+
+        // 260930Claude: 全ゼロ、または低エネルギーマスク後に信号が残らない入力。
+        // 260930Codex: 分類と定量の予測で、同じ説明を使う。
+        // 261016Codex: 公開版でも、信号のない入力を正常な学習・予測へ渡さない。
+        private const string NoSignalMessage = "スペクトルに信号がありません（全ゼロ、または低エネルギーマスク後に信号が残りません）。";
 
         private static SpectrumPredictionItem Failed(string filePath, string error) =>
             new(filePath, null, null, [], string.Empty, error);

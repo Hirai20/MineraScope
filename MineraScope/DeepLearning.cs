@@ -1068,6 +1068,11 @@ namespace MineraScope
                     "EDSレイアウト不一致",
                 SpectrumDataLoader.ClassificationLoadFailureKind.ReadFailure =>
                     $"読み取り失敗（{failure.ExceptionType ?? "原因不明"}）",
+                // 260930Claude: 読めてはいるので、読み取り失敗と区別して原因を示します。
+                // 260930Codex: モデルの学習・昇格前に、空の学習入力を通知する。
+                // 261016Codex: 公開版でも、信号のない入力を正常な学習・予測へ渡さない。
+                SpectrumDataLoader.ClassificationLoadFailureKind.NoSignal =>
+                    "信号なし（全ゼロ、または低エネルギーマスク後に信号が残らない）",
                 _ => throw new InvalidOperationException($"未対応の分類データ読込失敗です: {failure.Kind}")
             };
 

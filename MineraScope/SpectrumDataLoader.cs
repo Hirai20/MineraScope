@@ -32,7 +32,9 @@ namespace MineraScope
         {
             PointCountMismatch,
             EdsLayoutMismatch,
-            ReadFailure
+            ReadFailure,
+            // 260930Claude: 全ゼロ、またはマスク後に信号が残らない入力。学習させるとそのラベルを歪めます。
+            NoSignal
         }
 
         // 260902Codex: 並列読込後も入力順を保って報告できるよう、失敗したファイルと構造化した理由を保持します。
@@ -117,8 +119,20 @@ namespace MineraScope
         // 260430Codex: 2048 点スペクトルの読み込みと正規化を学習・予測で共通利用します。
         // 260626Claude: preprocessing 未指定は None = 従来どおりマスク無し正規化。予測経路はモデルの前処理を渡す。
         // 260901Codex: 公開経路は例外を握る従来の EDS リーダーを使い、予測と較正の挙動を維持します。
+        // 260930Claude: 信号の有無を CreateNormalizedSpectrum と同じ形で返します。以前は NormalizeSpectrum の
+        //   戻り値を捨てていたため、全ゼロのファイルやマスク後に信号が残らないファイルが分類成功になっていました。
+        // 260930Codex: 既存の呼び出しを維持し、有効な信号のないスペクトルを拒否する。
+        // 261016Codex: 公開版でも、信号のない入力を正常な学習・予測へ渡さない。
         public static float[]? LoadNormalizedSpectrum(string filePath, SpectrumPreprocessing? preprocessing = null)
         {
+            var values = LoadNormalizedSpectrum(filePath, preprocessing, out bool hasSignal);
+            return hasSignal ? values : null;
+        }
+
+        // 260930Codex: 空入力と読込不能を予測側で区別できるよう、信号の状態を公開する。
+        public static float[]? LoadNormalizedSpectrum(string filePath, SpectrumPreprocessing? preprocessing, out bool hasSignal)
+        {
+            hasSignal = false;
             if (!File.Exists(filePath))
                 return null;
 
@@ -129,7 +143,7 @@ namespace MineraScope
             if (values is null)
                 return null;
 
-            NormalizeSpectrum(values, preprocessing ?? SpectrumPreprocessing.None);
+            hasSignal = NormalizeSpectrum(values, preprocessing ?? SpectrumPreprocessing.None);
             return values;
         }
 
@@ -237,9 +251,12 @@ namespace MineraScope
                 return cachedData;
             }
 
-            var data = LoadNormalizedSpectrum(filePath, preprocessing);
-            if (data is not null)
-                cache?.StoreIfNeeded(filePath, data);
+            // 260930Claude: 無信号は分類に使えないので、キャッシュへ入れず読めなかった場合と同じ扱いにします。
+            var data = LoadNormalizedSpectrum(filePath, preprocessing, out bool hasSignal);
+            if (data is null || !hasSignal)
+                return null;
+
+            cache?.StoreIfNeeded(filePath, data);
 
             cancellationToken.ThrowIfCancellationRequested();
             return data;
@@ -513,7 +530,13 @@ namespace MineraScope
                 values = data.ToArray<float>();
             }
 
-            NormalizeSpectrum(values, preprocessing ?? SpectrumPreprocessing.None);
+            // 260930Claude: 学習も無信号を受け取らないようにします。全ゼロ行はどのラベルにも中身が無く、
+            //   そのまま学習すると該当クラスの平均と距離統計を歪めます。
+            if (!NormalizeSpectrum(values, preprocessing ?? SpectrumPreprocessing.None))
+                return new ClassificationSpectrumLoadResult(
+                    Spectrum: null,
+                    Failure: new ClassificationLoadFailure(filePath, ClassificationLoadFailureKind.NoSignal));
+
             return new ClassificationSpectrumLoadResult(values, Failure: null);
         }
 

@@ -6,6 +6,13 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261016Codex: 無信号の扱いは、合成ファイルだけを使う任意のネイティブ検証で確認する。
+            if (args.Length == 1 && args[0] == "--spectrum-signal-smoke")
+            {
+                SpectrumSignalTests.RunNativeSmoke();
+                Console.WriteLine("PASS: Empty spectrum refusal and normal input compatibility");
+                return 0;
+            }
             // 260930Codex: Opt-in verification uses synthetic saved models to exercise same-path overwrites.
             if (args.Length == 1 && args[0] == "--model-refresh-smoke")
             {
