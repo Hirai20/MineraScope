@@ -6,6 +6,13 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261016Codex: 通常分類の学習・採用重みの保存・再読込を合成入力で検証する。
+            if (args.Length == 1 && args[0] == "--classification-persistence-smoke")
+            {
+                ClassificationPersistenceTests.RunNativeSmoke();
+                Console.WriteLine("PASS: Trained classifier persistence and reload");
+                return 0;
+            }
             // 261016Codex: 直接学習の件数不足拒否を、専用の合成入力で確認する。
             if (args.Length == 1 && args[0] == "--classification-count-smoke")
             {

@@ -260,6 +260,9 @@ namespace MineraScope
                 model.build(new Shape(-1, features));
                 initWeights = model.get_weights();
             }
+            // 261016Codex: 初期重みと採用重みは、この学習スコープの完了・中止時に解放する。
+            using var initialWeightLifetime = new TrainingWeightArrays(initWeights);
+            using var bestWeightLifetime = new TrainingWeightArrays(null);
             TensorFlowTrainingDebugLog.Write("graph-loop-start", $"operation={op} engine=graph weights={initWeights.Count}");
 
             int sampleCount = (int)xTrain.shape[0];
@@ -318,6 +321,10 @@ namespace MineraScope
                 var legacyCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(valLogits, 1), tf.cast(valY, tf.int64)), tf.int32));
                 var valCorrectOp = tf.reduce_sum(tf.cast(PartialLabelLoss.Correct(valLogits, valY, valAlternative), tf.int32));
 
+                // 261016Codex: 検証の順伝播を共有し、指標と採用重みをそれぞれ一括取得する。
+                ITensorOrOperation[] validationFetches = [valLossOp, legacyCorrectOp, valCorrectOp];
+                ITensorOrOperation[] weightFetches = weightVars.Select(variable => (ITensorOrOperation)variable.AsTensor()).ToArray();
+
                 // 260621Claude: minimize 後に init を作って Adam の slot variables まで初期化する。
                 var init = tf.global_variables_initializer();
                 using var sess = tf.Session(graph);
@@ -339,9 +346,12 @@ namespace MineraScope
                     double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
 
                     long valStart = Stopwatch.GetTimestamp();
-                    double valLoss = sess.run(valLossOp).ToArray<float>()[0];
-                    double valAccuracy = valCount > 0 ? sess.run(valCorrectOp).ToArray<int>()[0] / (double)valCount : 0d;
-                    double legacyAccuracy = valCount > 0 ? sess.run(legacyCorrectOp).ToArray<int>()[0] / (double)valCount : 0d;
+                    // 261016Codex: 取得した検証配列は、当該エポックの集計が終わったら解放する。
+                    var validationValues = sess.run(validationFetches).ToList();
+                    using var validationLifetime = new TrainingWeightArrays(validationValues);
+                    double valLoss = validationValues[0].ToArray<float>()[0];
+                    double legacyAccuracy = valCount > 0 ? validationValues[1].ToArray<int>()[0] / (double)valCount : 0d;
+                    double valAccuracy = valCount > 0 ? validationValues[2].ToArray<int>()[0] / (double)valCount : 0d;
                     double validationMs = Stopwatch.GetElapsedTime(valStart).TotalMilliseconds;
 
                     bool willStop = false;
@@ -351,7 +361,9 @@ namespace MineraScope
                         bestValAccuracy = valAccuracy;
                         bestLegacyAccuracy = legacyAccuracy;
                         bestEpoch = epoch + 1;
-                        bestWeights = weightVars.Select(v => sess.run(v.AsTensor())).ToList();
+                        // 261016Codex: 新候補の取得後に、前の採用候補を解放する。
+                        bestWeights = sess.run(weightFetches).ToList();
+                        bestWeightLifetime.Replace(bestWeights);
                         wait = 0;
                     }
                     else if (++wait >= patience)
@@ -467,6 +479,7 @@ namespace MineraScope
                 var valLossOp = MseLoss(valPred, valY);
                 var valAbsSumOp = tf.reduce_sum(tf.abs(valPred - valY));
 
+                // 260621Claude: minimize 後に init を作って Adam の slot variables まで初期化する。
                 var init = tf.global_variables_initializer();
                 using var sess = tf.Session(graph);
                 sess.run(init);
@@ -1156,6 +1169,27 @@ namespace MineraScope
         //   SpectrumBatchPredictionWorkflow へ差し替わって以降、唯一の呼び出し元だった MineralPredictionWorkflow.RunAsync
         //   ごと到達不能になっていた。判定の正本は SpectrumBatchPredictionWorkflow + SpectrumPredictionBlockFormatter。
         //   このクラスは学習専用になった。
+        // 261016Codex: 学習中に所有するネイティブ配列を、候補更新とスコープ終了時に解放する。
+        private sealed class TrainingWeightArrays(List<NDArray>? values) : IDisposable
+        {
+            private List<NDArray>? _values = values;
+
+            public void Replace(List<NDArray> replacement)
+            {
+                Dispose();
+                _values = replacement;
+            }
+
+            public void Dispose()
+            {
+                if (_values is null)
+                    return;
+                foreach (var value in _values)
+                    value.Dispose();
+                _values = null;
+            }
+        }
+
     }
 }
 

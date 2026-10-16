@@ -60,3 +60,12 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 ```powershell
 dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --classification-count-smoke
 ```
+
+## 分類の採用重みと保存の検証
+
+<!-- 261016Codex: ネイティブ一時配列の解放後も分類器が利用可能なことを確認する。 -->
+2クラスの合成スペクトルだけで3エポック学習し、最良エポックの選択、前処理・ラベルの保存、分類モデルの再読込と有限な確率出力を確認します。専用の一時フォルダーだけを使用します。
+
+```powershell
+dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --classification-persistence-smoke
+```
