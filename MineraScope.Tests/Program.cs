@@ -41,6 +41,8 @@ namespace MineraScope.Tests
                 ("Model catalog staging folders", ModelCatalogTests.Run),
                 // 260930Codex: Ordinary defaults and legacy settings are checked without native TensorFlow.
                 ("Classification learning-rate settings", ClassificationLearningRateTests.Run),
+                // 261016Codex: 前処理記録の互換性と破損拒否を通常テストへ追加する。
+                ("Model preprocessing metadata integrity", SpectrumPreprocessingTests.Run),
                 // 260930Codex: Filesystem checks do not load the native runtime.
                 ("Saved model content identity", ModelRefreshTests.Run),
                 // 260930Codex: Check four feldspar compositions without loading TensorFlow.

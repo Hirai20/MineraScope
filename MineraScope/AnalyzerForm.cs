@@ -661,7 +661,17 @@ namespace MineraScope
 
             // 260626Claude: 分類モデルの前処理を読み、学習時と同じ低エネルギーマスクをクリック分析にも自動適用する。
             //   preprocessing.json が無い既存モデルは None = マスク無しで従来どおり。
-            var preprocessing = SpectrumPreprocessing.LoadFromModelFolder(ModelArtifactPaths.GetClassificationFolder(modelPath));
+            // 261016Codex: 壊れた前処理記録を通常操作の例外境界で処理する。
+            SpectrumPreprocessing preprocessing;
+            try
+            {
+                preprocessing = SpectrumPreprocessing.LoadFromModelFolder(ModelArtifactPaths.GetClassificationFolder(modelPath));
+            }
+            catch (InvalidDataException exception)
+            {
+                textBox1.Text = $"分類に失敗しました。\r\n{exception.Message}";
+                return;
+            }
 
             float[]? normalizedSpectrum = SpectrumDataLoader.CreateNormalizedSpectrum(spectrum, preprocessing, out bool hasSignal);
             if (normalizedSpectrum is null)

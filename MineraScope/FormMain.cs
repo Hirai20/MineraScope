@@ -533,9 +533,22 @@ namespace MineraScope
         private Profile ApplyDisplayMask(Profile rawProfile)
         {
             string modelPath = SelectedModelPath;
-            var preprocessing = string.IsNullOrWhiteSpace(modelPath)
-                ? SpectrumPreprocessing.None
-                : SpectrumPreprocessing.LoadFromModelFolder(ModelArtifactPaths.GetClassificationFolder(modelPath));
+            // 261016Codex: 壊れた前処理記録を通常操作の例外境界で処理する。
+            SpectrumPreprocessing preprocessing;
+            try
+            {
+                preprocessing = string.IsNullOrWhiteSpace(modelPath)
+                    ? SpectrumPreprocessing.None
+                    : SpectrumPreprocessing.LoadFromModelFolder(ModelArtifactPaths.GetClassificationFolder(modelPath));
+            }
+            // 260930Claude: ここは表示だけなので、壊れた記録で描画を止めません。分類は同じ記録を読んで拒否するため、
+            //   利用者は実際に分類したときに理由を受け取ります。
+            // 260930Codex: 分類メタデータが不正でも、生データの表示を維持する。
+            catch (InvalidDataException)
+            {
+                return rawProfile;
+            }
+
             if (!preprocessing.HasLowEnergyMask)
                 return rawProfile;
 
