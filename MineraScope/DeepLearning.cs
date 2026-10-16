@@ -330,8 +330,12 @@ namespace MineraScope
                     TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} engine=graph");
 
                     long batchLoopStart = Stopwatch.GetTimestamp();
+                    // 261016Codex: 分類・定量とも、各バッチの更新前に中止要求を確認する。
                     for (int start = 0; start + batchSize <= sampleCount; start += batchSize)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
                         sess.run(trainOp, new FeedItem(startPh, start));
+                    }
                     double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
 
                     long valStart = Stopwatch.GetTimestamp();
@@ -474,8 +478,12 @@ namespace MineraScope
                     TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} engine=graph kind=regression");
 
                     long batchLoopStart = Stopwatch.GetTimestamp();
+                    // 261016Codex: 分類・定量とも、各バッチの更新前に中止要求を確認する。
                     for (int start = 0; start + batchSize <= sampleCount; start += batchSize)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
                         sess.run(trainOp, new FeedItem(startPh, start));
+                    }
                     double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
 
                     long valStart = Stopwatch.GetTimestamp();
