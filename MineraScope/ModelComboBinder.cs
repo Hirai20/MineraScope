@@ -7,7 +7,9 @@ namespace MineraScope
         public static void Populate(ComboBox combo, IReadOnlyList<string> names, string preferredModelName)
         {
             string previousSelection = combo.SelectedItem as string ?? string.Empty;
-            string target = string.IsNullOrWhiteSpace(preferredModelName) ? previousSelection : preferredModelName;
+            // 261016Codex: 優先モデルが一覧になければ、まだ利用可能な前の選択を維持する。
+            string target = !string.IsNullOrWhiteSpace(preferredModelName) && names.Contains(preferredModelName)
+                ? preferredModelName : previousSelection;
 
             combo.BeginUpdate();
             try

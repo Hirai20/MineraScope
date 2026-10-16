@@ -6,6 +6,13 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261016Codex: コントロールだけを構築し、フォームは表示せず選択維持を確認する。
+            if (args.Length == 1 && args[0] == "--model-selection-smoke")
+            {
+                ModelSelectionTests.Run();
+                Console.WriteLine("PASS: Model selection survives unavailable preferred names");
+                return 0;
+            }
             // 261016Codex: 通常分類の学習・採用重みの保存・再読込を合成入力で検証する。
             if (args.Length == 1 && args[0] == "--classification-persistence-smoke")
             {

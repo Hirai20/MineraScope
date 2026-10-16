@@ -69,3 +69,12 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 ```powershell
 dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --classification-persistence-smoke
 ```
+
+## モデル選択の維持
+
+<!-- 261016Codex: STA上の非表示コントロールで選択状態を検証する。 -->
+一時的なコンボボックスだけを構築し、優先モデルが消えた場合の選択維持、優先モデルへの切り替え、以前の選択も消えた場合、空一覧を確認します。フォームを表示せず、利用者の設定・モデルを変更しません。
+
+```powershell
+dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --model-selection-smoke
+```
