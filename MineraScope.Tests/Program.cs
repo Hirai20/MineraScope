@@ -66,6 +66,8 @@ namespace MineraScope.Tests
                 ("Model preprocessing metadata integrity", SpectrumPreprocessingTests.Run),
                 // 261016Codex: 分類の開始条件はネイティブ学習なしでも検証する。
                 ("Classification training prerequisites", TrainingSampleRequirementsTests.Run),
+                // 261016Codex: モデルの開始前検証をネイティブ学習なしで確認する。
+                ("Batch classifier preflight", BatchPredictionTests.Run),
                 // 260930Codex: Filesystem checks do not load the native runtime.
                 ("Saved model content identity", ModelRefreshTests.Run),
                 // 260930Codex: Check four feldspar compositions without loading TensorFlow.

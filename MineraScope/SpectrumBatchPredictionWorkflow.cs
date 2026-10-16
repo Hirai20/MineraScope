@@ -48,6 +48,10 @@ namespace MineraScope
             string preprocessingFolder = regressionOnly ? modelPath : ModelArtifactPaths.GetClassificationFolder(modelPath);
             var preprocessing = SpectrumPreprocessing.LoadFromModelFolder(preprocessingFolder);
             _log($"前処理: {preprocessing.Describe()}");
+            // 261016Codex: 分類器の破損はファイルごとの失敗にせず、開始前に一度検証して停止する。
+            if (!regressionOnly)
+                classificationService.GetLabelNames(modelPath);
+
 
             _log(regressionOnly
                 ? $"回帰のみで予測を開始します（{files.Count} 件、{regressionMineral}）。"
