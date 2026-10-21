@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-// 260907Codex: Preparation-scoped reads can be canceled between manifests and physical-file checks.
+// 260907Codex: 準備内の読み取りは、manifest間と実ファイルの検査間で中止できるようにする。
 using System.Threading;
 
 namespace MineraScope
@@ -22,7 +22,7 @@ namespace MineraScope
 
         private readonly SpectrumConditionKeyBuilder _conditionKeyBuilder;
 
-        // 260907Codex: Cache only one preparation scope, never the long-lived generation/preview repository.
+        // 260907Codex: 長寿命の生成・プレビュー用リポジトリでなく、1回の準備スコープだけをキャッシュする。
         private readonly Dictionary<string, CachedManifest>? _preparationManifestCache;
         private readonly CancellationToken _preparationCancellationToken;
         public int ManifestReadCount { get; private set; }
@@ -33,7 +33,7 @@ namespace MineraScope
             _conditionKeyBuilder = conditionKeyBuilder ?? throw new ArgumentNullException(nameof(conditionKeyBuilder));
         }
 
-        // 260907Codex: The caller owns this single-threaded, short-lived scope and the mutable manifests it shares.
+        // 260907Codex: 呼び出し側が、単一スレッドの短寿命スコープと共有する可変manifestを所有する。
         private SpectrumPoolRepository(SpectrumConditionKeyBuilder conditionKeyBuilder, CancellationToken cancellationToken)
             : this(conditionKeyBuilder)
         {
@@ -41,7 +41,7 @@ namespace MineraScope
             _preparationCancellationToken = cancellationToken;
         }
 
-        // 260907Codex: Use a fresh repository for each mineral's recovery and training preparation, then release it.
+        // 260907Codex: 鉱物ごとの復旧と学習準備で新しいリポジトリを使い、終わったら解放する。
         public SpectrumPoolRepository CreatePreparationRepository(CancellationToken cancellationToken = default) =>
             new(_conditionKeyBuilder, cancellationToken);
 
@@ -52,7 +52,7 @@ namespace MineraScope
             double resolutionStep,
             SemEdxCondition semEdxCondition)
         {
-            // 260907Codex: Do not start catalog discovery after preparation has been canceled.
+            // 260907Codex: 準備の中止後に、カタログ探索を始めない。
             _preparationCancellationToken.ThrowIfCancellationRequested();
             var snapshot = _conditionKeyBuilder.CreateSnapshot(solution, resolutionStep, semEdxCondition);
             string conditionKey = _conditionKeyBuilder.BuildKey(snapshot);
@@ -67,7 +67,7 @@ namespace MineraScope
         // 260513Codex: 既存 manifest があれば読み込み、なければ新規の空 manifest を作ります。
         public SpectrumPoolManifest LoadOrCreate(SpectrumPoolHandle handle)
         {
-            // 260907Codex: Also honor cancellation when a pool has no existing manifest.
+            // 260907Codex: 既存manifestのないpoolでも、中止に応じる。
             _preparationCancellationToken.ThrowIfCancellationRequested();
             var manifest = File.Exists(handle.ManifestPath)
                 ? Load(handle.ManifestPath)
@@ -85,7 +85,7 @@ namespace MineraScope
         }
 
         // 260513Codex: 実行結果反映では handle がなくても manifest path から直接読めるようにします。
-        // 260907Codex: Repeated compatible-pool scans reuse JSON only while its on-disk stamp remains unchanged.
+        // 260907Codex: 互換poolの反復走査では、ディスク上の属性が変わらない間だけJSONを再利用する。
         public SpectrumPoolManifest? Load(string manifestPath)
         {
             _preparationCancellationToken.ThrowIfCancellationRequested();
@@ -98,7 +98,7 @@ namespace MineraScope
             }
 
             var beforeRead = cacheKey is null ? null : new FileInfo(cacheKey);
-            // 260907Codex: FileInfo is lazy, so capture the stamp before reading rather than at the later comparison.
+            // 260907Codex: FileInfoは遅延取得するため、後の比較時でなく読込前に属性を取得する。
             beforeRead?.Refresh();
             if (cacheKey is not null
                 && _preparationManifestCache!.TryGetValue(cacheKey, out var cached)
@@ -111,7 +111,8 @@ namespace MineraScope
 
             if (cacheKey is not null)
                 _preparationManifestCache!.Remove(cacheKey);
-            string json = File.ReadAllText(manifestPath);
+            // 260917Codex: この学習処理が現在のスナップショットを読む間に、シミュレーションは次のmanifestを公開できる。
+            string json = DurableJsonFile.ReadSnapshot(manifestPath);
             ManifestReadCount++;
             _preparationCancellationToken.ThrowIfCancellationRequested();
             var manifest = JsonSerializer.Deserialize<SpectrumPoolManifest>(json);
@@ -137,14 +138,14 @@ namespace MineraScope
         // 260513Codex: 実行結果反映時の manifest 保存も同じ JSON 設定に揃えます。
         public void Save(string manifestPath, SpectrumPoolManifest manifest)
         {
-            // 260907Codex: Invalidate even if replacement fails; a later read must not reuse a mutated unsaved object.
+            // 260907Codex: 置換失敗時も無効化し、変更した未保存オブジェクトを後の読込で再利用しない。
             if (_preparationManifestCache is not null)
                 _preparationManifestCache.Remove(Path.GetFullPath(manifestPath));
             string? folder = Path.GetDirectoryName(manifestPath);
             if (!string.IsNullOrWhiteSpace(folder))
                 Directory.CreateDirectory(folder);
 
-            // 260901Codex: Batch checkpoints must survive interruption without leaving a truncated manifest.
+            // 260901Codex: バッチのチェックポイントを中断後も残し、途中で切れたmanifestを残さない。
             DurableJsonFile.Replace(manifestPath, JsonSerializer.Serialize(manifest, JsonOptions));
         }
 
@@ -156,14 +157,14 @@ namespace MineraScope
             return string.IsNullOrWhiteSpace(sanitized) ? "Mineral" : sanitized.Trim();
         }
 
-        // 260606Codex: Reuse legacy pools when formula text changed but the DTSA-II inputs are chemically identical.
+        // 260606Codex: 化学式の文字列が変わってもDTSA-II入力が化学的に同じなら、旧poolを再利用する。
         // 260606Claude: 互換 pool のうち完了スペクトル最多のものを再利用する。完了0(=再利用価値なし)なら新規 handle へフォールバック。
         private SpectrumPoolHandle ResolveReusableHandle(
             string mineralFolder,
             SpectrumPoolHandle exactHandle,
             SpectrumGenerationConditionSnapshot requestedCondition)
         {
-            // 260907Codex: Directory enumeration and duplicate ranking remain cancelable without caching EMSA checks.
+            // 260907Codex: EMSA検証をキャッシュせず、フォルダー列挙と重複候補の順位付けの途中で中止可能にする。
             _preparationCancellationToken.ThrowIfCancellationRequested();
             if (!Directory.Exists(mineralFolder))
                 return exactHandle;
@@ -182,7 +183,7 @@ namespace MineraScope
             if (candidates.Length == 1)
                 return candidates[0].Handle;
 
-            // 260901Codex: Only duplicate compatible folders require the more expensive physical-file ranking.
+            // 260901Codex: 高負荷な実ファイルの順位付けは、互換フォルダーが重複した場合だけ行う。
             var bestCandidate = candidates
                 .OrderByDescending(CountValidCompletedSpectra)
                 .ThenBy(candidate => candidate.Handle.PoolFolder, StringComparer.OrdinalIgnoreCase)
@@ -195,7 +196,7 @@ namespace MineraScope
             string poolFolder,
             SpectrumGenerationConditionSnapshot requestedCondition)
         {
-            // 260907Codex: Check on every enumerated folder, including incompatible conditions.
+            // 260907Codex: 非互換条件も含め、列挙した全フォルダーで検査する。
             _preparationCancellationToken.ThrowIfCancellationRequested();
             string manifestPath = Path.Combine(poolFolder, ManifestFileName);
             var manifest = TryLoadForReuse(manifestPath);
@@ -211,8 +212,8 @@ namespace MineraScope
             return new ReusablePoolCandidate(handle, manifest);
         }
 
-        // 260901Codex: Prefer the duplicate compatible pool with the most physically valid EMSA files, not a stale Completed count.
-        // 260907Codex: Preserve the same physical-file ranking and inspect files anew, with cancellation between entries.
+        // 260901Codex: 古いCompleted件数でなく、物理的に有効なEMSAが最も多い互換poolを重複候補から選ぶ。
+        // 260907Codex: 同じ実ファイルの順位付けを保持し、項目間で中止を確認しながら改めてファイルを調べる。
         private int CountValidCompletedSpectra(ReusablePoolCandidate candidate)
         {
             int count = 0;
@@ -300,7 +301,7 @@ namespace MineraScope
             && SameDouble(left.LiveTime, right.LiveTime)
             && SameDouble(left.ProbeCurrent, right.ProbeCurrent);
 
-        // 260626Codex: Detector physics affects spectra, so reusable pool checks must match every persisted profile field.
+        // 260626Codex: 検出器の物理条件はスペクトルに影響するため、再利用判定では保存した全プロファイル欄を照合する。
         private static bool SameDetectorProfile(DetectorProfile left, DetectorProfile right) =>
             // 260803Codex: Name だけを除外し、全ての物理フィールド比較は従来どおり維持します。
             left.ChannelCount == right.ChannelCount
@@ -384,7 +385,7 @@ namespace MineraScope
             SpectrumPoolHandle Handle,
             SpectrumPoolManifest Manifest);
 
-        // 260907Codex: Metadata avoids rereading JSON while still observing normal external replacement/deletion.
+        // 260907Codex: メタデータでJSON再読込を避けつつ、通常の外部置換・削除を検出する。
         private sealed record CachedManifest(
             SpectrumPoolManifest Manifest,
             DateTime LastWriteTimeUtc,

@@ -7,7 +7,7 @@ using System.Text.Json;
 
 namespace MineraScope
 {
-    // 260901Codex: Persist one marker per DTSA-II Java attempt so a restarted app can refuse recovery while an orphan still writes EMSA files.
+    // 260901Codex: DTSA-IIのJava試行ごとにマーカーを保存し、孤児プロセスがEMSAを書いている間は再起動したアプリの復旧を拒否する。
     internal sealed class DtsaProcessRunMarker : IDisposable
     {
         private const string MarkerSearchPattern = "dtsa-run-*.json";
@@ -25,7 +25,7 @@ namespace MineraScope
             _document = document;
         }
 
-        // 260901Codex: Write the unresolved marker before Process.Start, closing the crash gap before a child PID exists.
+        // 260901Codex: Process.Start前に未解決マーカーを書き、子PIDが存在する前のクラッシュの隙間をなくす。
         public static DtsaProcessRunMarker CreatePending(string scriptName)
         {
             Directory.CreateDirectory(MarkerFolder);
@@ -43,7 +43,7 @@ namespace MineraScope
             return marker;
         }
 
-        // 260901Codex: Start and durably identify the child as one operation; failed registration kills it before the attempt can continue.
+        // 260901Codex: 子プロセスの起動と永続的な識別を一操作にし、登録失敗時は試行を続ける前に終了させる。
         public void StartAndRegister(Process process)
         {
             ArgumentNullException.ThrowIfNull(process);
@@ -70,15 +70,17 @@ namespace MineraScope
             }
             catch
             {
-                // 260901Codex: An unregistered writer is unsafe; kill its tree and retain the pending marker unless exit is confirmed.
+                // 260901Codex: 未登録の書き込みプロセスは安全でないためツリーごと終了させ、終了確認までは保留マーカーを残す。
                 if (TryKillAndConfirmExit(process))
                     TryDeleteMarker();
                 throw;
             }
         }
 
-        // 260901Codex: Inspect markers under the exclusive pool lease, then bridge the currently running old build with a conservative java.exe check.
-        public static bool TryEnsureNoDtsaProcessCanWrite(out string failureReason)
+        // 260901Codex: poolの排他的な利用権を持つ間にマーカーを検査する。
+        // 260917Claude: マーカー導入前の版向けの、java.exeの名前だけによる互換処理は削除し、全DTSA-II子プロセスをマーカーで追跡する。
+        // 260909Codex: 共有読み取り側は稼働中の書き込みを確認できるが、古いマーカーファイルを削除できない。
+        public static bool TryEnsureNoDtsaProcessCanWrite(out string failureReason, bool removeStaleMarkers = true)
         {
             var markerPaths = new List<string>();
             try
@@ -107,18 +109,14 @@ namespace MineraScope
                 return false;
             }
 
-            // 260901Codex: The active pre-marker build can only be covered conservatively; any remaining java.exe may be its orphan.
-            int? untrackedJavaProcessId = FindJavaProcessId();
-            if (untrackedJavaProcessId is not null)
+            // 260909Codex: 上記の稼働中書き込みの検査をすべて維持しつつ、読み取り専用の入力準備ではマーカーを変更しない。
+            if (!removeStaleMarkers)
             {
-                failureReason =
-                    $"java.exe（PID {untrackedJavaProcessId}）が動作中です。" +
-                    "旧版DTSA-IIの残存processと区別できないため、DTSA-II生成中でないことを確認し、" +
-                    "必要ならJava処理を終了してから再実行してください。";
-                return false;
+                failureReason = string.Empty;
+                return true;
             }
 
-            // 260901Codex: With no Java writer left, unresolved, corrupt, exited, or PID-reused markers are stale and safe to remove.
+            // 260901Codex: 追跡中のDTSA-II書き込みプロセスがなければ、未解決・破損・終了済み・PID再利用のマーカーは古く、安全に削除できる。
             foreach (string markerPath in markerPaths)
             {
                 try
@@ -151,7 +149,7 @@ namespace MineraScope
                 DurableJsonFile.Replace(_markerPath, JsonSerializer.Serialize(_document, JsonOptions));
         }
 
-        // 260901Codex: Cleanup failure leaves a conservative stale marker for the next exclusive lease inspection and must not replace the attempt result.
+        // 260901Codex: 削除失敗時は次の排他利用時の検査用にマーカーを保守的に残し、試行結果を置き換えない。
         private void TryDeleteMarker()
         {
             try
@@ -264,17 +262,6 @@ namespace MineraScope
             {
                 return null;
             }
-        }
-
-        private static int? FindJavaProcessId()
-        {
-            foreach (var process in Process.GetProcessesByName("java"))
-            {
-                using (process)
-                    return process.Id;
-            }
-
-            return null;
         }
 
         private sealed class MarkerDocument

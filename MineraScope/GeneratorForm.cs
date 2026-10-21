@@ -1093,7 +1093,7 @@ namespace MineraScope
             }
 
             // 260901Codex: Do not recover Pending entries while another process may still be producing their EMSA files.
-            if (!SpectrumPoolMutationLease.TryAcquire(out var poolMutationLease, out string leaseFailureReason))
+            if (!SpectrumPoolMutationLease.TryAcquireReadOnly(out var poolMutationLease, out string leaseFailureReason))
             {
                 MessageBox.Show(this, leaseFailureReason, "モデル作成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -1103,8 +1103,8 @@ namespace MineraScope
             _operationStopwatch.Restart();
             int trainingPreparationPoolCount = request.SelectedMineralSolutions.Count
                 * request.GetEffectiveSpectrumTimeAllocations().Count;
-            TrainLog($"学習準備を開始: {trainingPreparationPoolCount} pool の Pending と EMSA を確認します。");
-            SetStatusMarqueeWithElapsed("学習準備中: Pending回収");
+            TrainLog($"学習準備を開始: {trainingPreparationPoolCount} pool の生成完了済み EMSA を確認します。");
+            SetStatusMarqueeWithElapsed("学習準備中: 生成完了データ確認");
             buttonModelTrain.Enabled = false;
             buttonRunSpectrumGeneration.Enabled = false;
             checkBoxMeasurementTimePresetB.Enabled = false;
@@ -1118,10 +1118,13 @@ namespace MineraScope
             try
             {
                 // 260901Codex: 停止済みrunの完成ファイルを回収してから、全時間の厳格な学習pool選択をUIスレッド外で行います。
+                // 261021Codex: 生成中のpoolを書き換えず、公開済みスペクトルだけを学習へ渡す。
+                var trainingPoolWorkflow = new SpectrumPoolWorkflow(
+                    new SpectrumPoolRepository(new SpectrumConditionKeyBuilder()), _simulationPlanBuilder, persistManifestRepairs: false);
                 var preparationProgress = new Progress<SpectrumPoolPreparationProgress>(ReportSpectrumPoolPreparationProgress);
                 // 260908Codex: Share scoped manifest reads across recovery and selection, logging each phase to the UI and file.
                 var preparation = await Task.Run(
-                    () => _spectrumPoolWorkflow.PrepareTrainingPools(
+                    () => trainingPoolWorkflow.PrepareTrainingPools(
                         request,
                         preparationProgress,
                         preparationCancellationTokenSource.Token,
@@ -1134,9 +1137,7 @@ namespace MineraScope
                 preparationCancellationTokenSource.Token.ThrowIfCancellationRequested();
                 trainingPools = preparation.Pools;
                 shortages = preparation.Shortages;
-                TrainLog(
-                    $"Pending回収: 確認 {preparation.Recovery.ExaminedCount} 件 / 復旧 {preparation.Recovery.RecoveredCount} 件 / " +
-                    $"不正 {preparation.Recovery.InvalidCount} 件 / ファイルなし {preparation.Recovery.MissingFileCount} 件");
+                TrainLog("生成完了済みデータの確認が終了しました。生成中・未完了のデータは学習に使用しません。");
             }
             // 260908Codex: User cancellation stops before model creation and still releases the pool lease.
             catch (OperationCanceledException) when (preparationCancellationTokenSource.IsCancellationRequested)

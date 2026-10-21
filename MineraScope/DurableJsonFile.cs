@@ -17,12 +17,21 @@ namespace MineraScope
 
         public static string GetBackupPath(string path) => path + BackupSuffix;
 
+        // 260917Codex: 短いメタデータ読込・公開期間だけを直列化し、旧版が開かれていると失敗するWindowsのバックアップ置換に対応する。
+        internal static string ReadSnapshot(string path)
+        {
+            using var lease = PathOperationLease.Acquire(path, "JsonPublication", 30000);
+            return File.ReadAllText(path, Utf8NoBom);
+        }
+
         // 260728Claude: 一時ファイルへ書き → 物理ディスクまで flush → 原子的に差し替える。
         //   OS のバッファに載っただけでは電源断で失われ、「原子的に置き換わった空ファイル」が残りうるので
         //   flush を挟む順序が要点。File.Replace は差し替え前の内容を .bak へ退避するため、
         //   直前の正常値が必ず 1 世代残る (宛先が無い初回だけ Replace が使えないので Move)。
         public static void Replace(string path, string json)
         {
+            // 260917Codex: 初回ファイル作成も含め、poolの読み取り側と他の公開処理をプロセス間で調停する。
+            using var lease = PathOperationLease.Acquire(path, "JsonPublication", 30000);
             Directory.CreateDirectory(Path.GetDirectoryName(path) ?? DefaultStoragePaths.SettingsFolder);
             // 260728Claude: 一時ファイル名にプロセス ID を入れる。単一インスタンス制約が無いため、2 つ目の MineraScope が
             //   同時に保存を走らせると、共有名では「A が書いた .tmp を B が上書き → A が B の内容を置換 → B の Move が

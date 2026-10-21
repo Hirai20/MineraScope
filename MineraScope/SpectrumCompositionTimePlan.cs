@@ -10,12 +10,12 @@ using System.Text.Json;
 
 namespace MineraScope
 {
-    // 260907Codex: Persist one immutable, per-mineral composition/time schedule so Preset B can resume without reselecting compositions per live-time pool.
+    // 260907Codex: 鉱物ごとに不変の組成・時間予定表を1つ保存し、Preset Bの再開時に時間別poolごとの組成再選択を不要にする。
     internal sealed class SpectrumCompositionTimePlan
     {
         public const int CurrentSchemaVersion = 1;
         public const string CurrentPlannerVersion = "preset-b-composition-time-v1";
-        // 260907Codex: Unequal weights use a distinct identity; existing equal-weight plans keep their original version and row IDs.
+        // 260907Codex: 不等重みには別の識別情報を使い、既存の等重み計画の版と行IDを保持する。
         public const string ShuffledTimePlannerVersion = "preset-b-composition-time-shuffle-v1";
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -30,7 +30,7 @@ namespace MineraScope
         public List<SpectrumCompositionTimePlanEntry> Entries { get; set; } = [];
     }
 
-    // 260907Codex: This reference is duplicated in normal manifests, allowing a deleted plan document to be safely reconstructed from planned rows.
+    // 260907Codex: この参照を通常manifestにも複製し、削除した計画文書を予定行から安全に再構成できるようにする。
     internal sealed class SpectrumCompositionTimePlanReference
     {
         public string PlanId { get; set; } = string.Empty;
@@ -48,7 +48,7 @@ namespace MineraScope
         public int RepeatOrdinal { get; set; }
         public Dictionary<string, double> EndmemberFractions { get; set; } = [];
 
-        // 260907Codex: Verify the stored composition itself, not only a copied hash string that may outlive a damaged payload.
+        // 260907Codex: 破損した内容より長く残り得るハッシュ文字列だけでなく、保存した組成自体を検証する。
         public bool MatchesFractions(IReadOnlyDictionary<string, double> fractions) =>
             fractions.Count == EndmemberFractions.Count
             && EndmemberFractions.All(item => fractions.TryGetValue(item.Key, out double value)
@@ -56,7 +56,7 @@ namespace MineraScope
                 && Math.Abs(value - item.Value) <= 1e-9);
     }
 
-    // 260907Codex: Build the composition set once, then spend exact live-time quotas while avoiding repeat use of a time for the same composition where possible.
+    // 260907Codex: 組成集合を一度構築し、同じ組成での同一時間の反復を可能な範囲で避けつつ、ライブタイムの正確な割当数を使い切る。
     internal sealed class SpectrumCompositionTimePlanner
     {
         public const int DefaultSelectionSeed = 42;
@@ -68,9 +68,9 @@ namespace MineraScope
             IReadOnlyList<SpectrumTimeAllocation> allocations,
             IReadOnlyDictionary<double, string> conditionKeys,
             int selectionSeed = DefaultSelectionSeed,
-            // 260907Codex: The schedule, not rounded quota differences, determines whether weights are unequal.
+            // 260907Codex: 丸め後の割当数の差ではなく、予定表によって不等重みかを判定する。
             bool useShuffledTimeSlots = false,
-            // 260907Codex: Progress describes raw composition candidates; cancellation never changes a completed plan's random sequence.
+            // 260907Codex: 進捗は元の組成候補を示し、中止しても完了計画の乱数列を変えない。
             CancellationToken cancellationToken = default,
             Action<int>? onCandidateExamined = null)
         {
@@ -96,9 +96,9 @@ namespace MineraScope
             var occurrences = new List<CompositionOccurrence>(totalCount);
             for (int i = 0; i < totalCount; i++)
             {
-                // 260907Codex: Repeating compositions can create many rows even when the candidate set is small.
+                // 260907Codex: 候補集合が小さくても、組成の反復で多数の行を作れる。
                 cancellationToken.ThrowIfCancellationRequested();
-                // 260907Codex: Use the same selected composition for its key and endmember map.
+                // 260907Codex: キーと端成分対応表に、同じ選択組成を使う。
                 double[] fractions = candidates[i % candidates.Length];
                 occurrences.Add(new CompositionOccurrence(
                     solution.ComposeFractionKey(fractions),
@@ -106,7 +106,7 @@ namespace MineraScope
                     i / candidates.Length + 1));
             }
 
-            // 260907Codex: Preserve equal-weight schedules exactly while shuffling exact quotas for unequal weights.
+            // 260907Codex: 等重みの予定表を完全に保ち、不等重みでは正確な割当数をシャッフルする。
             var assignments = useShuffledTimeSlots
                 ? AssignShuffledLiveTimes(occurrences, allocations, random, cancellationToken)
                 : AssignLiveTimes(occurrences, allocations, random, cancellationToken);
@@ -129,7 +129,7 @@ namespace MineraScope
             cancellationToken.ThrowIfCancellationRequested();
             var plan = new SpectrumCompositionTimePlan
             {
-                // 260907Codex: Include the assignment algorithm in the persisted fingerprint and training provenance.
+                // 260907Codex: 保存する指紋と学習の由来情報に、割当アルゴリズムを含める。
                 PlannerVersion = useShuffledTimeSlots
                     ? SpectrumCompositionTimePlan.ShuffledTimePlannerVersion
                     : SpectrumCompositionTimePlan.CurrentPlannerVersion,
@@ -146,7 +146,7 @@ namespace MineraScope
             return plan;
         }
 
-        // 260907Codex: Keep progress cumulative across the bounded probe and random retries without materializing rejected candidates.
+        // 260907Codex: 拒否候補を実体化せず、制限した試行とランダム再試行を通して進捗を累積する。
         private static double[][] SelectCompositions(
             SolidSolution solution,
             double resolutionStep,
@@ -189,14 +189,14 @@ namespace MineraScope
             return selected.Values.ToArray();
         }
 
-        // 260907Codex: Shuffle a fixed number of time tickets so totals are exact without exhausting minority times on early compositions.
+        // 260907Codex: 固定数の時間チケットをシャッフルし、早い組成で少数側の時間を使い切らずに総数を正確にする。
         private static IReadOnlyList<LiveTimeAssignment> AssignShuffledLiveTimes(
             IReadOnlyList<CompositionOccurrence> occurrences,
             IReadOnlyList<SpectrumTimeAllocation> allocations,
             Random random,
             CancellationToken cancellationToken)
         {
-            // 260907Codex: Check before allocating tickets and throughout their shuffle while preserving the same random draws.
+            // 260907Codex: 同じ乱数の取得順を保ち、チケット確保前とシャッフル中に検査する。
             cancellationToken.ThrowIfCancellationRequested();
             double[] timeSlots = allocations
                 .SelectMany(item => Enumerable.Repeat(item.LiveTime, item.TargetSpectrumCount))
@@ -206,7 +206,7 @@ namespace MineraScope
             return occurrences.Select((occurrence, index) => new LiveTimeAssignment(occurrence, timeSlots[index])).ToArray();
         }
 
-        // 260907Codex: Cancellation is checked at each composition/time assignment without changing ordering or tie-breaks.
+        // 260907Codex: 順序や同率順位を変えず、各組成・時間の割当で中止を確認する。
         private static IReadOnlyList<LiveTimeAssignment> AssignLiveTimes(
             IReadOnlyList<CompositionOccurrence> occurrences,
             IReadOnlyList<SpectrumTimeAllocation> allocations,
@@ -289,7 +289,7 @@ namespace MineraScope
         private static string CreateHash(string text) =>
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 
-        // 260907Codex: Cancellation checks do not consume random values or alter the Fisher-Yates permutation.
+        // 260907Codex: 中止の検査で乱数を消費したりFisher-Yatesの順列を変えたりしない。
         private static void Shuffle<T>(IList<T> values, Random random, CancellationToken cancellationToken)
         {
             for (int index = values.Count - 1; index > 0; index--)
@@ -308,7 +308,7 @@ namespace MineraScope
         private sealed record LiveTimeAssignment(CompositionOccurrence Occurrence, double LiveTime);
     }
 
-    // 260907Codex: Plan documents are durable copies; manifests retain plan references and rows so deleting only this file never requires regenerating spectra.
+    // 260907Codex: 計画文書は永続コピーであり、manifestに参照と行を残すため、このファイルだけを消してもスペクトル再生成は不要である。
     internal static class SpectrumCompositionTimePlanStore
     {
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -324,15 +324,16 @@ namespace MineraScope
             string spectrumOutputFolder,
             SpectrumCompositionTimePlan proposed,
             IReadOnlyList<SpectrumPoolManifest> manifests,
-            // 260907Codex: Preview and baseline checks validate existing plans without creating or restoring files.
+            // 260907Codex: プレビューと基準動作の検証では、ファイルを作成・復元せず既存計画を検証する。
             bool persist = true)
         {
             string path = GetPlanPath(spectrumOutputFolder, proposed.MineralName, proposed.PlanId);
             if (File.Exists(path))
             {
-                var loaded = JsonSerializer.Deserialize<SpectrumCompositionTimePlan>(File.ReadAllText(path), JsonOptions)
+                // 260917Codex: 生成側が計画を並行公開・復元するときも、manifestと同じスナップショット読込を使う。
+                var loaded = JsonSerializer.Deserialize<SpectrumCompositionTimePlan>(DurableJsonFile.ReadSnapshot(path), JsonOptions)
                     ?? throw new InvalidOperationException($"組成・測定時間計画を読み込めませんでした: {path}");
-                // 260907Codex: Metadata and unique row payloads must agree with the deterministic proposal before accepting a saved plan.
+                // 260907Codex: 保存計画を受け入れる前に、メタデータと重複のない各行の内容を決定的な提案内容と一致させる。
                 if (!string.Equals(loaded.PlanFingerprint, proposed.PlanFingerprint, StringComparison.Ordinal)
                     || loaded.SchemaVersion != proposed.SchemaVersion
                     || loaded.PlannerVersion != proposed.PlannerVersion
@@ -358,12 +359,12 @@ namespace MineraScope
             }
 
             var plannedRows = manifests
-                // 260907Codex: A reused spectrum may reference this plan through an additive association rather than its original PlanId.
+                // 260907Codex: 再利用したスペクトルは、元のPlanIdでなく追加の関連付けでこの計画を参照してもよい。
                 .SelectMany(manifest => manifest.Spectra.SelectMany(entry => entry.GetPlanBindings()
                     .Where(identity => string.Equals(identity.PlanId, proposed.PlanId, StringComparison.Ordinal))
                     .Select(identity => new { Entry = entry, Identity = identity, LiveTime = manifest.Condition.SemEdxCondition.LiveTime })))
                 .ToArray();
-            // 260907Codex: A reference without all rows is evidence of an incomplete lost plan, not permission to silently create a new one.
+            // 260907Codex: 全行がない参照は失われた計画が不完全な根拠であり、暗黙の新規作成を許可するものではない。
             bool hasReference = manifests.Any(manifest => manifest.CompositionTimePlans
                 .Any(reference => reference.PlanId == proposed.PlanId));
             if (plannedRows.Length > 0 || hasReference)

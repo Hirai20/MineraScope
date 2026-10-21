@@ -5,10 +5,12 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
+// 260908Codex: 独立したスペクトル読取だけを並列化し、pool選択とmanifest修復は順序を保つ。
+using System.Threading.Tasks;
 
 namespace MineraScope
 {
-    // 260901Codex: Include live time and condition identity because one mineral can now have several independent shortages.
+    // 260901Codex: 1鉱物に複数の独立した不足があるため、ライブタイムと条件の識別情報を含める。
     internal sealed record SpectrumPoolShortage(
         string MineralName,
         int RequiredCount,
@@ -19,14 +21,14 @@ namespace MineraScope
         public int MissingCount => Math.Max(0, RequiredCount - CompletedCount);
     }
 
-    // 260901Codex: Report explicit Pending recovery outcomes without changing invalid or absent reservations.
+    // 260901Codex: 不正・欠損した予約を変えずに、Pending復旧の結果を明示する。
     internal sealed record PendingSpectrumRecoveryResult(
         int ExaminedCount,
         int RecoveredCount,
         int InvalidCount,
         int MissingFileCount);
 
-    // 260902Codex: Show pool preparation progress while manifest and EMSA entries are inspected off the UI thread.
+    // 260902Codex: UIスレッド外でmanifestとEMSA項目を検査する間、pool準備の進捗を表示する。
     internal sealed record SpectrumPoolPreparationProgress(
         string Phase,
         int PoolNumber,
@@ -37,10 +39,10 @@ namespace MineraScope
         int FilesChecked,
         int FilesToCheck,
         bool PoolCompleted,
-        // 260907Codex: Candidate checks are not EMSA reads; keep the preparation display explicit about its unit.
+        // 260907Codex: 候補検査はEMSA読込ではないため、準備表示の単位を明示する。
         string ItemName = "EMSA");
 
-    // 260907Codex: Recovery and exact sample selection belong to one bounded preparation operation.
+    // 260907Codex: 復旧と正確なサンプル選択を、範囲を限定した1回の準備操作にまとめる。
     internal sealed record SpectrumTrainingPreparationResult(
         PendingSpectrumRecoveryResult Recovery,
         IReadOnlyList<SpectrumTrainingPool> Pools,
@@ -77,7 +79,7 @@ namespace MineraScope
             _persistManifestRepairs = persistManifestRepairs;
         }
 
-        // 260901Codex: Count each effective time allocation independently while preserving the legacy single-time path.
+        // 260901Codex: 従来の単一時間経路を保持しつつ、有効な各時間割当を別々に集計する。
         public IReadOnlyList<SpectrumPoolShortage> GetShortages(
             ModelCreationRequest request,
             bool validateCompletedSpectra = true)
@@ -107,13 +109,13 @@ namespace MineraScope
             return shortages;
         }
 
-        // 260901Codex: Dry-run preview returns only deficient rows while keeping all filesystem access read-only.
+        // 260901Codex: 試行確認のプレビューは不足行だけを返し、ファイルシステムへの全アクセスを読み取り専用にする。
         public IReadOnlyList<SpectrumPoolShortage> PreviewShortages(ModelCreationRequest request) =>
             PreviewPoolStates(request)
                 .Where(item => item.MissingCount > 0)
                 .ToArray();
 
-        // 260901Codex: Include sufficient rows so headless output can show the actual reusable count for 20- and 50-second pools.
+        // 260901Codex: 充足済みの行も含め、非対話出力で20秒・50秒poolの実際の再利用可能件数を示す。
         public IReadOnlyList<SpectrumPoolShortage> PreviewPoolStates(ModelCreationRequest request)
         {
             if (request.UsesCompositionTimePlan)
@@ -150,7 +152,7 @@ namespace MineraScope
             return poolStates;
         }
 
-        // 260901Codex: Preview workload counts with production job allocation and no reservation side effects.
+        // 260901Codex: 本番のジョブ割当で作業量をプレビューし、予約の副作用は生じさせない。
         public SimulationExecutionPlanPreview PreviewMissingSimulationPlan(
             ModelCreationRequest request,
             out IReadOnlyList<SpectrumPoolShortage> shortages)
@@ -159,7 +161,7 @@ namespace MineraScope
             return _simulationPlanBuilder.CreatePreview(request, shortages);
         }
 
-        // 260901Codex: Aggregate status counts across every effective measurement-time pool.
+        // 260901Codex: 有効な全測定時間のpoolで、状態件数を集計する。
         public SpectrumPoolStatusCounts GetStatusCounts(
             ModelCreationRequest request,
             bool validateCompletedSpectra = true)
@@ -202,7 +204,7 @@ namespace MineraScope
             return new SpectrumPoolStatusCounts(completed, failed, missing, pending);
         }
 
-        // 260907Codex: B status is reported for scheduled rows only, so retained legacy spectra cannot make a completed plan look failed or incomplete.
+        // 260907Codex: Bの状態は予定行だけで報告し、保存した旧スペクトルのために完了計画が失敗・未完了に見えないようにする。
         private SpectrumPoolStatusCounts GetCompositionTimePlanStatusCounts(
             ModelCreationRequest request,
             bool validateCompletedSpectra)
@@ -240,13 +242,17 @@ namespace MineraScope
             return new SpectrumPoolStatusCounts(completed, failed, missing, pending);
         }
 
-        // 260907Codex: The caller holds the pool mutation lease. B shares manifest reads across recovery/selection for one mineral at a time, bounding cache memory.
+        // 260907Codex: 呼び出し側がpool変更用利用権を保持する。Bは1鉱物ずつ復旧・選択間でmanifest読込を共有し、キャッシュメモリを抑える。
         public SpectrumTrainingPreparationResult PrepareTrainingPools(
             ModelCreationRequest request,
             IProgress<SpectrumPoolPreparationProgress>? progress = null,
             CancellationToken cancellationToken = default,
-            Action<string>? log = null)
+            Action<string>? log = null,
+            // 260908Codex: 実験では既存の準備呼び出しを変えず、EMSAの同時読込数を制限できる。
+            int validationParallelism = 1)
         {
+            // 260908Codex: poolを開く・修復する前に、不正な上限を拒否する。
+            ArgumentOutOfRangeException.ThrowIfLessThan(validationParallelism, 1);
             var timer = Stopwatch.StartNew();
             var recovery = new PendingSpectrumRecoveryResult(0, 0, 0, 0);
             var pools = new List<SpectrumTrainingPool>();
@@ -256,7 +262,7 @@ namespace MineraScope
             int poolOffset = 0;
             int timeCount = request.GetEffectiveSpectrumTimeAllocations().Count;
             int totalPoolCount = request.SelectedMineralSolutions.Count * timeCount;
-            // 260907Codex: Legacy selection consumes one shared Random across minerals; do not partition or reseed that path.
+            // 260907Codex: 旧形式の選択は鉱物間で1つのRandomを共用し、その経路を分割・再初期化しない。
             IEnumerable<ModelCreationRequest> batches = request.UsesCompositionTimePlan
                 ? request.SelectedMineralSolutions.Select(solution => request with { SelectedMineralSolutions = [solution] })
                 : [request];
@@ -268,13 +274,16 @@ namespace MineraScope
                 var batchProgress = new OffsetPreparationProgress(progress, poolOffset, totalPoolCount);
                 var recoveryTimer = Stopwatch.StartNew();
                 var recovered = workflow.RecoverPendingSpectra(batch, batchProgress, cancellationToken);
-                log?.Invoke($"学習準備 Pending回収: {string.Join(", ", batch.SelectedMineralSolutions.Select(item => item.Name))}, {recoveryTimer.Elapsed.TotalSeconds:F2}秒");
+                // 260917Codex: 読み取り専用の準備では、生成側の保留出力を復旧しない。
+                if (_persistManifestRepairs)
+                    log?.Invoke($"学習準備 Pending回収: {string.Join(", ", batch.SelectedMineralSolutions.Select(item => item.Name))}, {recoveryTimer.Elapsed.TotalSeconds:F2}秒");
                 recovery = new PendingSpectrumRecoveryResult(
                     recovery.ExaminedCount + recovered.ExaminedCount,
                     recovery.RecoveredCount + recovered.RecoveredCount,
                     recovery.InvalidCount + recovered.InvalidCount,
                     recovery.MissingFileCount + recovered.MissingFileCount);
-                pools.AddRange(workflow.CreateTrainingPools(batch, out var batchShortages, batchProgress, cancellationToken, log));
+                // 260908Codex: 読込上限を、鉱物ごとの準備スコープへ伝える。
+                pools.AddRange(workflow.CreateTrainingPools(batch, out var batchShortages, batchProgress, cancellationToken, log, validationParallelism));
                 shortages.AddRange(batchShortages);
                 manifestReads += repository.ManifestReadCount;
                 manifestCacheHits += repository.ManifestCacheHitCount;
@@ -286,7 +295,7 @@ namespace MineraScope
             return new SpectrumTrainingPreparationResult(recovery, shortages.Count == 0 ? pools : [], shortages);
         }
 
-        // 260907Codex: Synchronously translate per-mineral counters; the caller's IProgress owns UI-thread dispatch.
+        // 260907Codex: 鉱物別件数を同期的に変換し、UIスレッドへの配送は呼び出し側のIProgressに任せる。
         private sealed class OffsetPreparationProgress(
             IProgress<SpectrumPoolPreparationProgress>? progress,
             int poolOffset,
@@ -300,17 +309,21 @@ namespace MineraScope
             });
         }
 
-        // 260901Codex: Select the exact target from each time pool; explicit schedules carry source metadata and composition stratification.
+        // 260901Codex: 各時間poolから目標数を正確に選び、明示予定表に元メタデータと組成の層化情報を持たせる。
         public IReadOnlyList<SpectrumTrainingPool> CreateTrainingPools(
             ModelCreationRequest request,
             out IReadOnlyList<SpectrumPoolShortage> shortages,
             IProgress<SpectrumPoolPreparationProgress>? progress = null,
             CancellationToken cancellationToken = default,
-            // 260907Codex: Phase timings use an injected logger; headless and fixture callers need not write logs.
-            Action<string>? log = null)
+            // 260907Codex: 工程時間には注入したロガーを使い、非対話・テストの呼び出し側にログ書込を強制しない。
+            Action<string>? log = null,
+            // 260908Codex: 既存の生成・学習経路向けの公開既定値は、逐次検証のままにする。
+            int validationParallelism = 1)
         {
+            // 260908Codex: 計画あり・旧形式の両経路で、同じ選択と修復の順序を保持する。
+            ArgumentOutOfRangeException.ThrowIfLessThan(validationParallelism, 1);
             if (request.UsesCompositionTimePlan)
-                return CreateCompositionTimeTrainingPools(request, out shortages, progress, cancellationToken, log);
+                return CreateCompositionTimeTrainingPools(request, out shortages, progress, cancellationToken, log, validationParallelism);
 
             var pools = new List<SpectrumTrainingPool>(request.SelectedMineralSolutions.Count);
             var allocations = request.GetEffectiveSpectrumTimeAllocations();
@@ -321,7 +334,7 @@ namespace MineraScope
                 request.SelectedMineralSolutions.Count * allocations.Count);
             var shortageList = new List<SpectrumPoolShortage>();
 
-            // 260901Codex: Load and validate every pool once, avoiding a second full EMSA scan before selection.
+            // 260901Codex: 各poolを一度だけ読込・検証し、選択前の2回目の全EMSA走査を避ける。
             foreach (var solution in request.SelectedMineralSolutions)
             {
                 foreach (var allocation in allocations)
@@ -359,7 +372,8 @@ namespace MineraScope
                                     totalCount,
                                     poolCompleted: false);
                         },
-                        cancellationToken: cancellationToken);
+                        // 260908Codex: 読み込んだmanifestはこのスレッドに保持し、ファイル検査だけを並行実行する。
+                        cancellationToken: cancellationToken, validationParallelism: validationParallelism);
                     preparedStates.Add(new TrainingPoolSelectionState(solution, allocation, state));
                     if (state.CompletedEntries.Count < allocation.TargetSpectrumCount)
                         shortageList.Add(new SpectrumPoolShortage(
@@ -415,7 +429,7 @@ namespace MineraScope
                                     state.Handle.ManifestPath)
                                 : null))
                         .ToArray();
-                    // 260901Codex: A file can disappear between the initial shortage pass and selection; return a shortage instead of throwing.
+                    // 260901Codex: 最初の不足確認と選択の間にファイルが消えた場合、例外でなく不足として返す。
                     if (candidates.Length < allocation.TargetSpectrumCount)
                     {
                         shortages =
@@ -465,7 +479,7 @@ namespace MineraScope
             return pools;
         }
 
-        // 260901Codex: Reserve each time in its normal condition-key manifest, then build one bounded batch per mineral.
+        // 260901Codex: 通常の条件キーmanifestへ時間ごとに予約し、鉱物ごとに制限付きバッチを1つ作る。
         public SimulationExecutionPlan CreateMissingSimulationPlan(
             ModelCreationRequest request,
             out IReadOnlyList<SpectrumPoolShortage> shortages,
@@ -505,8 +519,8 @@ namespace MineraScope
                         0,
                         0,
                         poolCompleted: false);
-                    // 260902Codex: The GUI passes false here so a restart only checks file existence;
-                    // callers retaining the default still receive the original full EMSA integrity check.
+                    // 260902Codex: GUIはここでfalseを渡し、再開時はファイルの存在だけを確認する。
+                    // 既定値を使う呼び出し側には、従来の完全なEMSA完全性検証を適用する。
                     var state = LoadState(
                         allocationRequest,
                         solution,
@@ -587,12 +601,17 @@ namespace MineraScope
             }
         }
 
-        // 260901Codex: Call only when no DTSA-II run is active; valid completed files are recovered while invalid or absent Pending entries remain retryable.
+        // 260901Codex: DTSA-IIが稼働していない時だけ呼ぶ。有効な完成ファイルを復旧し、不正・欠損のPending項目は再試行可能に残す。
         public PendingSpectrumRecoveryResult RecoverPendingSpectra(
             ModelCreationRequest request,
             IProgress<SpectrumPoolPreparationProgress>? progress = null,
             CancellationToken cancellationToken = default)
         {
+            // 260917Codex: 構文上完成したPendingファイルでも、並行する生成側が所有している場合がある。
+            // 復旧はシミュレーションだけが行い、読み取り側はCompleted状態の公開を待つ。
+            if (!_persistManifestRepairs)
+                return new PendingSpectrumRecoveryResult(0, 0, 0, 0);
+
             int examinedCount = 0;
             int recoveredCount = 0;
             int invalidCount = 0;
@@ -682,8 +701,9 @@ namespace MineraScope
                                 poolCompleted: false);
                     }
 
-                    // 260907Codex: Read-only preparation may recover in memory but must not write a manifest repair.
-                    if (changed && _persistManifestRepairs)
+                    // 260907Codex: 復旧した完了状態を保存する。
+                    // 260917Codex: 読み取り専用の呼び出しは復旧前に戻るため、この分岐にはシミュレーションの書き込み側だけが到達する。
+                    if (changed)
                         _repository.Save(handle, manifest);
 
                     ReportPreparationProgress(
@@ -707,7 +727,7 @@ namespace MineraScope
                 missingFileCount);
         }
 
-        // 260907Codex: A read-only preview derives the same deterministic plan but never creates a plan file, reservation, or manifest tag.
+        // 260907Codex: 読み取り専用プレビューでも同じ決定的計画を求めるが、計画ファイル・予約・manifestタグは作らない。
         private IReadOnlyList<SpectrumPoolShortage> PreviewCompositionTimePlanStates(ModelCreationRequest request) =>
             CollectCompositionTimePlanShortages(
                 request,
@@ -715,7 +735,7 @@ namespace MineraScope
                 persistPlan: false,
                 includeLegacyCompleted: true);
 
-        // 260907Codex: After a plan has been reserved, only plan-tagged Completed rows satisfy its shortage. Legacy rows are adopted during reservation, never silently at training time.
+        // 260907Codex: 計画予約後の不足を満たすのは計画タグ付きCompleted行だけとし、旧行は予約時に取り込み、学習時に暗黙に採用しない。
         private IReadOnlyList<SpectrumPoolShortage> GetCompositionTimePlanShortages(
             ModelCreationRequest request,
             bool validateCompletedSpectra)
@@ -724,11 +744,11 @@ namespace MineraScope
                 validateCompletedSpectra,
                 persistPlan: true,
                 includeLegacyCompleted: false)
-                // 260907Codex: Match the legacy contract: a completed plan has no shortages, not five zero-shortage rows.
+                // 260907Codex: 従来の契約に合わせ、完了計画は不足0の5行ではなく、不足行なしとする。
                 .Where(item => item.MissingCount > 0)
                 .ToArray();
 
-        // 260907Codex: Preview may count exact legacy rows before reservation; all later status and training checks require rows already bound to the saved plan.
+        // 260907Codex: プレビューでは予約前に一致する旧行を数えられるが、以後の状態・学習検証では保存計画へ結び付いた行を必須にする。
         private IReadOnlyList<SpectrumPoolShortage> CollectCompositionTimePlanShortages(
             ModelCreationRequest request,
             bool validateCompletedSpectra,
@@ -755,7 +775,7 @@ namespace MineraScope
             return shortages;
         }
 
-        // 260907Codex: Reserve every missing planned row once. Existing Completed rows are adopted only when their composition and physical pool exactly match a scheduled row.
+        // 260907Codex: 欠損予定行を各1回予約し、既存Completed行は組成と物理poolが予定行と完全一致する場合だけ採用する。
         private SimulationExecutionPlan CreateCompositionTimeSimulationPlan(
             ModelCreationRequest request,
             out IReadOnlyList<SpectrumPoolShortage> shortages,
@@ -837,13 +857,15 @@ namespace MineraScope
             return _simulationPlanBuilder.CreatePlan(request, reservations);
         }
 
-        // 260907Codex: Training consumes exactly the planned rows. A missing row remains a shortage instead of being replaced by another spectrum from the same pool.
+        // 260907Codex: 学習は予定行そのものを使い、欠損行を同じpoolの別スペクトルで代替せず不足とする。
         private IReadOnlyList<SpectrumTrainingPool> CreateCompositionTimeTrainingPools(
             ModelCreationRequest request,
             out IReadOnlyList<SpectrumPoolShortage> shortages,
             IProgress<SpectrumPoolPreparationProgress>? progress,
             CancellationToken cancellationToken,
-            Action<string>? log)
+            Action<string>? log,
+            // 260908Codex: 計画の関連付けやmanifest解決ではなく、採用行そのものの検査だけを並列化する。
+            int validationParallelism)
         {
             var pools = new List<SpectrumTrainingPool>(request.SelectedMineralSolutions.Count);
             var shortageList = new List<SpectrumPoolShortage>();
@@ -853,7 +875,7 @@ namespace MineraScope
             foreach (var solution in request.SelectedMineralSolutions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                // 260907Codex: Resolve and verify plan identities before opening spectra; retained files outside this plan are not training inputs.
+                // 260907Codex: スペクトルを開く前に計画の識別情報を解決・検証し、この計画外の保存ファイルは学習入力にしない。
                 var state = BuildCompositionTimePlanState(request, solution, validateCompletedSpectra: true, persistPlan: true,
                     deferCompletedSpectrumValidation: true, progress: progress, completedPoolCount: poolNumber,
                     cancellationToken: cancellationToken, log: log);
@@ -868,7 +890,7 @@ namespace MineraScope
                         .Where(item => item.Pool == pool && item.Entry?.Status == SpectrumManifestStatus.Completed)
                         .Select(item => item.Entry!)
                         .ToArray();
-                    // 260907Codex: Keep each pool's identity and total in one progress value; only checked/completed counts change during validation.
+                    // 260907Codex: 各poolの識別情報と総数を1つの進捗値に保持し、検証中は検査済み・完了件数だけを変える。
                     var poolProgress = new SpectrumPoolPreparationProgress(
                         "採用EMSA確認", poolNumber, totalPoolCount, poolNumber - 1,
                         solution.Name, pool.Allocation.LiveTime, 0, entriesToCheck.Length, PoolCompleted: false);
@@ -878,7 +900,8 @@ namespace MineraScope
                         {
                             if (checkedCount == totalCount || checkedCount % 128 == 0)
                                 progress?.Report(poolProgress with { FilesChecked = checkedCount });
-                        }, cancellationToken);
+                        // 260908Codex: 制限付き読込バッチごとに、項目順で結果と進捗を適用する。
+                        }, cancellationToken, validationParallelism);
                     if (changed && _persistManifestRepairs)
                         _repository.Save(pool.State.Handle, pool.State.Manifest);
                     validatedCount += entriesToCheck.Length;
@@ -912,7 +935,7 @@ namespace MineraScope
                             item.Entry.SimulationId,
                             item.Pool.State.Handle.ManifestPath,
                             state.Plan.PlanId,
-                            // 260907Codex: Record the actual equal/unequal assignment algorithm with each selected source.
+                            // 260907Codex: 各採用元とともに、実際の等重み・不等重みの割当アルゴリズムを記録する。
                             state.Plan.PlannerVersion)))
                     .ToArray();
                 pools.Add(new SpectrumTrainingPool(
@@ -931,13 +954,13 @@ namespace MineraScope
             return pools;
         }
 
-        // 260907Codex: Resolve all condition-key pools first because those keys are part of each planned physical row hash.
+        // 260907Codex: 各予定実体行のハッシュに条件キーを含むため、先に全条件キーのpoolを解決する。
         private CompositionTimePlanState BuildCompositionTimePlanState(
             ModelCreationRequest request,
             SolidSolution solution,
             bool validateCompletedSpectra,
             bool persistPlan,
-            // 260907Codex: Only exact-plan training defers physical checks until its bindings are known; generation and preview keep full pool checks.
+            // 260907Codex: 厳密な計画学習だけは関連付け確定まで実体検証を遅延し、生成とプレビューはpool全体の検証を維持する。
             bool deferCompletedSpectrumValidation = false,
             IProgress<SpectrumPoolPreparationProgress>? progress = null,
             int completedPoolCount = 0,
@@ -946,7 +969,7 @@ namespace MineraScope
         {
             var pools = new List<CompositionTimePoolState>();
             var timer = Stopwatch.StartNew();
-            // 260907Codex: Resolve the validated time allocation once for pool loading and deterministic plan construction.
+            // 260907Codex: 検証済み時間割当を一度解決し、pool読込と決定的な計画構築に使う。
             var allocations = request.GetEffectiveSpectrumTimeAllocations();
             int totalPoolCount = request.SelectedMineralSolutions.Count * allocations.Count;
             foreach (var allocation in allocations)
@@ -967,7 +990,7 @@ namespace MineraScope
             var conditionKeys = pools.ToDictionary(item => item.Allocation.LiveTime, item => item.State.Handle.ConditionKey);
             var planner = new SpectrumCompositionTimePlanner();
             timer.Restart();
-            // 260907Codex: Candidate counts keep long constrained enumeration visible and cancellable without changing random draws or plan hashes.
+            // 260907Codex: 乱数取得や計画ハッシュを変えず、候補件数で長い制約付き列挙の進捗と中止可能性を保つ。
             void ReportCandidateProgress(int count) => progress?.Report(new SpectrumPoolPreparationProgress(
                 "組成・時間計画の再計算", completedPoolCount + 1, totalPoolCount, completedPoolCount,
                 solution.Name, 0, count, 0, false, "組成候補"));
@@ -976,7 +999,7 @@ namespace MineraScope
                 request.Simulation.ResolutionStep,
                 allocations,
                 conditionKeys,
-                // 260907Codex: Equal ratios may round to unequal counts; only genuinely unequal weights select quota shuffling.
+                // 260907Codex: 等しい比率でも丸め後の件数は異なり得るため、本来の重みが不等な場合だけ割当数をシャッフルする。
                 useShuffledTimeSlots: request.SpectrumTimeSchedule!.TimeWeights.Select(item => item.Weight).Distinct().Skip(1).Any(),
                 cancellationToken: cancellationToken, onCandidateExamined: ReportCandidateProgress);
             log?.Invoke($"学習準備 組成・時間計画の再計算: {solution.Name}, {timer.Elapsed.TotalSeconds:F2}秒");
@@ -984,7 +1007,7 @@ namespace MineraScope
             ReportPreparationProgress(progress, "保存計画との照合", completedPoolCount + 1, totalPoolCount,
                 completedPoolCount, solution.Name, 0, 0, 0, poolCompleted: false);
             timer.Restart();
-            // 260907Codex: Both read-only and mutating paths validate persisted plans; only the latter may restore a missing document.
+            // 260907Codex: 読み取り専用・変更可能の両経路で保存計画を検証し、欠損文書の復元は後者だけに許す。
             SpectrumCompositionTimePlan plan = SpectrumCompositionTimePlanStore.LoadOrCreate(
                 request.Paths.SpectrumOutputFolder,
                 proposed,
@@ -995,7 +1018,7 @@ namespace MineraScope
             return new CompositionTimePlanState(plan, pools);
         }
 
-        // 260907Codex: The headless and GUI preview must not create a manifest or write repair state while counting exact reusable planned rows.
+        // 260907Codex: 非対話・GUIのプレビューは、再利用可能な正確な予定行を数える間にmanifest作成や修復保存を行わない。
         private PoolState LoadPreviewState(ModelCreationRequest request, SolidSolution solution)
         {
             var handle = _repository.ResolvePool(
@@ -1010,7 +1033,7 @@ namespace MineraScope
                     MineralName = solution.Name,
                     Condition = handle.Condition
                 };
-            // 260907Codex: Downgrade stale Completed flags in memory so planned bindings cannot count missing/corrupt files in preview.
+            // 260907Codex: 古いCompletedフラグをメモリ内で下げ、プレビューで計画の関連付けが欠損・破損ファイルを数えないようにする。
             foreach (var entry in manifest.Spectra.Where(entry => entry.Status == SpectrumManifestStatus.Completed))
                 if (!EmsaSpectrumIntegrityValidator.TryValidate(
                     Path.Combine(handle.PoolFolder, entry.FileName),
@@ -1023,7 +1046,7 @@ namespace MineraScope
             return new PoolState(handle, manifest, completed);
         }
 
-        // 260907Codex: Match already planned entries first, then optionally bind legacy Completed rows one-to-one by exact composition. Only generation mutates manifests or creates rows.
+        // 260907Codex: 計画済み項目を先に照合し、必要なら組成の完全一致で旧Completed行を一対一に結び付ける。manifest変更と行作成は生成時だけ行う。
         private static IReadOnlyList<CompositionTimePlanBinding> BuildPlanBindings(
             SolidSolution solution,
             CompositionTimePlanState state,
@@ -1036,7 +1059,7 @@ namespace MineraScope
             var usedEntries = new HashSet<SpectrumManifestEntry>();
             foreach (var pool in state.Pools)
             {
-                // 260907Codex: Resolve every association for this plan while retaining associations to older plans.
+                // 260907Codex: 以前の計画との関連を保ちつつ、この計画のすべての関連付けを解決する。
                 foreach (var row in pool.State.Manifest.Spectra.SelectMany(entry => entry.GetPlanBindings()
                     .Where(identity => string.Equals(identity.PlanId, state.Plan.PlanId, StringComparison.Ordinal))
                     .Select(identity => new { Entry = entry, Identity = identity })))
@@ -1046,7 +1069,7 @@ namespace MineraScope
                     if (identity.PlanEntryId is null
                         || !expectedById.TryGetValue(identity.PlanEntryId, out var planned)
                         || !string.Equals(identity.PlanRowHash, planned.RowHash, StringComparison.Ordinal)
-                        // 260907Codex: Reject mislabeled manifest rows even if their copied plan hash still matches.
+                        // 260907Codex: コピーした計画ハッシュが一致していても、誤ったラベルのmanifest行は拒否する。
                         || identity.PlanRepeatOrdinal != planned.RepeatOrdinal
                         || !planned.MatchesFractions(entry.EndmemberFractions)
                         || Math.Abs(planned.LiveTime - pool.Allocation.LiveTime) > 1e-9
@@ -1063,7 +1086,7 @@ namespace MineraScope
                 var pool = poolByLiveTime[planned.LiveTime];
                 SpectrumManifestEntry? legacyEntry = includeLegacyCompleted
                     ? pool.State.CompletedEntries
-                        // 260907Codex: Reuse exact cells from prior plans too, once per new plan; their original associations remain intact.
+                        // 260907Codex: 前の計画の正確なセルも新計画につき1回再利用し、元の関連付けは保持する。
                         .Where(entry => !usedEntries.Contains(entry)
                             && string.Equals(
                                 solution.ComposeFractionKey(entry.EndmemberFractions),
@@ -1110,7 +1133,7 @@ namespace MineraScope
             SpectrumCompositionTimePlan plan,
             SpectrumCompositionTimePlanEntry planned)
         {
-            // 260907Codex: Keep the original fields backward-compatible and add a separate association for each later plan.
+            // 260907Codex: 元のフィールドの後方互換性を保ち、後続計画ごとに別の関連付けを追加する。
             if (!string.IsNullOrWhiteSpace(entry.PlanId))
             {
                 entry.AdditionalPlanBindings.Add(new SpectrumManifestPlanBinding
@@ -1128,7 +1151,7 @@ namespace MineraScope
             entry.PlanRepeatOrdinal = planned.RepeatOrdinal;
         }
 
-        // 260901Codex: Distinguish the same mineral's independent shortages by measurement time.
+        // 260901Codex: 同じ鉱物の独立した不足を、測定時間で区別する。
         public static string FormatShortageMessage(IEnumerable<SpectrumPoolShortage> shortages) =>
             string.Join(
                 Environment.NewLine,
@@ -1144,8 +1167,10 @@ namespace MineraScope
             bool validateCompletedSpectra = true,
             Action<int, int>? onCompletedSpectrumChecked = null,
             CancellationToken cancellationToken = default,
-            // 260907Codex: Exact-plan training first loads metadata only, then validates its selected Completed rows with the same validator.
-            bool deferCompletedSpectrumValidation = false)
+            // 260907Codex: 厳密な計画学習では先にメタデータだけを読み、選択したCompleted行を同じ検証器で確認する。
+            bool deferCompletedSpectrumValidation = false,
+            // 260908Codex: 任意の同時読込数は、学習準備だけから渡す。
+            int validationParallelism = 1)
         {
             var handle = _repository.ResolvePool(
                 request.Paths.SpectrumOutputFolder,
@@ -1155,7 +1180,7 @@ namespace MineraScope
             var manifest = _repository.LoadOrCreate(handle);
             bool changed = EnsureNextSimulationIdAfterManifest(manifest);
 
-            // 260620Codex: Clean existing manifest labels so retries and training use percent-grid fractions.
+            // 260620Codex: 既存manifestのラベルを整え、再試行と学習で百分率グリッド上の比率を使う。
             foreach (var entry in manifest.Spectra)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -1167,7 +1192,8 @@ namespace MineraScope
                 .ToArray();
             if (!deferCompletedSpectrumValidation)
                 changed |= ValidateCompletedEntries(handle, completedEntriesToCheck, validateCompletedSpectra,
-                    onCompletedSpectrumChecked, cancellationToken);
+                    // 260908Codex: 読み取り専用の検証が順序どおり戻ってから、manifest状態を変更する。
+                    onCompletedSpectrumChecked, cancellationToken, validationParallelism);
 
             // 260803Codex: 読み取り専用でも同じ修復後データを返し、永続化だけを止めて採取値を維持します。
             if (changed && _persistManifestRepairs)
@@ -1180,16 +1206,51 @@ namespace MineraScope
             return new PoolState(handle, manifest, completedEntries);
         }
 
-        // 260907Codex: Share identical integrity/error handling between legacy full-pool checks and B's exact selected-row checks.
+        // 260907Codex: 旧式の全pool検査とBの厳密な採用行検査で、同じ完全性検証・エラー処理を共用する。
         private static bool ValidateCompletedEntries(
             SpectrumPoolHandle handle,
             SpectrumManifestEntry[] completedEntriesToCheck,
             bool validateCompletedSpectra,
             Action<int, int>? onCompletedSpectrumChecked,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            // 260908Codex: 既存の検証利用側では、ファイルを1つずつ読み取る。
+            int validationParallelism = 1)
         {
+            // 260908Codex: 進行中の読込と結果バッファーを進捗1区間に制限し、リポジトリ状態をworkerへ渡さない。
+            int batchSize = validationParallelism > 1 ? 128 : 1;
+            var failureReasons = new string?[Math.Min(batchSize, completedEntriesToCheck.Length)];
+            var options = new ParallelOptions { MaxDegreeOfParallelism = validationParallelism, CancellationToken = cancellationToken };
             bool changed = false;
-            for (int completedIndex = 0; completedIndex < completedEntriesToCheck.Length; completedIndex++)
+            for (int batchStart = 0; batchStart < completedEntriesToCheck.Length; batchStart += batchSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int count = Math.Min(batchSize, completedEntriesToCheck.Length - batchStart);
+                if (validationParallelism > 1 && count > 1)
+                    Parallel.For(0, count, options, index => failureReasons[index] = ValidateFile(batchStart + index));
+                else
+                    failureReasons[0] = ValidateFile(batchStart);
+
+                // 260908Codex: workerは項目変更やコールバック呼出をせず、修復と進捗の意味を決定的に保つ。
+                for (int index = 0; index < count; index++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int completedIndex = batchStart + index;
+                    if (failureReasons[index] is string failureReason)
+                    {
+                        var entry = completedEntriesToCheck[completedIndex];
+                        entry.Status = SpectrumManifestStatus.Missing;
+                        entry.FailureReason = failureReason;
+                        changed = true;
+                    }
+
+                    onCompletedSpectrumChecked?.Invoke(completedIndex + 1, completedEntriesToCheck.Length);
+                }
+            }
+
+            return changed;
+
+            // 260908Codex: 逐次・並列の読取で、変更していない実体検証器と失敗文言を共用する。
+            string? ValidateFile(int completedIndex)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var entry = completedEntriesToCheck[completedIndex];
@@ -1197,26 +1258,17 @@ namespace MineraScope
                 bool valid = File.Exists(spectrumPath);
                 string failureReason = valid ? string.Empty : "出力ファイルが見つかりませんでした。";
                 if (valid && validateCompletedSpectra)
-                    // 260901Codex: Training and explicit integrity paths retain full EMSA validation; generation resumes use the fast existence check.
+                    // 260901Codex: 学習と明示的な完全性検証では全EMSAを検証し、生成の再開では高速な存在確認を使う。
                     valid = EmsaSpectrumIntegrityValidator.TryValidate(
                         spectrumPath,
                         handle.Condition.SemEdxCondition,
                         out failureReason);
 
-                if (!valid)
-                {
-                    entry.Status = SpectrumManifestStatus.Missing;
-                    entry.FailureReason = failureReason;
-                    changed = true;
-                }
-
-                onCompletedSpectrumChecked?.Invoke(completedIndex + 1, completedEntriesToCheck.Length);
+                return valid ? null : failureReason;
             }
-
-            return changed;
         }
 
-        // 260902Codex: Keep preparation progress reporting in one place so worker-thread scans never touch WinForms controls.
+        // 260902Codex: 準備進捗の報告を一か所にまとめ、workerスレッドの走査からWinFormsコントロールへ触れないようにする。
         private static void ReportPreparationProgress(
             IProgress<SpectrumPoolPreparationProgress>? progress,
             string phase,
@@ -1244,7 +1296,7 @@ namespace MineraScope
             SolidSolution solution,
             PoolState state,
             double resolutionStep,
-            // 260901Codex: Preserve the allocation condition and target on every reservation for multi-time job packing.
+            // 260901Codex: 各予約に割当条件と目標を保持し、複数時間のジョブをまとめる。
             SemEdxCondition semEdxCondition,
             int targetSpectrumCount,
             int missingCount)
@@ -1424,7 +1476,7 @@ namespace MineraScope
             SpectrumPoolHandle handle,
             SpectrumManifestEntry entry,
             double resolutionStep,
-            // 260901Codex: Job construction uses the request condition while the handle supplies the resolved compatible pool identity.
+            // 260901Codex: ジョブ構築は要求条件を使い、ハンドルは解決した互換poolの識別情報を渡す。
             SemEdxCondition semEdxCondition,
             int targetSpectrumCount)
         {
@@ -1444,7 +1496,7 @@ namespace MineraScope
                 targetSpectrumCount);
         }
 
-        // 260620Codex: Reuse the same manifest lookup path for cleanup and DTSA-II reservation inputs.
+        // 260620Codex: 削除処理とDTSA-II予約入力で、同じmanifest検索経路を再利用する。
         private static double[] ReadEndmemberFractions(SolidSolution solution, SpectrumManifestEntry entry) =>
             solution.Members
                 .Select(member => TryGetFraction(entry.EndmemberFractions, member.Name, out double fraction)
@@ -1452,7 +1504,7 @@ namespace MineraScope
                     : 0)
                 .ToArray();
 
-        // 260620Codex: Normalize old manifest entries in place, including tiny negative values from past runs.
+        // 260620Codex: 過去の微小な負値も含め、旧manifest項目をその場で正規化する。
         private static bool NormalizeManifestEntryFractions(
             SolidSolution solution,
             SpectrumManifestEntry entry,
@@ -1468,7 +1520,7 @@ namespace MineraScope
             return true;
         }
 
-        // 260620Codex: Keep comparisons exact so cleaned JSON values are written back once.
+        // 260620Codex: 比較を厳密に保ち、整えたJSON値を一度だけ書き戻す。
         private static bool ManifestFractionsMatch(
             SolidSolution solution,
             SpectrumManifestEntry entry,
@@ -1485,7 +1537,7 @@ namespace MineraScope
             return true;
         }
 
-        // 260620Codex: Accept legacy case differences without preserving duplicate endmember keys.
+        // 260620Codex: 旧形式の大文字・小文字の違いを許容し、端成分キーの重複は残さない。
         private static bool TryGetFraction(
             IReadOnlyDictionary<string, double> fractions,
             string memberName,
@@ -1507,7 +1559,7 @@ namespace MineraScope
             return false;
         }
 
-        // 260901Codex: Apply each save marker independently and validate the full EMSA before checkpointing it as Completed.
+        // 260901Codex: 保存マーカーを個別に適用し、Completedのチェックポイントにする前にEMSA全体を検証する。
         private static void ApplyResultToEntry(
             SimulationExecutionResult result,
             SpectrumSimulationReservation reservation,
@@ -1518,9 +1570,9 @@ namespace MineraScope
             bool saved = cleanExit || (result.SavedSpectrumFiles?.Contains(reservation.FileName) ?? false);
 
             string outputPath = Path.Combine(reservation.PoolFolder, reservation.FileName);
-            // 260901Codex: Keep a deterministic Missing reason when no save marker or clean exit permits validation.
+            // 260901Codex: 保存マーカーも正常終了もなく検証できない場合は、決定的なMissing理由を残す。
             string validationFailureReason = "DTSA-II の保存完了を確認できませんでした。";
-            // 260901Codex: Never checkpoint a partial or physically mismatched EMSA as Completed.
+            // 260901Codex: 不完全または物理条件の異なるEMSAを、Completedとして保存しない。
             if (saved && EmsaSpectrumIntegrityValidator.TryValidate(
                 outputPath,
                 reservation.SemEdxCondition,
@@ -1548,7 +1600,7 @@ namespace MineraScope
                 return;
             }
 
-            // 260901Codex: A clean process exit with an absent or invalid EMSA is retried through the Missing path.
+            // 260901Codex: プロセスが正常終了してもEMSAが欠損・不正なら、Missing経路で再試行する。
             entry.Status = SpectrumManifestStatus.Missing;
             entry.FailureReason = validationFailureReason;
             entry.LastFailureKind = "InvalidOutput";
@@ -1579,13 +1631,13 @@ namespace MineraScope
             SpectrumPoolManifest Manifest,
             IReadOnlyList<SpectrumManifestEntry> CompletedEntries);
 
-        // 260901Codex: Reuse the one validated manifest snapshot throughout exact multi-time training selection.
+        // 260901Codex: 厳密な複数時間の学習選択全体で、検証済みの1つのmanifestスナップショットを再利用する。
         private sealed record TrainingPoolSelectionState(
             SolidSolution Solution,
             SpectrumTimeAllocation Allocation,
             PoolState State);
 
-        // 260907Codex: One mineral's global plan keeps the normal condition-homogeneous pools while sharing one composition schedule.
+        // 260907Codex: 鉱物ごとの全体計画で、条件が均一な通常poolを保ち、組成予定表を1つ共有する。
         private sealed record CompositionTimePlanState(
             SpectrumCompositionTimePlan Plan,
             IReadOnlyList<CompositionTimePoolState> Pools);

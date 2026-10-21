@@ -6,6 +6,9 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261021Codex: プロセス間共有の合成テスト専用入口。
+            if (args.Length == 3 && args[0] == "--concurrency-child")
+                return ConcurrencyTests.RunChild(args[1], args[2]);
             // 261016Codex: コントロールだけを構築し、フォームは表示せず選択維持を確認する。
             if (args.Length == 1 && args[0] == "--model-selection-smoke")
             {
@@ -63,6 +66,8 @@ namespace MineraScope.Tests
 
             List<(string Name, Action Run)> suites =
             [
+                // 261021Codex: 別プロセス間の生成・読み取り共有とJSON公開を検証する。
+                ("Cross-process spectrum pool concurrency", ConcurrencyTests.Run),
                 // 260930Codex: Filesystem failure checks verify promotion and backup cleanup without TensorFlow.
                 ("Model promotion and backup cleanup", ModelPromotionTests.Run),
                 // 260930Codex: Catalog refresh hides GUID-qualified work folders while retaining ordinary model names.

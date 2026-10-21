@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace MineraScope.Tests
 {
-    // 260907Codex: Keep preparation optimizations observable without starting training or touching real spectrum pools.
+    // 260907Codex: 学習の開始や実スペクトルpoolへの接触なしに、準備処理の最適化を観測可能にする。
     internal static class PreparationTests
     {
         public static void Run()
@@ -15,9 +15,72 @@ namespace MineraScope.Tests
             DuplicateCompatiblePoolsRetainPhysicalFileRanking();
             PreparationReportsProgressAndHonorsCancellation();
             RejectedCompositionCandidatesRemainCancelable();
+            // 260908Codex: 並列ファイル読み取りでも、科学的入力・進捗・修復・中止の動作を保持する。
+            ParallelValidationPreservesPreparationAndRepairs();
         }
 
-        // 260907Codex: The second legacy mineral must use the continuation of seed 42, not a newly reset selector.
+        // 260908Codex: 計画あり・旧形式の両選択経路で、128ファイルのバッチ2個と端数バッチをまたぐ入力を使う。
+        private static void ParallelValidationPreservesPreparationAndRepairs()
+        {
+            foreach (bool planned in new[] { true, false })
+            {
+                using var fixture = new TestFixture(new SpectrumTimeSchedule(260, [new(1, 1)]));
+                var request = planned ? fixture.Request : fixture.Request with { SpectrumTimeSchedule = null };
+                var reservations = TestFixture.Reservations(fixture.Workflow.CreateMissingSimulationPlan(request, out _));
+                fixture.Complete(reservations);
+                var before = fixture.Snapshot();
+                var serialProgress = new List<SpectrumPoolPreparationProgress>();
+                var parallelProgress = new List<SpectrumPoolPreparationProgress>();
+                // 260908Codex: 共有PCで不確かな速度判定を課さず、規模を限定した合成データの所要時間を表示する。
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                var serial = fixture.Workflow.PrepareTrainingPools(request, new InlineProgress(serialProgress.Add));
+                double serialSeconds = timer.Elapsed.TotalSeconds;
+                timer.Restart();
+                var parallel = fixture.Workflow.PrepareTrainingPools(request, new InlineProgress(parallelProgress.Add), validationParallelism: 4);
+                Console.WriteLine($"Preparation {(planned ? "planned" : "legacy")} 260 synthetic spectra: serial {serialSeconds:F3}s, four readers {timer.Elapsed.TotalSeconds:F3}s.");
+                TestAssert.Equal(JsonSerializer.Serialize(serial), JsonSerializer.Serialize(parallel), "Parallel validation must preserve sample order, labels, provenance, recovery, and shortages.");
+                TestAssert.SequenceEqual(serialProgress, parallelProgress, "Parallel readers must not reorder progress callbacks or alter counts.");
+                TestAssert.SequenceEqual(before, fixture.Snapshot(), "Valid parallel preparation must remain read-only.");
+                TestAssert.Throws<ArgumentOutOfRangeException>(() => fixture.Workflow.PrepareTrainingPools(request, validationParallelism: 0), "Invalid read concurrency must fail before preparation starts.");
+
+                using var canceled = new CancellationTokenSource();
+                TestAssert.Throws<OperationCanceledException>(() => fixture.Workflow.PrepareTrainingPools(request,
+                    new InlineProgress(value =>
+                    {
+                        if (value.FilesChecked == 128 && value.Phase is "採用EMSA確認" or "学習pool確認")
+                            canceled.Cancel();
+                    }), canceled.Token, validationParallelism: 4), "Cancellation at a read-batch progress boundary must stop preparation.");
+                TestAssert.SequenceEqual(before, fixture.Snapshot(), "Canceled parallel preparation must not change source files or plans.");
+
+                // 260908Codex: 欠損ファイル、不正な数値、実体のヘッダー不一致でも、逐次処理と同じ失敗規則を保つ。
+                var damaged = new[] { reservations[0], reservations[129], reservations[259] };
+                string[] paths = damaged.Select(row => Path.Combine(row.PoolFolder, row.FileName)).ToArray();
+                foreach (string path in paths)
+                    fixture.AssertOwnedPath(path);
+                File.Delete(paths[0]);
+                File.WriteAllText(paths[1], "#SPECTRUM:\nNaN\n#ENDOFDATA:\n");
+                File.WriteAllText(paths[2], File.ReadAllText(paths[2]).Replace("#BEAMKV: 15", "#BEAMKV: 99", StringComparison.Ordinal));
+                var readOnly = new SpectrumPoolWorkflow(fixture.Repository, new SimulationPlanBuilder(), persistManifestRepairs: false);
+                before = fixture.Snapshot();
+                serial = readOnly.PrepareTrainingPools(request);
+                parallel = readOnly.PrepareTrainingPools(request, validationParallelism: 4);
+                TestAssert.Equal(JsonSerializer.Serialize(serial), JsonSerializer.Serialize(parallel), "Invalid selected files must produce the same complete refusal and exact shortages in both modes.");
+                TestAssert.Equal(0, parallel.Pools.Count, "An invalid selected file must prevent partial training.");
+                TestAssert.Equal(3, parallel.Shortages.Sum(item => item.MissingCount), "Every invalid file must remain a separate missing input.");
+                TestAssert.SequenceEqual(before, fixture.Snapshot(), "Read-only parallel validation must not persist Missing statuses.");
+
+                fixture.Workflow.PrepareTrainingPools(request, validationParallelism: 4);
+                string[] reasons = ["出力ファイルが見つかりませんでした。", "無効なスペクトル値があります: NaN", "#BEAMKV がmanifestの加速電圧と一致しません。"];
+                for (int index = 0; index < damaged.Length; index++)
+                {
+                    var entry = fixture.Repository.Load(damaged[index].ManifestPath)!.Spectra.Single(row => row.SimulationId == damaged[index].SimulationId);
+                    TestAssert.Equal(SpectrumManifestStatus.Missing, entry.Status, "Parallel validation must persist the same Missing repairs when enabled.");
+                    TestAssert.Equal(reasons[index], entry.FailureReason, "Parallel validation must retain the exact original validation reason.");
+                }
+            }
+        }
+
+        // 260907Codex: 旧形式の2番目の鉱物では選択器をリセットせず、seed 42の続きの乱数列を使う。
         private static void PreparationPreservesExactTrainingSelection()
         {
             foreach (bool planned in new[] { true, false })
@@ -43,7 +106,7 @@ namespace MineraScope.Tests
             }
         }
 
-        // 260907Codex: Recovery may restore saved Pending files, but no partial pool may escape after a selected file becomes corrupt or absent.
+        // 260907Codex: 復旧で保存済みPendingファイルを戻すことはできるが、選択ファイルの破損・欠損後に不完全なpoolを返さない。
         private static void PendingRecoveryAndSelectedIntegrityKeepTrainingAllOrNone()
         {
             using var fixture = new TestFixture(null, TestFixture.CreateSolution("SyntheticFirst"), TestFixture.CreateSolution("SyntheticSecond"));
@@ -81,7 +144,8 @@ namespace MineraScope.Tests
             TestAssert.Throws<InvalidOperationException>(() => fixture.Workflow.PrepareTrainingPools(fixture.Request), "Faster preparation must still reject damaged plan bindings.");
         }
 
-        // 260907Codex: Scoped mutable cache entries may carry recovery in memory, but read-only callers must leave their original manifests intact.
+        // 260907Codex: 読み取り専用の呼び出しでは元のmanifestを変更しない。
+        // 260917Codex: 内容が完成して見えても、Pending入力は除外する。
         private static void ReadOnlyPreparationDoesNotPersistRecovery()
         {
             using var fixture = new TestFixture();
@@ -92,12 +156,20 @@ namespace MineraScope.Tests
             var workflow = new SpectrumPoolWorkflow(fixture.Repository, new SimulationPlanBuilder(), persistManifestRepairs: false);
 
             var result = workflow.PrepareTrainingPools(fixture.Request);
-            TestAssert.Equal(8, result.Recovery.RecoveredCount, "Read-only recovery should be visible to selection in the same scope.");
-            TestAssert.Equal(1, result.Pools.Count, "Valid in-memory recovery must permit complete read-only selection.");
+            // 260917Codex: 書き込み済みのPendingファイルでも、稼働中の生成処理が所有している可能性があるため学習に使わない。
+            TestAssert.Equal(0, result.Recovery.RecoveredCount, "Read-only preparation must not recover pending spectra.");
+            TestAssert.Equal(0, result.Pools.Count, "Pending-only input cannot satisfy training, even if its files parse correctly.");
+            TestAssert.True(result.Shortages.Count > 0, "Unpublished input must report a shortage.");
             TestAssert.SequenceEqual(before, fixture.Snapshot(), "Read-only preparation must not persist recovered statuses or plan changes.");
+            // 260917Codex: 生成側が完了を公開した後は、同じ読み取り専用ワークフローでそのデータを選択できる。
+            fixture.Complete(reservations);
+            before = fixture.Snapshot();
+            result = workflow.PrepareTrainingPools(fixture.Request);
+            TestAssert.Equal(1, result.Pools.Count, "Published Completed spectra must remain available to learners.");
+            TestAssert.SequenceEqual(before, fixture.Snapshot(), "Reading published spectra must not modify pool metadata.");
         }
 
-        // 260907Codex: Old, unselected spectra remain retained data rather than extra input or mandatory work for this exact B plan.
+        // 260907Codex: 古い未選択スペクトルは保存データとして残し、このB計画の追加入力や必須処理にしない。
         private static void RetainedUnselectedSpectraAreNotValidatedForBTraining()
         {
             using var fixture = new TestFixture();
@@ -128,7 +200,7 @@ namespace MineraScope.Tests
             TestAssert.SequenceEqual(before, fixture.Snapshot(), "Unused old data must be retained without an unrelated repair write.");
         }
 
-        // 260907Codex: Count actual JSON reads instead of asserting unreliable wall-clock speed on a shared machine.
+        // 260907Codex: 共有PCで不確かな実時間の速度を判定せず、実際のJSON読み取り回数を数える。
         private static void CachedManifestsAreScopedAndObserveFileChanges()
         {
             using var fixture = new TestFixture();
@@ -175,7 +247,7 @@ namespace MineraScope.Tests
             TestAssert.Equal(8, cached.ManifestReadCount, "Recreated files must require a fresh JSON read.");
         }
 
-        // 260907Codex: Cached JSON cannot replace physical EMSA validation when duplicate compatible folders compete for reuse.
+        // 260907Codex: 互換フォルダーが重複して再利用候補になる場合、JSONキャッシュで実EMSA検証を代替しない。
         private static void DuplicateCompatiblePoolsRetainPhysicalFileRanking()
         {
             using var fixture = new TestFixture();
@@ -212,10 +284,10 @@ namespace MineraScope.Tests
             TestAssert.Equal(2, cached.ManifestReadCount, "Rechecking duplicate spectra must not require rereading unchanged manifests.");
         }
 
-        // 260907Codex: Inline progress gives cancellation tests deterministic boundaries without UI threads or timer races.
+        // 260907Codex: 同期的な進捗通知で、UIスレッドやタイマーの競合なしに中止テストの境界を確定する。
         private static void PreparationReportsProgressAndHonorsCancellation()
         {
-            // 260907Codex: Two minerals exercise both pool-local progress and the preparation wrapper's global offsets.
+            // 260907Codex: 2鉱物を使い、pool内の進捗と準備処理全体のオフセットを両方検証する。
             using var fixture = new TestFixture(null, TestFixture.CreateSolution("SyntheticFirst"), TestFixture.CreateSolution("SyntheticSecond"));
             fixture.Complete(TestFixture.Reservations(fixture.Workflow.CreateMissingSimulationPlan(fixture.Request, out _)));
             var reports = new List<SpectrumPoolPreparationProgress>();
@@ -223,7 +295,7 @@ namespace MineraScope.Tests
             TestAssert.True(reports.Any(item => item.FilesToCheck > 0 && item.FilesChecked > 0 && !item.PoolCompleted), "Preparation must report spectrum work before the final completed-pool event.");
             TestAssert.True(reports.All(item => item.FilesChecked >= 0 && item.FilesToCheck >= 0), "Preparation progress counters must remain nonnegative.");
 
-            // 260907Codex: Preserve start, last-file, and completion notifications exactly when deduplicating their common fields.
+            // 260907Codex: 共通フィールドの重複を除去しても、開始・最終ファイル・完了の通知を正確に保持する。
             var allocations = fixture.Request.GetEffectiveSpectrumTimeAllocations();
             int totalPools = fixture.Request.SelectedMineralSolutions.Count * allocations.Count;
             int poolNumber = 0;
@@ -258,7 +330,7 @@ namespace MineraScope.Tests
             TestAssert.Equal(2, fixture.Workflow.PrepareTrainingPools(fixture.Request).Pools.Count, "A canceled cache scope must not poison the next preparation attempt.");
         }
 
-        // 260907Codex: A mineral that rejects all candidates must not make cancellation depend on yielding an accepted composition.
+        // 260907Codex: 全候補を拒否する鉱物でも、採用組成が返るまで中止を待たせない。
         private static void RejectedCompositionCandidatesRemainCancelable()
         {
             var solution = TestFixture.CreateSolution();
@@ -284,7 +356,7 @@ namespace MineraScope.Tests
                 }), "Planner candidate probing must pass cancellation through constraint rejections.");
         }
 
-        // 260907Codex: The test callback runs synchronously so cancellation and file snapshots have deterministic ordering.
+        // 260907Codex: テストのコールバックは同期実行し、中止とファイルスナップショットの順序を確定する。
         private sealed class InlineProgress(Action<SpectrumPoolPreparationProgress> report) : IProgress<SpectrumPoolPreparationProgress>
         {
             public void Report(SpectrumPoolPreparationProgress value) => report(value);
