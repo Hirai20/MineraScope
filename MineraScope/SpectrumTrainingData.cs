@@ -24,5 +24,9 @@ namespace MineraScope
     internal sealed record SpectrumTrainingPool(
         string MineralName,
         IReadOnlyList<string> EndmemberNames,
-        IReadOnlyList<SpectrumTrainingSample> Samples);
+        IReadOnlyList<SpectrumTrainingSample> Samples)
+    {
+        // 261021Claude: 端成分が2つ以上の鉱物だけ定量モデルを作る。学習と保存先の事前検査で同じ判定を使う。
+        public bool HasRegressionModel => EndmemberNames.Count >= 2;
+    }
 }

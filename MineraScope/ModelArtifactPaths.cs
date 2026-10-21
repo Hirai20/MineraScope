@@ -42,6 +42,10 @@ namespace MineraScope
         public static string GetClassificationFolder(string modelPath) =>
             Path.Combine(modelPath, ClassificationFolderName);
 
+        // 261021Claude: 学習が作る回帰モデルフォルダ名。学習と保存先の事前検査で同じ値を使う。
+        public static string GetRegressionFolderName(string mineralName) =>
+            mineralName + RegressionFolderSuffix;
+
         // 260727Claude: 予測鉱物名に対応する回帰モデルフォルダの検索パターン (単発・バッチ予測で共有)。
         public static string GetRegressionSearchPattern(string mineralName) =>
             $"{mineralName}*{RegressionFolderSuffix}";

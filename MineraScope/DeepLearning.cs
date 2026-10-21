@@ -171,7 +171,8 @@ namespace MineraScope
             // 260621Codex: run 全体の CPU 使用率を、論理 CPU 総量に対する割合で後から比較できるようにします。
             using var runProcess = Process.GetCurrentProcess();
             TimeSpan runCpuStart = runProcess.TotalProcessorTime;
-            int regressionCount = orderedPools.Count(pool => pool.EndmemberNames.Count >= 2);
+            // 261021Claude: 定量モデルの対象判定は SpectrumTrainingPool の共通定義を使う。
+            int regressionCount = orderedPools.Count(pool => pool.HasRegressionModel);
             // 261014Codex: 選択された分類学習率を機械可読な形式で学習開始ログへ記録する。
             TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience} classificationLearningRate={classificationLearningRate.ToString(CultureInfo.InvariantCulture)}");
 
@@ -181,7 +182,7 @@ namespace MineraScope
             // 260606Codex: 回帰モデルで再利用する spectrum だけを分類ロード時に保持し、重複ファイル読込を避けます。
             var spectrumCache = new SpectrumDataLoader.NormalizedSpectrumCache(
                 orderedPools
-                    .Where(pool => pool.EndmemberNames.Count >= 2)
+                    .Where(pool => pool.HasRegressionModel)
                     .SelectMany(pool => pool.Samples)
                     .Select(sample => sample.FilePath));
             TensorFlowTrainingDebugLog.Write("spectrum-cache-created", $"cacheableSpectra={spectrumCache.CacheablePathCount}");
@@ -217,7 +218,7 @@ namespace MineraScope
             var modelMetrics = new List<TrainingModelMetrics>(classificationResult.ModelMetrics);
 
             // 260930Codex: 共通する鉱物別件数はバッチ検証1回で確認し、UI外の呼び出しで件数が異なる場合も引き続き扱う。
-            var regressionPools = orderedPools.Where(pool => pool.EndmemberNames.Count >= 2).ToArray();
+            var regressionPools = orderedPools.Where(pool => pool.HasRegressionModel).ToArray();
             var regressionSkipReasons = regressionPools.Select(pool => pool.Samples.Count).Distinct().ToDictionary(
                 count => count,
                 count =>
@@ -228,7 +229,8 @@ namespace MineraScope
             foreach (var pool in regressionPools)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string regressionModelName = pool.MineralName + ModelArtifactPaths.RegressionFolderSuffix;
+                // 261021Claude: 回帰フォルダ名は保存先の事前検査と同じ定義から作る。
+                string regressionModelName = ModelArtifactPaths.GetRegressionFolderName(pool.MineralName);
                 string regressionOutputPath = Path.Combine(outputPath, regressionModelName);
                 // 260930Codex: 選択した件数判定を、ログと学習で再利用する。
                 string? skipReason = regressionSkipReasons[pool.Samples.Count];
@@ -281,7 +283,7 @@ namespace MineraScope
                 TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=skipped reason={skipReason} totalMs={modelTimer.ElapsedMilliseconds}");
                 return new TrainingModelMetrics(
                     Target: "regression",
-                    ModelFolderName: trainingPool.MineralName + ModelArtifactPaths.RegressionFolderSuffix,
+                    ModelFolderName: ModelArtifactPaths.GetRegressionFolderName(trainingPool.MineralName),
                     Status: "skipped",
                     MineralName: trainingPool.MineralName,
                     SkipReason: skipReason,
@@ -411,7 +413,7 @@ namespace MineraScope
             TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=ok totalMs={modelTimer.ElapsedMilliseconds} trainedEpochs={fitResult.CompletedEpochs} testLoss={FormatMetric(validationLoss)} testMae={FormatMetric(validationMae)}");
             return new TrainingModelMetrics(
                 Target: "regression",
-                ModelFolderName: trainingPool.MineralName + ModelArtifactPaths.RegressionFolderSuffix,
+                ModelFolderName: ModelArtifactPaths.GetRegressionFolderName(trainingPool.MineralName),
                 Status: "trained",
                 MineralName: trainingPool.MineralName,
                 SkipReason: null,

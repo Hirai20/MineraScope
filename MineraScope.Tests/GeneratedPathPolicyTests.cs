@@ -14,8 +14,9 @@ namespace MineraScope.Tests
                 Path.Combine(fixture.Root, $"{index}.emsa"), new Dictionary<string, double> { ["A"] = .5, ["B"] = .5 })).ToArray();
             var pools = new[] { new SpectrumTrainingPool("First", ["First"], samples), new SpectrumTrainingPool("Second", ["Second"], samples) };
             var workflow = new ModelTrainingWorkflow(new DeepLearning(_ => { }), _ => { });
-            int savingRelative = $".{Guid.Empty:N}.tmp".Length + 1 + ModelArtifactPaths.ClassificationFolderName.Length + 1
-                + ModelArtifactPaths.SavedModelSavingDeepestLength;
+            // 261021Claude: 一時フォルダー名は本体の命名から測り、形式の変更にテストが追従するようにする。
+            int savingRelative = Path.GetFileName(ModelTrainingWorkflow.NewTemporaryOutputFolder(fixture.Root)).Length
+                + 1 + ModelArtifactPaths.ClassificationFolderName.Length + 1 + ModelArtifactPaths.SavedModelSavingDeepestLength;
             string parent = Path.Combine(fixture.Root,
                 new string('p', GeneratedPathPolicy.MaxFullPathLength - 1 - savingRelative - fixture.Root.Length - 1));
             var plan = new ModelTrainingPlan(Path.Combine(parent, "M"), pools, fixture.Request.Training,

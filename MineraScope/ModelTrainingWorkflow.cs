@@ -189,8 +189,8 @@ namespace MineraScope
             return ValidateOutputPathLength(plan) ?? ValidateTrainingSources(plan);
         }
 
-        // 261021Claude: 一時フォルダーの命名を、事前のパス長検査と実際の作成で共有する。
-        private static string NewTemporaryOutputFolder(string modelOutputFolder) =>
+        // 261021Claude: 一時フォルダーの命名を、事前のパス長検査・実際の作成・境界テストで共有する。
+        internal static string NewTemporaryOutputFolder(string modelOutputFolder) =>
             Path.Combine(Path.GetDirectoryName(modelOutputFolder)!, $".{Guid.NewGuid():N}.tmp");
 
         // 261021Claude: TensorFlowは保存中の中間ファイルがMAX_PATHを超えると失敗し、学習時間を無駄にするため、学習前に止める。
@@ -200,14 +200,15 @@ namespace MineraScope
         {
             string modelFolder = Path.GetFullPath(plan.ModelOutputFolder).TrimEnd(Path.DirectorySeparatorChar);
             string parent = Path.GetDirectoryName(modelFolder)!;
-            int innerFolderLength = plan.TrainingPools
-                .Where(pool => pool.EndmemberNames.Count >= 2)
-                .Select(pool => (pool.MineralName + ModelArtifactPaths.RegressionFolderSuffix).Length)
+            // 261021Claude: 学習と同じ判定・命名で内部フォルダーを求め、前後の区切り文字を含めた長さにする。
+            int innerFolderLength = 1 + plan.TrainingPools
+                .Where(pool => pool.HasRegressionModel)
+                .Select(pool => ModelArtifactPaths.GetRegressionFolderName(pool.MineralName).Length)
                 .Append(ModelArtifactPaths.ClassificationFolderName.Length)
-                .Max();
-            int whileSaving = Path.GetFileName(NewTemporaryOutputFolder(modelFolder)).Length + 1 + innerFolderLength + 1
+                .Max() + 1;
+            int whileSaving = Path.GetFileName(NewTemporaryOutputFolder(modelFolder)).Length + innerFolderLength
                 + ModelArtifactPaths.SavedModelSavingDeepestLength;
-            int afterSaving = Path.GetFileName(modelFolder).Length + 1 + innerFolderLength + 1 + ModelArtifactPaths.SavedModelDeepestLength;
+            int afterSaving = Path.GetFileName(modelFolder).Length + innerFolderLength + ModelArtifactPaths.SavedModelDeepestLength;
             return GeneratedPathPolicy.FindTooLong(parent, whileSaving, "モデル", safetyMargin: 0)
                 ?? GeneratedPathPolicy.FindTooLong(parent, afterSaving, "モデル");
         }
