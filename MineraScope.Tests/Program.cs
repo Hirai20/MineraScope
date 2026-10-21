@@ -94,6 +94,8 @@ namespace MineraScope.Tests
                 ("Model preprocessing metadata integrity", SpectrumPreprocessingTests.Run),
                 // 261016Codex: 分類の開始条件はネイティブ学習なしでも検証する。
                 ("Classification training prerequisites", TrainingSampleRequirementsTests.Run),
+                // 261021Claude: 保存先の深さはネイティブ学習なしで検査する。
+                ("Model save path length", GeneratedPathPolicyTests.Run),
                 // 261016Codex: モデルの開始前検証をネイティブ学習なしで確認する。
                 ("Batch classifier preflight", BatchPredictionTests.Run),
                 // 260930Codex: Filesystem checks do not load the native runtime.

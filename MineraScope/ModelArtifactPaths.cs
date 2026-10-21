@@ -29,6 +29,15 @@ namespace MineraScope
         // 260906Codex: The model root records the validation metrics observed while this model was trained.
         public const string TrainingResultsFileName = "trainingResults.json";
 
+        // 261021Claude: TensorFlow が SavedModel の保存中だけ作る最深の中間ファイル (各モデルフォルダからの相対)。
+        //   末尾は uint64 の乱数で最大 20 桁。全長が MAX_PATH を超えると model.save が NotImplementedException で
+        //   失敗する (261021 実測、全長 259 文字で成功・260 文字で失敗)。保存後のファイルより 50 文字以上長い。
+        public static readonly int SavedModelSavingDeepestLength = Path.Combine("variables", "variables_temp",
+            "part-00000-of-00001.data-00000-of-00001.tempstate18446744073709551615").Length;
+
+        // 261021Claude: 保存後のモデルフォルダ内で最も長いファイル (各モデルフォルダからの相対)。
+        public static readonly int SavedModelDeepestLength = Path.Combine("variables", "variables.data-00000-of-00001").Length;
+
         // 260727Claude: 選択中モデルフォルダから分類モデルフォルダへの解決を 1 か所にする。
         public static string GetClassificationFolder(string modelPath) =>
             Path.Combine(modelPath, ClassificationFolderName);

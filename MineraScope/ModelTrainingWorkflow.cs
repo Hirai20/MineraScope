@@ -186,7 +186,30 @@ namespace MineraScope
             if (plan.SoftmaxOcnSeed is < 0)
                 return "OCNの学習Seedは0以上にしてください。";
 
-            return ValidateTrainingSources(plan);
+            return ValidateOutputPathLength(plan) ?? ValidateTrainingSources(plan);
+        }
+
+        // 261021Claude: 一時フォルダーの命名を、事前のパス長検査と実際の作成で共有する。
+        private static string NewTemporaryOutputFolder(string modelOutputFolder) =>
+            Path.Combine(Path.GetDirectoryName(modelOutputFolder)!, $".{Guid.NewGuid():N}.tmp");
+
+        // 261021Claude: TensorFlowは保存中の中間ファイルがMAX_PATHを超えると失敗し、学習時間を無駄にするため、学習前に止める。
+        //   内部フォルダー名は既存モデルとの互換のため変えられないので、計画に含まれる鉱物名から最長を求める。
+        //   保存中の長さは実測した最悪値なので余裕を足さず、保存後のファイルは他の生成物と同じ余裕で検査する。
+        private static string? ValidateOutputPathLength(ModelTrainingPlan plan)
+        {
+            string modelFolder = Path.GetFullPath(plan.ModelOutputFolder).TrimEnd(Path.DirectorySeparatorChar);
+            string parent = Path.GetDirectoryName(modelFolder)!;
+            int innerFolderLength = plan.TrainingPools
+                .Where(pool => pool.EndmemberNames.Count >= 2)
+                .Select(pool => (pool.MineralName + ModelArtifactPaths.RegressionFolderSuffix).Length)
+                .Append(ModelArtifactPaths.ClassificationFolderName.Length)
+                .Max();
+            int whileSaving = Path.GetFileName(NewTemporaryOutputFolder(modelFolder)).Length + 1 + innerFolderLength + 1
+                + ModelArtifactPaths.SavedModelSavingDeepestLength;
+            int afterSaving = Path.GetFileName(modelFolder).Length + 1 + innerFolderLength + 1 + ModelArtifactPaths.SavedModelDeepestLength;
+            return GeneratedPathPolicy.FindTooLong(parent, whileSaving, "モデル", safetyMargin: 0)
+                ?? GeneratedPathPolicy.FindTooLong(parent, afterSaving, "モデル");
         }
 
         // 260901Codex: TensorFlowの開始前に、不完全なメタデータと複数時間の比率不整合を拒否する。
@@ -305,7 +328,7 @@ namespace MineraScope
             using var outputLease = PathOperationLease.Acquire(plan.ModelOutputFolder, "ModelOutput");
             // 260917Codex: 専用の作業領域を使い、意図的に.tmpで終わる名前を付けたモデルとの衝突も避ける。
             // 260928Codex: 原子的な昇格のため同じボリュームで準備し、TensorFlowの深いSavedModelパスを短く保つ。
-            string temporaryOutputFolder = Path.Combine(Path.GetDirectoryName(plan.ModelOutputFolder)!, $".{Guid.NewGuid():N}.tmp");
+            string temporaryOutputFolder = NewTemporaryOutputFolder(plan.ModelOutputFolder);
             // 260928Codex: 正規化したheadのスナップショットを、昇格する成果物の外に置く。
             string? headDatasetFolder = plan.SoftmaxOcnSeed is null ? null
                 : Path.Combine(Path.GetTempPath(), "MineraScopeHeadData", Guid.NewGuid().ToString("N"));
