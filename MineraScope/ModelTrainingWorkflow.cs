@@ -40,12 +40,15 @@ namespace MineraScope
             ModelTrainingStatus status,
             ModelTrainingFailureKind? failureKind,
             string? failureReason,
-            string? preservedArtifactsFolder)
+            string? preservedArtifactsFolder,
+            // 261021Claude: 昇格した結果だけに、定量を省略した通知を付ける。
+            string? completionMessage = null)
         {
             Status = status;
             FailureKind = failureKind;
             FailureReason = failureReason;
             PreservedArtifactsFolder = preservedArtifactsFolder;
+            CompletionMessage = completionMessage;
         }
 
         public ModelTrainingStatus Status { get; }
@@ -56,12 +59,31 @@ namespace MineraScope
 
         public string? PreservedArtifactsFolder { get; }
 
-        public static ModelTrainingResult CreatePromoted() =>
-            new(
+        // 261021Claude: 要求した定量がすべて学習済みなら、通知は不要とする。
+        public string? CompletionMessage { get; }
+
+        // 261021Claude: 定量の省略は鉱物ごとに列挙せず、理由をまとめて1回通知する（非公開版と同じ文言）。
+        public static ModelTrainingResult CreatePromoted(IReadOnlyList<TrainingModelMetrics>? modelMetrics = null)
+        {
+            var skipped = modelMetrics?.Where(metric => metric.Target == "regression" && metric.Status == "skipped").ToArray()
+                ?? Array.Empty<TrainingModelMetrics>();
+            string? completionMessage = null;
+            if (skipped.Length > 0)
+            {
+                bool anyRegressionTrained = modelMetrics!.Any(metric => metric.Target == "regression" && metric.Status == "trained");
+                completionMessage = (anyRegressionTrained
+                    ? "分類モデルと学習可能な定量モデルを作成しました。\r\n一部の定量モデルはデータ数不足のため作成していません。"
+                    : "分類モデルのみ作成しました。\r\n定量モデルはデータ数不足のため作成していません。")
+                    + "\r\n\r\n" + string.Join("\r\n", skipped.Select(metric => metric.SkipReason).Distinct());
+            }
+
+            return new(
                 ModelTrainingStatus.Promoted,
                 failureKind: null,
                 failureReason: null,
-                preservedArtifactsFolder: null);
+                preservedArtifactsFolder: null,
+                completionMessage);
+        }
 
         public static ModelTrainingResult CreateNotPromoted(
             ModelTrainingFailureKind failureKind,
@@ -347,7 +369,8 @@ namespace MineraScope
 
                 cancellationToken.ThrowIfCancellationRequested();
                 PromoteTemporaryFolder(temporaryOutputFolder, plan.ModelOutputFolder, plan.AllowOverwriteExistingModel);
-                return ModelTrainingResult.CreatePromoted();
+                // 261021Claude: 分類器と学習できた定量モデルを正式に保存してから通知する。
+                return ModelTrainingResult.CreatePromoted(trainingResult.ModelMetrics);
             }
             catch (Exception exception)
             {

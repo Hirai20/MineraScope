@@ -1,6 +1,9 @@
+using System.Text.Json;
+
 namespace MineraScope.Tests
 {
     // 261016Codex: 公開版の分類開始条件を検証し、定量省略の方針は追加しない。
+    // 261021Claude: ユーザー指定により、非公開版と同じ定量省略と完了通知を公開版にも適用し、その保存を検証する。
     internal static class TrainingSampleRequirementsTests
     {
         public static void Run()
@@ -34,6 +37,33 @@ namespace MineraScope.Tests
                     "学習不能ならTensorFlowの実行前に停止する。");
                 TestAssert.True(!Directory.Exists(invalid.ModelOutputFolder), "拒否した計画で出力を作らない。");
             }
+
+            // 261021Claude: 定量は1バッチに満たなければ省略し、分類器だけでも昇格できることを通知する。
+            var classifier = new TrainingModelMetrics("classification", "classifier", "trained", null, null,
+                200, 160, 40, 2, null, 1, 1, 1, "cross_entropy", .5, .5, null, "legacy");
+            var skipped = classifier with { Target = "regression", Status = "skipped", MineralName = "First",
+                SkipReason = "学習用80本がバッチサイズ128未満です。", SampleCount = 100, TrainingSampleCount = 80,
+                ValidationSampleCount = 20, CompletedEpochs = 0, BestEpoch = null, ValidationLoss = null };
+            var onlyClassifier = ModelTrainingResult.CreatePromoted([classifier, skipped, skipped with { MineralName = "Second" }]);
+            TestAssert.True(onlyClassifier.CompletionMessage!.StartsWith("分類モデルのみ作成しました。", StringComparison.Ordinal),
+                "定量をすべて省略したときは分類器のみの通知になる。");
+            TestAssert.True(!onlyClassifier.CompletionMessage.Contains("First", StringComparison.Ordinal)
+                && !onlyClassifier.CompletionMessage.Contains("Second", StringComparison.Ordinal), "通知は鉱物名を列挙しない。");
+            TestAssert.Equal(2, onlyClassifier.CompletionMessage.Split(skipped.SkipReason!, StringSplitOptions.None).Length,
+                "共通の省略理由は1回だけ示す。");
+            var trainedRegression = skipped with { Status = "trained", MineralName = "Second", SkipReason = null };
+            TestAssert.True(ModelTrainingResult.CreatePromoted([classifier, skipped, trainedRegression]).CompletionMessage!
+                .StartsWith("分類モデルと学習可能な定量モデル", StringComparison.Ordinal), "一部の省略では学習した定量を残す。");
+            TestAssert.True(ModelTrainingResult.CreatePromoted([classifier, trainedRegression]).CompletionMessage is null,
+                "通常の完了では通知を増やさない。");
+            TestAssert.True(ModelTrainingResult.CreatePromoted().CompletionMessage is null, "指標なしの昇格は従来どおり。");
+            TrainingResultsWriter.Write(fixture.Root, new TrainingResultsSpecification(1, 128, 1, .2f, 42, "val_loss", .0001f),
+                [classifier, skipped]);
+            using var saved = JsonDocument.Parse(File.ReadAllText(Path.Combine(fixture.Root, ModelArtifactPaths.TrainingResultsFileName)));
+            var omission = saved.RootElement.GetProperty("models")[1];
+            TestAssert.Equal("skipped", omission.GetProperty("status").GetString(), "省略した状態を保存する。");
+            TestAssert.Equal(80, omission.GetProperty("trainingSampleCount").GetInt32(), "実際の分割件数を保存する。");
+            TestAssert.Equal(skipped.SkipReason, omission.GetProperty("skipReason").GetString(), "省略理由を保存する。");
         }
 
         // 261016Codex: 実学習の入口を使い、既存モデルの代替として未更新の重みを保存しないことを確認する。

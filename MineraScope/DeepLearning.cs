@@ -685,14 +685,27 @@ namespace MineraScope
             reporter.CompleteModel();
             var modelMetrics = new List<TrainingModelMetrics>(classificationResult.ModelMetrics);
 
-            foreach (var pool in orderedPools.Where(pool => pool.EndmemberNames.Count >= 2))
+            // 261021Claude: 非公開版と同じく、定量は件数が1バッチに満たない鉱物だけ省略する。
+            //   以前は重みを一度も更新しないまま保存まで進んでいた。分類器は検証済みなので作成を続ける。
+            var regressionPools = orderedPools.Where(pool => pool.EndmemberNames.Count >= 2).ToArray();
+            var regressionSkipReasons = regressionPools.Select(pool => pool.Samples.Count).Distinct().ToDictionary(
+                count => count,
+                count =>
+                {
+                    var (training, validation) = TrainingSampleRequirements.GetSplitCounts(count, testSplit);
+                    return TrainingSampleRequirements.GetFailureReason(training, validation, batchSize);
+                });
+            foreach (var pool in regressionPools)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 string regressionModelName = pool.MineralName + ModelArtifactPaths.RegressionFolderSuffix;
                 string regressionOutputPath = Path.Combine(outputPath, regressionModelName);
-                Log($"回帰モデル学習開始: {pool.MineralName}");
+                string? skipReason = regressionSkipReasons[pool.Samples.Count];
+                if (skipReason is null)
+                    Log($"回帰モデル学習開始: {pool.MineralName}");
                 reporter.BeginModel(regressionModelName);
-                modelMetrics.Add(TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, spectrumCache, reporter.ReportEpoch, cancellationToken));
+                modelMetrics.Add(TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, spectrumCache, reporter.ReportEpoch, cancellationToken,
+                    skipReason));
                 reporter.CompleteModel();
             }
 
@@ -720,11 +733,39 @@ namespace MineraScope
             string outputPath,
             SpectrumDataLoader.NormalizedSpectrumCache? spectrumCache,
             Action<int>? reportEpoch,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            // 261021Claude: 呼び出し元の件数判定で省略が決まった場合の理由。
+            string? skipReason)
         {
             string op = $"regression:{trainingPool.MineralName}";
             var modelTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("model-train-start", $"op={op} epochs={epochs} batchSize={batchSize} patience={patience} samples={trainingPool.Samples.Count}");
+
+            // 261021Claude: 分類で全スペクトルを読込済みなので、省略する定量では個別の読込を行わない。
+            if (skipReason is not null)
+            {
+                var (trainingCount, validationCount) = TrainingSampleRequirements.GetSplitCounts(trainingPool.Samples.Count, testSplit);
+                TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=skipped reason={skipReason} totalMs={modelTimer.ElapsedMilliseconds}");
+                return new TrainingModelMetrics(
+                    Target: "regression",
+                    ModelFolderName: trainingPool.MineralName + ModelArtifactPaths.RegressionFolderSuffix,
+                    Status: "skipped",
+                    MineralName: trainingPool.MineralName,
+                    SkipReason: skipReason,
+                    SampleCount: trainingPool.Samples.Count,
+                    TrainingSampleCount: trainingCount,
+                    ValidationSampleCount: validationCount,
+                    ClassCount: null,
+                    ComponentCount: trainingPool.EndmemberNames.Count,
+                    RequestedEpochs: epochs,
+                    CompletedEpochs: 0,
+                    BestEpoch: null,
+                    ValidationLossName: null,
+                    ValidationLoss: null,
+                    ValidationAccuracy: null,
+                    ValidationMae: null,
+                    SplitMethod: LegacySplitMethod);
+            }
 
             TensorFlowTrainingDebugLog.Write("clear-session-before", $"op={op}");
             keras.backend.clear_session();

@@ -1238,6 +1238,13 @@ namespace MineraScope
 
                 FormMain?.RefreshModelPathList(request.ModelName);
                 SetStatusWithElapsed("モデル作成完了", ProgressScale, ProgressScale);
+                // 261021Claude: 定量を省略して保存した分類器も利用できるが、省略は明示する。
+                if (trainingResult.CompletionMessage is not null)
+                {
+                    TrainLog(trainingResult.CompletionMessage);
+                    MessageBox.Show(this, trainingResult.CompletionMessage, "モデル作成完了",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
             catch (OperationCanceledException) when (cancellationTokenSource.IsCancellationRequested)
             {
