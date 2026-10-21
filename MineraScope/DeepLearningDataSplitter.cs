@@ -9,7 +9,7 @@ namespace MineraScope
     // 260430Codex: ラベルエンコードと train/test 分割を DeepLearning 本体から分離します。
     internal static class DeepLearningDataSplitter
     {
-        // 260906Codex: Keep the actual split seed in one place so training results can report it without duplicating a literal.
+        // 260906Codex: 実際の分割Seedを一か所で管理し、学習結果の報告でリテラルを重複させない。
         public const int DefaultRandomState = 42;
 
         // 260430Codex: 鉱物名ラベルを TensorFlow に渡す整数ラベルへ変換します。
@@ -31,7 +31,7 @@ namespace MineraScope
             int randomState = DefaultRandomState)
         {
             int numSamples = (int)spectra.shape[0];
-            // 260907Codex: Composition/time planning must not introduce stratification into the established split.
+            // 260907Codex: 組成・時間の計画によって、既存の分割へ層化を持ち込まない。
             var (trainIndices, testIndices) = CreateLegacySplitIndices(numSamples, testSize, randomState);
             int trainCount = trainIndices.Length;
             int testCount = testIndices.Length;
@@ -75,7 +75,7 @@ namespace MineraScope
             int nFeatures = (int)spectra.shape[1];
             int nLabels = (int)labels.shape[1];
 
-            // 260907Codex: Keep regression's original seed-based non-stratified selection as well.
+            // 260907Codex: 定量でも従来のSeedに基づく非層化選択を保持する。
             var (trainIndices, testIndices) = CreateLegacyRegressionSplitIndices(nSamples, testSize, randomState);
             int nTrain = trainIndices.Length;
             int nTest = testIndices.Length;
@@ -116,29 +116,29 @@ namespace MineraScope
             );
         }
 
-        // 260901Codex: Keep the original classification shuffle byte-for-byte for metadata-free training pools.
-        // 260930Codex: The unchanged split indices align alternative labels with ordinary classification inputs.
+        // 260901Codex: メタデータのない学習poolでは、元の分類シャッフルをバイト単位で維持する。
+        // 260917Claude: SeedTrainingDatasetと共用し、固定実験でも別の複製ではなくこの順序そのものを使う。
         internal static (int[] TrainIndices, int[] TestIndices) CreateLegacySplitIndices(
             int sampleCount,
             float testSize,
             int randomState)
         {
-            int testCount = (int)(sampleCount * testSize);
-            int trainCount = sampleCount - testCount;
+            // 260930Codex: 事前検査と実際の分割の件数を一致させる。
+            var (trainCount, testCount) = TrainingSampleRequirements.GetSplitCounts(sampleCount, testSize);
             var indices = Enumerable.Range(0, sampleCount).ToArray();
             var random = new Random(randomState);
             Shuffle(indices, random);
             return (indices.Take(trainCount).ToArray(), indices.Skip(trainCount).ToArray());
         }
 
-        // 260901Codex: Keep regression's previous OrderBy(Random.Next) sequence when source metadata is absent.
+        // 260901Codex: 元メタデータがない場合は、従来の定量用OrderBy(Random.Next)の順序を保持する。
         private static (int[] TrainIndices, int[] TestIndices) CreateLegacyRegressionSplitIndices(
             int sampleCount,
             float testSize,
             int randomState)
         {
-            int testCount = (int)(sampleCount * testSize);
-            int trainCount = sampleCount - testCount;
+            // 260930Codex: 定量でも同じ件数を使い、既存のシャッフルは保持する。
+            var (trainCount, testCount) = TrainingSampleRequirements.GetSplitCounts(sampleCount, testSize);
             var random = new Random(randomState);
             int[] indices = Enumerable.Range(0, sampleCount)
                 .OrderBy(_ => random.Next())
@@ -146,7 +146,8 @@ namespace MineraScope
             return (indices.Take(trainCount).ToArray(), indices.Skip(trainCount).ToArray());
         }
 
-        // 260901Codex: Keep the classification Fisher-Yates shuffle local to its established split behavior.
+        // 260901Codex: 分類のFisher-Yatesシャッフルを、既存の分割動作の範囲内に保つ。
+        // 260917Claude: OCNのエピソード・分割シャッフルでも使い、各呼び出し元が独自のSeed付きRandomを保持して乱数列を変えない。
         private static void Shuffle<T>(IList<T> values, Random random)
         {
             for (int i = values.Count - 1; i > 0; i--)

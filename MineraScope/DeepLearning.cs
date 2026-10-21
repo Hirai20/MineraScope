@@ -15,71 +15,9 @@ using static Tensorflow.KerasApi;
 
 namespace MineraScope
 {
-    // 260606Claude: 学習の進捗を UI へ運ぶ DTO。OverallFraction は分類1個+回帰N個を「モデル均等×エポック比」で 0..1 に正規化した全体進捗。経過時間は UI 側の操作ストップウォッチで表示する。
-    internal sealed record TrainingProgress(
-        string ModelName,
-        int ModelIndex,
-        int TotalModels,
-        int Epoch,
-        int RequestedEpochs,
-        double OverallFraction);
-
-    // 260902Codex: 想定内の学習中止理由を、予期しない例外と分けて workflow へ返します。
-    internal enum DeepLearningTrainingFailureKind
-    {
-        TrainingDataLoadFailed,
-        // 261016Codex: 分類を更新できない件数では、完了結果を返さない。
-        InsufficientTrainingSamples
-    }
-
-    // 260902Codex: 学習本体が正常完了したか、想定内の理由で開始前に止まったかを表します。
-    internal enum DeepLearningTrainingStatus
-    {
-        Completed,
-        NotCompleted
-    }
-
-    // 260902Codex: 分類で打ち切った場合に回帰と正式昇格へ進ませないための内部結果です。
-    internal sealed record DeepLearningTrainingResult
-    {
-        private DeepLearningTrainingResult(
-            DeepLearningTrainingStatus status,
-            DeepLearningTrainingFailureKind? failureKind,
-            string? failureReason,
-            IReadOnlyList<TrainingModelMetrics> modelMetrics)
-        {
-            Status = status;
-            FailureKind = failureKind;
-            FailureReason = failureReason;
-            ModelMetrics = modelMetrics;
-        }
-
-        public DeepLearningTrainingStatus Status { get; }
-
-        public DeepLearningTrainingFailureKind? FailureKind { get; }
-
-        public string? FailureReason { get; }
-
-        public IReadOnlyList<TrainingModelMetrics> ModelMetrics { get; }
-
-        public static DeepLearningTrainingResult CreateCompleted(IReadOnlyList<TrainingModelMetrics> modelMetrics)
-        {
-            ArgumentNullException.ThrowIfNull(modelMetrics);
-            if (modelMetrics.Count == 0)
-                throw new ArgumentException("At least one model metric is required for a completed training run.", nameof(modelMetrics));
-            return new(DeepLearningTrainingStatus.Completed, failureKind: null, failureReason: null, modelMetrics);
-        }
-
-        public static DeepLearningTrainingResult CreateNotCompleted(
-            DeepLearningTrainingFailureKind failureKind,
-            string failureReason)
-        {
-            ArgumentException.ThrowIfNullOrWhiteSpace(failureReason);
-            return new(DeepLearningTrainingStatus.NotCompleted, failureKind, failureReason, Array.Empty<TrainingModelMetrics>());
-        }
-    }
-
-    public class DeepLearning
+    // 260908Codex: 任意のSeed実験の入口を、通常の分類・定量学習から分離する。
+    // 260924Codex: このファイルはデータ読込・モデル学習・保存を調停し、グラフループと診断は別のpartialに分ける。
+    public partial class DeepLearning
     {
         private readonly Action<string> _logAction;
         public Dictionary<string, int>? ComponentIndex { get; private set; }
@@ -119,38 +57,25 @@ namespace MineraScope
                 keras.layers.Dense(numComponents)
             });
 
-        // 260605Codex: Keep debug metric formatting culture-stable for log parsing.
+        // 260605Codex: ログ解析のため、デバッグ指標の書式をカルチャに依存させない。
         private static string FormatMetric(double value) => value.ToString("G9", CultureInfo.InvariantCulture);
 
-        // 260606Codex: Cache counters are cumulative for the training run, so log them with each stage for before/after comparison.
+        // 260606Codex: キャッシュ件数は学習実行中の累積値なので、前後比較のため各工程で記録する。
         private static string FormatSpectrumCacheStats(SpectrumDataLoader.NormalizedSpectrumCache? cache) =>
             cache is null
                 ? string.Empty
                 : $" cacheableSpectra={cache.CacheablePathCount} cachedSpectra={cache.CachedCount} cacheHits={cache.HitCount} cacheMisses={cache.MissCount} cacheStores={cache.StoreCount}";
 
-        // 260605Codex: Patience is intended to watch validation/test loss rather than training loss.
-        // 260906Codex: Keep the persisted training result tied to the exact early-stopping monitor used by graph training.
+        // 260605Codex: Patienceは学習損失ではなく、検証・テスト損失を監視する意図で使う。
+        // 260906Codex: 保存する学習結果を、グラフ学習で実際に使った早期終了の監視項目に結び付ける。
         internal const string EarlyStoppingMonitor = "val_loss";
 
-        // 260906Codex: Describe the actually selected splitter rather than inferring it later from the pool type.
+        // 260906Codex: poolの種類から後で推測せず、実際に選んだ分割処理を記述する。
         private const string LegacySplitMethod = "legacy-random-v1";
 
         // 260622Claude: 評価・保存モデルは softmax 出力なので loss は from_logits=false。学習自体は graph 経路が logits で安定計算する。
         private static ILossFunc CreateSparseCategoricalCrossentropy() =>
             keras.losses.SparseCategoricalCrossentropy(from_logits: false);
-
-        // 260605Codex: Return the observed fit result because TensorFlow.Keras History is not reliable enough here.
-        // 260906Codex: Metrics are from the best validation epoch, not an independent test set.
-        private sealed record TrainingFitResult(
-            int RequestedEpochs,
-            int CompletedEpochs,
-            int LastEpoch,
-            string LastEpochMetrics,
-            int? BestEpoch,
-            double BestValidationLoss,
-            double BestValidationMetric,
-            // 260930Codex: Preserve strict source-label accuracy beside overlap-aware accuracy.
-            double? LegacyValidationAccuracy = null);
 
         // 260606Claude: 分類1個+回帰N個を1本のバーで表すため、モデル境界とエポックを「モデル均等×エポック比」で 0..1 の全体進捗へ畳み込みます。
         //              EarlyStopping で早期終了しても CompleteModel でその区間を 100% へスナップし、単調増加を保ちます。
@@ -200,410 +125,14 @@ namespace MineraScope
                     Math.Clamp(fraction, 0d, 1d)));
         }
 
-        // 260430Codex: 端成分解析はスペクトルデータ loader に委譲し、DeepLearning は学習/予測入口だけを持ちます。
-        // 260612Claude: 分類・回帰とも自前 custom loop で学習する(fit の毎batch GC 経路を避ける)。op 名で回帰/分類を選ぶ。
-        private static TrainingFitResult FitModelWithCancellation(
-            Model model,
-            NDArray xTrain,
-            NDArray yTrain,
-            NDArray xValidation,
-            NDArray yValidation,
-            int batchSize,
-            int epochs,
-            int patience,
-            string operationName,
-            Action<string> logAction,
-            Action<int>? reportEpoch,
-            CancellationToken cancellationToken,
-            // 260930Codex: Alternative labels are used only by classification; regression stays unchanged.
-            int[]? trainingAlternatives = null, int[]? validationAlternatives = null,
-            // 260930Codex: Classification receives its recorded rate; regression uses its own optimizer.
-            float classificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate)
+        // 260917Claude: 通常学習とSeed試行の両方で、分類保存時にラベルエンコーダーとモデル種別の付随ファイルを書き込む。
+        // 261014Codex: 通常学習とSeed試行の同じ保存処理を1か所へ集約する。
+        private static void WriteClassificationSidecars(string classificationFolder, Dictionary<string, int> encoder)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            // 260622Claude: 分類・回帰とも v1 Graph/Session 経路で学習する(高速化の本命、eager と統計的同等を実測確認済み)。
-            if (operationName.StartsWith("regression", StringComparison.Ordinal))
-                return RunGraphRegressionLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken);
-            return RunGraphClassificationLoop(model, xTrain, yTrain, xValidation, yValidation, batchSize, epochs, patience, operationName, logAction, reportEpoch, cancellationToken, trainingAlternatives, validationAlternatives, classificationLearningRate);
+            Directory.CreateDirectory(classificationFolder);
+            File.WriteAllText(Path.Combine(classificationFolder, ModelArtifactPaths.LabelEncoderFileName), System.Text.Json.JsonSerializer.Serialize(encoder));
+            File.WriteAllText(Path.Combine(classificationFolder, ModelArtifactPaths.ModelTypeFileName), "classification");
         }
-
-        // 260621Claude: 分類の v1-style Graph/Session 学習(高速化の本命)。eager custom loop の per-batch dispatch を畳んで大幅高速化する。
-        //   - to_graph は外部変数を capture できないため、manual Dense(W/b を自前変数)で graph を組み Session.run で train op を回す。
-        //   - 研究比較のため: 初期重みは渡された Keras model の get_weights() を注入し、Adam hyperparams を Keras Adam と一致(epsilon=1e-7)させる。
-        //   - eager は global 無効化せず graph.as_default() スコープ内だけ graph モード。学習後 best weights を model に set_weights し、
-        //     呼び出し側の evaluate/save(load_model 互換) をそのまま使う。★Dense-only 前提。
-        //   - 全データは graph 内 constant に置き start だけ feed して gather(tf.slice は動的 begin 不可)。巨大データで GraphDef が問題化したら feed-once Variable へ。
-        private static TrainingFitResult RunGraphClassificationLoop(
-            Model model,
-            NDArray xTrain,
-            NDArray yTrain,
-            NDArray xValidation,
-            NDArray yValidation,
-            int batchSize,
-            int epochs,
-            int patience,
-            string operationName,
-            Action<string> logAction,
-            Action<int>? reportEpoch,
-            CancellationToken cancellationToken,
-            int[]? trainingAlternatives, int[]? validationAlternatives,
-            float classificationLearningRate)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            string op = TensorFlowTrainingDebugLog.Clean(operationName);
-
-            // 初期重みを eager で確定させる(eager 経路と同一初期化にする)。未 build なら build してから取り出す。
-            int features = (int)xTrain.shape[1];
-            var initWeights = model.get_weights();
-            if (initWeights == null || initWeights.Count == 0)
-            {
-                model.build(new Shape(-1, features));
-                initWeights = model.get_weights();
-            }
-            // 261016Codex: 初期重みと採用重みは、この学習スコープの完了・中止時に解放する。
-            using var initialWeightLifetime = new TrainingWeightArrays(initWeights);
-            using var bestWeightLifetime = new TrainingWeightArrays(null);
-            TensorFlowTrainingDebugLog.Write("graph-loop-start", $"operation={op} engine=graph weights={initWeights.Count}");
-
-            int sampleCount = (int)xTrain.shape[0];
-            int valCount = (int)xValidation.shape[0];
-            List<NDArray>? bestWeights = null;
-            double bestValLoss = double.PositiveInfinity;
-            double bestValAccuracy = 0d;
-            // 260930Codex: Track the original one-label metric at the adopted epoch.
-            double bestLegacyAccuracy = 0d;
-            int? bestEpoch = null;
-            int wait = 0;
-            int completedEpochs = 0;
-            int lastEpoch = -1;
-            string lastEpochMetrics = "";
-            var epochStopwatch = new Stopwatch();
-
-            var graph = tf.Graph();
-            graph.as_default();
-            try
-            {
-                var dataX = tf.constant(xTrain);
-                var dataY = tf.constant(yTrain, dtype: TF_DataType.TF_INT32);
-                var valX = tf.constant(xValidation);
-                var valY = tf.constant(yValidation, dtype: TF_DataType.TF_INT32);
-                // 260930Codex: Keep alternative targets aligned with the original classification split.
-                var dataAlternative = trainingAlternatives is null ? dataY : tf.constant(trainingAlternatives);
-                var valAlternative = validationAlternatives is null ? valY : tf.constant(validationAlternatives);
-                int classCount = (int)initWeights[5].shape[0];
-
-                var W1 = tf.Variable(tf.constant(initWeights[0]), name: "W1");
-                var b1 = tf.Variable(tf.constant(initWeights[1]), name: "b1");
-                var W2 = tf.Variable(tf.constant(initWeights[2]), name: "W2");
-                var b2 = tf.Variable(tf.constant(initWeights[3]), name: "b2");
-                var W3 = tf.Variable(tf.constant(initWeights[4]), name: "W3");
-                var b3 = tf.Variable(tf.constant(initWeights[5]), name: "b3");
-                var weightVars = new[] { W1, b1, W2, b2, W3, b3 };
-
-                Tensor Forward(Tensor x)
-                {
-                    var h1 = tf.nn.relu(tf.matmul(x, W1.AsTensor()) + b1.AsTensor());
-                    var h2 = tf.nn.relu(tf.matmul(h1, W2.AsTensor()) + b2.AsTensor());
-                    return tf.matmul(h2, W3.AsTensor()) + b3.AsTensor();
-                }
-
-                var startPh = tf.placeholder(tf.int32, new Shape(Array.Empty<int>()), "start");
-                var idx = tf.range(startPh, tf.add(startPh, tf.constant(batchSize)));
-                // 260930Codex: Sum acceptable class probability for the four feldspar intersections.
-                var trainLoss = tf.reduce_mean(PartialLabelLoss.PerSample(Forward(tf.gather(dataX, idx)), tf.gather(dataY, idx), tf.gather(dataAlternative, idx), classCount));
-                // 260621Claude: Keras Adam と同一の hyperparams(epsilon=1e-7)で minimize し、研究比較の同等性を保つ。
-                // 260930Codex: Use the selected classification rate in the graph that updates the weights.
-                var optimizer = new Tensorflow.Train.AdamOptimizer(classificationLearningRate, 0.9f, 0.999f, 1e-7f, false, TF_DataType.TF_FLOAT, "Adam");
-                var trainOp = optimizer.minimize(trainLoss);
-
-                var valLogits = Forward(valX);
-                var valLossOp = tf.reduce_mean(PartialLabelLoss.PerSample(valLogits, valY, valAlternative, classCount));
-                var legacyCorrectOp = tf.reduce_sum(tf.cast(tf.equal(tf.arg_max(valLogits, 1), tf.cast(valY, tf.int64)), tf.int32));
-                var valCorrectOp = tf.reduce_sum(tf.cast(PartialLabelLoss.Correct(valLogits, valY, valAlternative), tf.int32));
-
-                // 261016Codex: 検証の順伝播を共有し、指標と採用重みをそれぞれ一括取得する。
-                ITensorOrOperation[] validationFetches = [valLossOp, legacyCorrectOp, valCorrectOp];
-                ITensorOrOperation[] weightFetches = weightVars.Select(variable => (ITensorOrOperation)variable.AsTensor()).ToArray();
-
-                // 260621Claude: minimize 後に init を作って Adam の slot variables まで初期化する。
-                var init = tf.global_variables_initializer();
-                using var sess = tf.Session(graph);
-                sess.run(init);
-
-                for (int epoch = 0; epoch < epochs; epoch++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    epochStopwatch.Restart();
-                    TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} engine=graph");
-
-                    long batchLoopStart = Stopwatch.GetTimestamp();
-                    // 261016Codex: 分類・定量とも、各バッチの更新前に中止要求を確認する。
-                    for (int start = 0; start + batchSize <= sampleCount; start += batchSize)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        sess.run(trainOp, new FeedItem(startPh, start));
-                    }
-                    double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
-
-                    long valStart = Stopwatch.GetTimestamp();
-                    // 261016Codex: 取得した検証配列は、当該エポックの集計が終わったら解放する。
-                    var validationValues = sess.run(validationFetches).ToList();
-                    using var validationLifetime = new TrainingWeightArrays(validationValues);
-                    double valLoss = validationValues[0].ToArray<float>()[0];
-                    double legacyAccuracy = valCount > 0 ? validationValues[1].ToArray<int>()[0] / (double)valCount : 0d;
-                    double valAccuracy = valCount > 0 ? validationValues[2].ToArray<int>()[0] / (double)valCount : 0d;
-                    double validationMs = Stopwatch.GetElapsedTime(valStart).TotalMilliseconds;
-
-                    bool willStop = false;
-                    if (valLoss < bestValLoss)
-                    {
-                        bestValLoss = valLoss;
-                        bestValAccuracy = valAccuracy;
-                        bestLegacyAccuracy = legacyAccuracy;
-                        bestEpoch = epoch + 1;
-                        // 261016Codex: 新候補の取得後に、前の採用候補を解放する。
-                        bestWeights = sess.run(weightFetches).ToList();
-                        bestWeightLifetime.Replace(bestWeights);
-                        wait = 0;
-                    }
-                    else if (++wait >= patience)
-                        willStop = true;
-
-                    // 260622Claude: 学習データ全体の metric はログ専用かつ初回ウォームアップが重いので算出しない。val(=test) のみ毎epoch評価する。
-                    string logs = $"val_loss={FormatMetric(valLoss)},val_accuracy={FormatMetric(valAccuracy)},legacy_val_accuracy={FormatMetric(legacyAccuracy)}";
-
-                    completedEpochs++;
-                    lastEpoch = epoch;
-                    lastEpochMetrics = logs;
-                    TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} engine=graph durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
-                    logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
-
-                    if (willStop)
-                    {
-                        reportEpoch?.Invoke(epoch);
-                        break;
-                    }
-
-                    reportEpoch?.Invoke(epoch);
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-            }
-            finally
-            {
-                graph.Exit();
-            }
-
-            // 260621Claude: best weights を eager の Keras model に書き戻し、呼び出し側の save をそのまま使う。
-            if (bestWeights != null)
-                model.set_weights(bestWeights);
-            TensorFlowTrainingDebugLog.Write("graph-loop-end", $"operation={op} engine=graph trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
-            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics, bestEpoch, bestValLoss, bestValAccuracy, bestLegacyAccuracy);
-        }
-
-        // 260622Claude: 回帰の v1-style Graph/Session 学習。分類 graph 経路と同形で、loss を MSE・出力を線形(端成分比率)にしたもの。
-        //   初期重みは渡された Keras model から注入、Adam hyperparams を Keras Adam と一致(epsilon=1e-7)させ研究比較の同等性を保つ。
-        //   best weights を model へ書き戻し、呼び出し側の evaluate/save をそのまま使う。★Dense-only 前提。
-        private static TrainingFitResult RunGraphRegressionLoop(
-            Model model,
-            NDArray xTrain,
-            NDArray yTrain,
-            NDArray xValidation,
-            NDArray yValidation,
-            int batchSize,
-            int epochs,
-            int patience,
-            string operationName,
-            Action<string> logAction,
-            Action<int>? reportEpoch,
-            CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            string op = TensorFlowTrainingDebugLog.Clean(operationName);
-
-            int features = (int)xTrain.shape[1];
-            int outputCount = (int)yTrain.shape[1];
-            var initWeights = model.get_weights();
-            if (initWeights == null || initWeights.Count == 0)
-            {
-                model.build(new Shape(-1, features));
-                initWeights = model.get_weights();
-            }
-            TensorFlowTrainingDebugLog.Write("graph-loop-start", $"operation={op} engine=graph kind=regression weights={initWeights.Count}");
-
-            int sampleCount = (int)xTrain.shape[0];
-            int valCount = (int)xValidation.shape[0];
-            List<NDArray>? bestWeights = null;
-            double bestValLoss = double.PositiveInfinity;
-            double bestValMae = 0d;
-            int? bestEpoch = null;
-            int wait = 0;
-            int completedEpochs = 0;
-            int lastEpoch = -1;
-            string lastEpochMetrics = "";
-            var epochStopwatch = new Stopwatch();
-
-            var graph = tf.Graph();
-            graph.as_default();
-            try
-            {
-                var dataX = tf.constant(xTrain);
-                var dataY = tf.constant(yTrain);
-                var valX = tf.constant(xValidation);
-                var valY = tf.constant(yValidation);
-
-                var W1 = tf.Variable(tf.constant(initWeights[0]), name: "W1");
-                var b1 = tf.Variable(tf.constant(initWeights[1]), name: "b1");
-                var W2 = tf.Variable(tf.constant(initWeights[2]), name: "W2");
-                var b2 = tf.Variable(tf.constant(initWeights[3]), name: "b2");
-                var W3 = tf.Variable(tf.constant(initWeights[4]), name: "W3");
-                var b3 = tf.Variable(tf.constant(initWeights[5]), name: "b3");
-                var weightVars = new[] { W1, b1, W2, b2, W3, b3 };
-
-                Tensor Forward(Tensor x)
-                {
-                    var h1 = tf.nn.relu(tf.matmul(x, W1.AsTensor()) + b1.AsTensor());
-                    var h2 = tf.nn.relu(tf.matmul(h1, W2.AsTensor()) + b2.AsTensor());
-                    return tf.matmul(h2, W3.AsTensor()) + b3.AsTensor();
-                }
-
-                Tensor MseLoss(Tensor pred, Tensor y) => tf.reduce_mean(tf.square(pred - y));
-
-                var startPh = tf.placeholder(tf.int32, new Shape(Array.Empty<int>()), "start");
-                var idx = tf.range(startPh, tf.add(startPh, tf.constant(batchSize)));
-                var trainLoss = MseLoss(Forward(tf.gather(dataX, idx)), tf.gather(dataY, idx));
-                // 260622Claude: Keras Adam と同一の hyperparams(epsilon=1e-7)で minimize し、研究比較の同等性を保つ。
-                var optimizer = new Tensorflow.Train.AdamOptimizer(0.001f, 0.9f, 0.999f, 1e-7f, false, TF_DataType.TF_FLOAT, "Adam");
-                var trainOp = optimizer.minimize(trainLoss);
-
-                var valPred = Forward(valX);
-                var valLossOp = MseLoss(valPred, valY);
-                var valAbsSumOp = tf.reduce_sum(tf.abs(valPred - valY));
-
-                // 260621Claude: minimize 後に init を作って Adam の slot variables まで初期化する。
-                var init = tf.global_variables_initializer();
-                using var sess = tf.Session(graph);
-                sess.run(init);
-
-                for (int epoch = 0; epoch < epochs; epoch++)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    epochStopwatch.Restart();
-                    TensorFlowTrainingDebugLog.Write("epoch-begin", $"operation={op} epoch={epoch} engine=graph kind=regression");
-
-                    long batchLoopStart = Stopwatch.GetTimestamp();
-                    // 261016Codex: 分類・定量とも、各バッチの更新前に中止要求を確認する。
-                    for (int start = 0; start + batchSize <= sampleCount; start += batchSize)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        sess.run(trainOp, new FeedItem(startPh, start));
-                    }
-                    double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
-
-                    long valStart = Stopwatch.GetTimestamp();
-                    double valLoss = sess.run(valLossOp).ToArray<float>()[0];
-                    double valMae = valCount > 0 && outputCount > 0 ? sess.run(valAbsSumOp).ToArray<float>()[0] / valCount / outputCount : 0d;
-                    double validationMs = Stopwatch.GetElapsedTime(valStart).TotalMilliseconds;
-
-                    bool willStop = false;
-                    if (valLoss < bestValLoss)
-                    {
-                        bestValLoss = valLoss;
-                        bestValMae = valMae;
-                        bestEpoch = epoch + 1;
-                        bestWeights = weightVars.Select(v => sess.run(v.AsTensor())).ToList();
-                        wait = 0;
-                    }
-                    else if (++wait >= patience)
-                        willStop = true;
-
-                    // 260622Claude: 学習データ全体の metric はログ専用かつ初回ウォームアップが重いので算出しない。val(=test) のみ毎epoch評価する。
-                    string logs = $"val_loss={FormatMetric(valLoss)},val_mean_absolute_error={FormatMetric(valMae)}";
-
-                    completedEpochs++;
-                    lastEpoch = epoch;
-                    lastEpochMetrics = logs;
-                    TensorFlowTrainingDebugLog.Write("epoch-end", $"operation={op} epoch={epoch} engine=graph kind=regression durationMs={epochStopwatch.ElapsedMilliseconds} batchLoopMs={FormatMetric(batchLoopMs)} validationMs={FormatMetric(validationMs)} {TensorFlowTrainingDebugLog.Clean(logs)}");
-                    logAction($"  Epoch {epoch + 1}/{epochs} [{operationName}]: {logs}");
-
-                    if (willStop)
-                    {
-                        reportEpoch?.Invoke(epoch);
-                        break;
-                    }
-
-                    reportEpoch?.Invoke(epoch);
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-            }
-            finally
-            {
-                graph.Exit();
-            }
-
-            if (bestWeights != null)
-                model.set_weights(bestWeights);
-            TensorFlowTrainingDebugLog.Write("graph-loop-end", $"operation={op} engine=graph kind=regression trainedEpochs={completedEpochs} lastEpoch={lastEpoch} bestValLoss={FormatMetric(bestValLoss)}");
-            return new TrainingFitResult(epochs, completedEpochs, lastEpoch, lastEpochMetrics, bestEpoch, bestValLoss, bestValMae);
-        }
-
-        // 260609Claude: GUI なしで分類 custom loop 学習を回す開発用ヘッドレス smoke test。env MINERASCOPE_HEADLESS_TRAIN=1 で Program から呼ぶ。
-        //              合成だが学習可能なデータ(クラス中心+小ノイズ)を実データ相当の形 [n,2048]/K クラスで作り、最適化が正しく回るか・速度・leak を実 pool 無しで検証する。
-        //              合成なので精度の意味は無い(実データの精度 A/B は GUI/実 pool で別途)。結果は tf-train-debug.log に出る。
-        internal static void RunHeadlessSmokeTest(Action<string> log)
-        {
-            int samples = ReadIntEnv("MINERASCOPE_SMOKE_SAMPLES", 6000);
-            int classes = ReadIntEnv("MINERASCOPE_SMOKE_CLASSES", 29);
-            int epochs = ReadIntEnv("MINERASCOPE_SMOKE_EPOCHS", 5);
-            int batchSize = ReadIntEnv("MINERASCOPE_SMOKE_BATCH", 128);
-            int valSamples = Math.Max(classes, samples / 5);
-
-            TensorFlowTrainingDebugLog.Write("smoke-start", $"samples={samples} classes={classes} epochs={epochs} batchSize={batchSize}");
-            log($"headless smoke test: samples={samples} classes={classes} epochs={epochs} batch={batchSize}");
-
-            tf.set_random_seed(42);
-            var rng = new Random(42);
-            float[,] centers = new float[classes, SpectrumLength];
-            for (int k = 0; k < classes; k++)
-                for (int j = 0; j < SpectrumLength; j++)
-                    centers[k, j] = (float)rng.NextDouble();
-
-            var (xTrain, yTrain) = MakeSyntheticClassificationData(samples, classes, centers, rng);
-            var (xTest, yTest) = MakeSyntheticClassificationData(valSamples, classes, centers, rng);
-
-            var model = CreateClassificationModel(classes);
-            model.compile(
-                optimizer: keras.optimizers.Adam(),
-                loss: CreateSparseCategoricalCrossentropy(),
-                metrics: new[] { "accuracy" });
-
-            var sw = Stopwatch.StartNew();
-            var result = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, 10, "classification:Smoke", log, null, default);
-            sw.Stop();
-
-            TensorFlowTrainingDebugLog.Write("smoke-end", $"totalMs={sw.ElapsedMilliseconds} trainedEpochs={result.CompletedEpochs} finalMetrics={TensorFlowTrainingDebugLog.Clean(result.LastEpochMetrics)}");
-            log($"headless smoke done: totalMs={sw.ElapsedMilliseconds} epochs={result.CompletedEpochs} final={result.LastEpochMetrics}");
-        }
-
-        // 260609Claude: クラスごとに固有中心 + 小ノイズの学習可能な合成分類データを実データ相当の形で作る。
-        private static (NDArray X, NDArray Y) MakeSyntheticClassificationData(int n, int classes, float[,] centers, Random rng)
-        {
-            float[,] x = new float[n, SpectrumLength];
-            int[] y = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                int label = rng.Next(classes);
-                y[i] = label;
-                for (int j = 0; j < SpectrumLength; j++)
-                    x[i, j] = centers[label, j] + (float)(rng.NextDouble() * 0.1 - 0.05);
-            }
-
-            return (np.array(x), np.array(y));
-        }
-
-        private static int ReadIntEnv(string name, int fallback) =>
-            int.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) && value > 0
-                ? value
-                : fallback;
 
         #region モデル訓練
         // 260507Codex: 新方式では manifest の Completed から選ばれた spectrum だけを学習に使います。
@@ -619,10 +148,11 @@ namespace MineraScope
             string outputPath,
             IProgress<TrainingProgress>? progress = null,
             CancellationToken cancellationToken = default,
-            // 260930Codex: Direct callers share the ordinary classification default.
-            float classificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate)
+            float classificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate,
+            // 261001Codex: 通常機能のOCN headを要求した場合だけ、特徴量をコピーする。
+            bool captureClassifierFeatures = false)
         {
-            // 260930Codex: Reject invalid rates before loading spectra or starting TensorFlow.
+            // 260930Codex: スペクトル読込やTensorFlow起動の前に、不正な学習率を拒否する。
             if (!float.IsFinite(classificationLearningRate) || classificationLearningRate <= 0)
                 throw new ArgumentOutOfRangeException(nameof(classificationLearningRate));
             if (!Directory.Exists(outputPath))
@@ -642,7 +172,8 @@ namespace MineraScope
             using var runProcess = Process.GetCurrentProcess();
             TimeSpan runCpuStart = runProcess.TotalProcessorTime;
             int regressionCount = orderedPools.Count(pool => pool.EndmemberNames.Count >= 2);
-            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience}");
+            // 261014Codex: 選択された分類学習率を機械可読な形式で学習開始ログへ記録する。
+            TensorFlowTrainingDebugLog.Write("training-run-start", $"pools={orderedPools.Length} regressionModels={regressionCount} epochs={epochs} batchSize={batchSize} patience={patience} classificationLearningRate={classificationLearningRate.ToString(CultureInfo.InvariantCulture)}");
 
             // 260606Claude: 分類1個+回帰N個を1本のバーで表す。各モデルを BeginModel/CompleteModel で挟み、epoch 進捗は reporter.ReportEpoch で報告する。
             var reporter = new TrainingProgressReporter(progress, 1 + regressionCount, epochs);
@@ -667,11 +198,11 @@ namespace MineraScope
                 patience,
                 testSplit,
                 unknownDistanceScale,
+                classificationLearningRate,
                 classificationOutputPath,
                 spectrumCache,
                 reporter.ReportEpoch,
-                cancellationToken,
-                classificationLearningRate);
+                cancellationToken, captureClassifierFeatures);
             if (classificationResult.Status == DeepLearningTrainingStatus.NotCompleted)
             {
                 TensorFlowTrainingDebugLog.Write(
@@ -685,8 +216,7 @@ namespace MineraScope
             reporter.CompleteModel();
             var modelMetrics = new List<TrainingModelMetrics>(classificationResult.ModelMetrics);
 
-            // 261021Claude: 非公開版と同じく、定量は件数が1バッチに満たない鉱物だけ省略する。
-            //   以前は重みを一度も更新しないまま保存まで進んでいた。分類器は検証済みなので作成を続ける。
+            // 260930Codex: 共通する鉱物別件数はバッチ検証1回で確認し、UI外の呼び出しで件数が異なる場合も引き続き扱う。
             var regressionPools = orderedPools.Where(pool => pool.EndmemberNames.Count >= 2).ToArray();
             var regressionSkipReasons = regressionPools.Select(pool => pool.Samples.Count).Distinct().ToDictionary(
                 count => count,
@@ -700,10 +230,13 @@ namespace MineraScope
                 cancellationToken.ThrowIfCancellationRequested();
                 string regressionModelName = pool.MineralName + ModelArtifactPaths.RegressionFolderSuffix;
                 string regressionOutputPath = Path.Combine(outputPath, regressionModelName);
+                // 260930Codex: 選択した件数判定を、ログと学習で再利用する。
                 string? skipReason = regressionSkipReasons[pool.Samples.Count];
+                // 260930Codex: 省略した定量処理を、学習開始として通知しない。
                 if (skipReason is null)
                     Log($"回帰モデル学習開始: {pool.MineralName}");
                 reporter.BeginModel(regressionModelName);
+                // 260930Codex: 共通の件数判定を再利用しつつ、すべての入力poolを検証する。
                 modelMetrics.Add(TrainRegressionModel(pool, epochs, batchSize, patience, testSplit, regressionOutputPath, spectrumCache, reporter.ReportEpoch, cancellationToken,
                     skipReason));
                 reporter.CompleteModel();
@@ -718,7 +251,7 @@ namespace MineraScope
                 ? runCpuMs * 100d / totalMs / Environment.ProcessorCount
                 : 0d;
             TensorFlowTrainingDebugLog.Write("training-run-end", $"status=completed totalMs={totalMs} runCpuMs={runCpuMs} avgLogicalCpuPercent={FormatMetric(averageLogicalCpuPercent)} logicalProcessors={Environment.ProcessorCount}");
-            return DeepLearningTrainingResult.CreateCompleted(modelMetrics);
+            return DeepLearningTrainingResult.CreateCompleted(modelMetrics) with { ClassifierFeatures = classificationResult.ClassifierFeatures };
         }
 
         // 260507Codex: manifest の endmemberFractions から回帰ラベルを作り、ファイル名パースを通らずに学習します。
@@ -734,14 +267,14 @@ namespace MineraScope
             SpectrumDataLoader.NormalizedSpectrumCache? spectrumCache,
             Action<int>? reportEpoch,
             CancellationToken cancellationToken,
-            // 261021Claude: 呼び出し元の件数判定で省略が決まった場合の理由。
+            // 260930Codex: 共通の設定検証から、任意の定量処理を省略する理由を取得する。
             string? skipReason)
         {
             string op = $"regression:{trainingPool.MineralName}";
             var modelTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("model-train-start", $"op={op} epochs={epochs} batchSize={batchSize} patience={patience} samples={trainingPool.Samples.Count}");
 
-            // 261021Claude: 分類で全スペクトルを読込済みなので、省略する定量では個別の読込を行わない。
+            // 260930Codex: 分類で全スペクトルを検査済みなので、省略した定量処理では個別読込やUI通知を行わない。
             if (skipReason is not null)
             {
                 var (trainingCount, validationCount) = TrainingSampleRequirements.GetSplitCounts(trainingPool.Samples.Count, testSplit);
@@ -767,6 +300,7 @@ namespace MineraScope
                     SplitMethod: LegacySplitMethod);
             }
 
+
             TensorFlowTrainingDebugLog.Write("clear-session-before", $"op={op}");
             keras.backend.clear_session();
             TensorFlowTrainingDebugLog.Write("clear-session-after", $"op={op}");
@@ -784,35 +318,18 @@ namespace MineraScope
             TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds}{FormatSpectrumCacheStats(spectrumCache)}");
             ComponentIndex = componentIdx;
 
-            // 260901Codex: Multi-time training must fail instead of silently changing the requested condition balance.
-            bool useSourceMetadata = ResolveSourceMetadataMode(trainingPool.Samples, op);
-            if (useSourceMetadata && (int)allSpectra.shape[0] != trainingPool.Samples.Count)
+            // 260901Codex: 複数時間の学習では、要求した条件比率を暗黙に変えず失敗させる。
+            // 260930Codex: 未使用のモードフラグを保持せず、メタデータの検証を維持する。
+            ResolveSourceMetadataMode(trainingPool.Samples, op);
+            // 260930Codex: 読み取り失敗によって、共通の事前検査で使った件数を暗黙に変えない。
+            if ((int)allSpectra.shape[0] != trainingPool.Samples.Count)
                 throw new InvalidDataException(
                     $"Training spectrum load failed for {op}: expected={trainingPool.Samples.Count}, loaded={(int)allSpectra.shape[0]}.");
 
             if (allSpectra.shape[0] == 0 || ComponentIndex == null)
             {
-                Log("エラー: 端成分情報が見つかりません。");
-                TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=skipped totalMs={modelTimer.ElapsedMilliseconds}");
-                return new TrainingModelMetrics(
-                    Target: "regression",
-                    ModelFolderName: trainingPool.MineralName + ModelArtifactPaths.RegressionFolderSuffix,
-                    Status: "skipped",
-                    MineralName: trainingPool.MineralName,
-                    SkipReason: "No regression labels were loaded.",
-                    SampleCount: trainingPool.Samples.Count,
-                    TrainingSampleCount: null,
-                    ValidationSampleCount: null,
-                    ClassCount: null,
-                    ComponentCount: componentIdx?.Count,
-                    RequestedEpochs: null,
-                    CompletedEpochs: null,
-                    BestEpoch: null,
-                    ValidationLossName: null,
-                    ValidationLoss: null,
-                    ValidationAccuracy: null,
-                    ValidationMae: null,
-                    SplitMethod: "not-applicable");
+                // 260930Codex: ラベル欠損は読み込み失敗とし、件数に基づく任意の定量省略として扱わない。
+                throw new InvalidDataException($"{trainingPool.MineralName}の定量用スペクトルまたは端成分情報を読み込めませんでした。");
             }
 
             Log($"  ファイル数: {allSpectra.shape[0]}");
@@ -825,7 +342,7 @@ namespace MineraScope
             Log("");
 
             var splitTimer = Stopwatch.StartNew();
-            // 260907Codex: Composition/time planning is independent from train/validation splitting; retain the established seed-42 non-stratified split for every data source.
+            // 260907Codex: 組成・時間の計画と学習・検証分割は独立させ、全入力元で従来のseed 42の非層化分割を保持する。
             var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitRegression(
                 allSpectra,
                 allLabels,
@@ -852,7 +369,7 @@ namespace MineraScope
             TensorFlowTrainingDebugLog.Write("fit-start", $"op={op}");
             var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken);
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
-            // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
+            // 260606Codex: 実際のエポック数を、この学習で使ったEarlyStopping設定と並べて表示する。
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
 
             // 260622Claude: 検証に test を渡しているので graph が best epoch で測った test loss/MAE をそのまま使い、冗長な model.evaluate を省く。
@@ -924,12 +441,12 @@ namespace MineraScope
             int patience,
             float testSplit,
             double unknownDistanceScale,
+            // 261014Codex: 分類の学習条件を保存先とcallbackより前にまとめる。
+            float classificationLearningRate,
             string outputPath,
             SpectrumDataLoader.NormalizedSpectrumCache? spectrumCache,
             Action<int>? reportEpoch,
-            CancellationToken cancellationToken,
-            // 260930Codex: Pass the actual rate through model setup and graph training.
-            float classificationLearningRate)
+            CancellationToken cancellationToken, bool captureClassifierFeatures = false)
         {
             const string op = "classification:AllMinerals";
             var modelTimer = Stopwatch.StartNew();
@@ -944,7 +461,7 @@ namespace MineraScope
             var dataTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("data-load-start", $"op={op}");
             var (allSpectra, allLabelsList, loadStats, loadFailures) = SpectrumDataLoader.LoadClassificationData(trainingPools, cancellationToken, spectrumCache, preprocessing);
-            // 260607Codex: Log bounded parallel classification load stats so data-load speedups can be compared safely.
+            // 260607Codex: 並列分類読込の統計を記録し、規模を限定して読込の高速化を安全に比較できるようにする。
             TensorFlowTrainingDebugLog.Write("data-load-end", $"op={op} spectra={allSpectra.shape[0]} durationMs={dataTimer.ElapsedMilliseconds} inputSamples={loadStats.InputSamples} loadedSamples={loadStats.LoadedSamples} skippedSamples={loadStats.SkippedSamples} parallelDegree={loadStats.ParallelDegree}{FormatSpectrumCacheStats(spectrumCache)}");
             if (loadFailures.Count > 0)
                 return ReportClassificationLoadFailures(
@@ -954,7 +471,7 @@ namespace MineraScope
                     modelTimer,
                     cancellationToken);
 
-            // 260901Codex: Source rows stay aligned with loaded spectra because a multi-time run accepts no skipped input.
+            // 260901Codex: 複数時間の実行では入力の省略を認めないため、元の行と読込スペクトルの対応を保持する。
             var classificationSamples = trainingPools
                 .SelectMany(pool => pool.Samples.Select(sample => (pool.MineralName, Sample: sample)))
                 .ToArray();
@@ -973,7 +490,7 @@ namespace MineraScope
             }
 
             var splitTimer = Stopwatch.StartNew();
-            // 260907Codex: Keep the split rule separate from the planner; condition coverage is guaranteed by the completed plan, not by a new splitter policy.
+            // 260907Codex: 分割規則を計画処理から分離し、条件の網羅は新しい分割方針ではなく完了した計画で保証する。
             var (xTrain, xTest, yTrain, yTest) = DeepLearningDataSplitter.TrainTestSplitClassification(
                 allSpectra,
                 labelsEncoded,
@@ -984,7 +501,7 @@ namespace MineraScope
             Log($"訓練データ: {xTrain.shape[0]}");
             Log($"テストデータ: {xTest.shape[0]}\n");
 
-            // 261016Codex: 直接呼び出しでも、分類モデルの構築前に件数不足を拒否する。
+            // 260930Codex: 学習処理を直接呼ぶ場合も、学習不能な分類器の構築前に停止する。
             string? insufficientReason = TrainingSampleRequirements.GetFailureReason((int)xTrain.shape[0], (int)xTest.shape[0], batchSize);
             if (insufficientReason is not null)
             {
@@ -1012,15 +529,18 @@ namespace MineraScope
             Log("訓練中...");
             var fitTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("fit-start", $"op={op}");
-            // 260930Codex: Derive alternatives from manifest composition and reuse the exact original split indices.
+            // 260917Codex: 分類の分割を変えず、manifestの組成から許容する目標ラベルを求める。
             var policyClasses = encoder.OrderBy(pair => pair.Value).Select(pair => pair.Key).ToArray();
             var alternatives = classificationSamples.Select(row => MineralLabelPolicy.AlternativeIndex(row.MineralName, row.Sample.EndmemberFractions, policyClasses)).ToArray();
+            // 260917Claude: TrainTestSplitClassificationと同じSeed付き分割で、代替ラベルとxTrain・xTestの行対応を保持する。
             var (trainIndices, testIndices) = DeepLearningDataSplitter.CreateLegacySplitIndices(alternatives.Length, testSplit, DeepLearningDataSplitter.DefaultRandomState);
             var fitResult = FitModelWithCancellation(model, xTrain, yTrain, xTest, yTest, batchSize, epochs, patience, op, _logAction, reportEpoch, cancellationToken,
-                trainIndices.Select(index => alternatives[index]).ToArray(), testIndices.Select(index => alternatives[index]).ToArray(),
-                classificationLearningRate: classificationLearningRate);
+                classificationLearningRate: classificationLearningRate,
+                // 261014Codex: 任意引数の並び替え後も、各入力を名前付きで対応させる。
+                trainingAlternatives: trainIndices.Select(index => alternatives[index]).ToArray(),
+                validationAlternatives: testIndices.Select(index => alternatives[index]).ToArray());
             TensorFlowTrainingDebugLog.Write("fit-end", $"op={op} durationMs={fitTimer.ElapsedMilliseconds} requestedEpochs={fitResult.RequestedEpochs} trainedEpochs={fitResult.CompletedEpochs} lastEpoch={fitResult.LastEpoch} earlyStoppingMonitor={EarlyStoppingMonitor} patience={patience} finalEpochMetrics={TensorFlowTrainingDebugLog.Clean(fitResult.LastEpochMetrics)}");
-            // 260606Codex: Show the actual epoch count beside the EarlyStopping settings used for this fit.
+            // 260606Codex: 実際のエポック数を、この学習で使ったEarlyStopping設定と並べて表示する。
             Log($"  学習エポック数: {fitResult.CompletedEpochs}/{fitResult.RequestedEpochs} (monitor={EarlyStoppingMonitor}, patience={patience})");
             // 260622Claude: 検証に test を渡しているので graph が best epoch で測った test loss/accuracy をそのまま使い、冗長な model.evaluate を省く。
             double validationLoss = fitResult.BestValidationLoss;
@@ -1030,12 +550,7 @@ namespace MineraScope
             Log($"検証 Loss: {validationLoss:F4}");
             Log($"検証 Accuracy: {validationAccuracy * 100:F2}%");
             cancellationToken.ThrowIfCancellationRequested();
-            Directory.CreateDirectory(outputPath);
-            string encoderPath = Path.Combine(outputPath, ModelArtifactPaths.LabelEncoderFileName);
-            File.WriteAllText(encoderPath, System.Text.Json.JsonSerializer.Serialize(encoder));
-
-            string modelTypePath = Path.Combine(outputPath, ModelArtifactPaths.ModelTypeFileName);
-            File.WriteAllText(modelTypePath, "classification");
+            WriteClassificationSidecars(outputPath, encoder);
             cancellationToken.ThrowIfCancellationRequested();
             var saveTimer = Stopwatch.StartNew();
             TensorFlowTrainingDebugLog.Write("save-start", $"op={op}");
@@ -1044,9 +559,9 @@ namespace MineraScope
             cancellationToken.ThrowIfCancellationRequested();
             // 260626Claude: 予測時に自動適用するため、分類モデルフォルダにも前処理を記録する。
             preprocessing.WriteToModelFolder(outputPath);
-            // 260930Codex: Mark models trained with the dual-label rule; missing metadata means legacy training.
+            // 260917Codex: この付随ファイルは後の評価とは独立して、学習内容を記述する。
             MineralLabelPolicy.WriteTrainingMetadata(outputPath);
-            // 260622Codex: Persist optional open-set statistics after the classifier itself is safely saved.
+            // 260622Codex: 分類器自体を安全に保存してから、任意のオープンセット統計を保存する。
             TrySaveUnknownDetector(model, xTrain, yTrain, xTest, yTest, unknownDistanceScale, outputPath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             TensorFlowTrainingDebugLog.Write("model-train-end", $"op={op} status=ok totalMs={modelTimer.ElapsedMilliseconds} trainedEpochs={fitResult.CompletedEpochs} testLoss={FormatMetric(validationLoss)} testAccuracy={FormatMetric(validationAccuracy)}");
@@ -1072,7 +587,11 @@ namespace MineraScope
                     ValidationMae: null,
                     SplitMethod: splitMethod,
                     LegacyValidationAccuracy: fitResult.LegacyValidationAccuracy)
-            });
+            }) with
+            {
+                // 261001Codex: このマネージド重みは直前に保存した分類器と一致し、ファイルシステムのハンドルを保持しない。
+                ClassifierFeatures = captureClassifierFeatures ? DenseClassificationFeatureExtractor.FromModel(model) : null
+            };
         }
 
         // 260902Codex: 先頭10件を画面ログへ、修復に必要な全件を診断ログへ入力順で残します。
@@ -1142,15 +661,15 @@ namespace MineraScope
                 SpectrumDataLoader.ClassificationLoadFailureKind.ReadFailure =>
                     $"読み取り失敗（{failure.ExceptionType ?? "原因不明"}）",
                 // 260930Claude: 読めてはいるので、読み取り失敗と区別して原因を示します。
-                // 260930Codex: モデルの学習・昇格前に、空の学習入力を通知する。
-                // 261016Codex: 公開版でも、信号のない入力を正常な学習・予測へ渡さない。
+                // 260930Codex: モデルの学習や昇格の前に、空の学習入力を通知する。
                 SpectrumDataLoader.ClassificationLoadFailureKind.NoSignal =>
                     "信号なし（全ゼロ、または低エネルギーマスク後に信号が残らない）",
                 _ => throw new InvalidOperationException($"未対応の分類データ読込失敗です: {failure.Kind}")
             };
 
-        // 260901Codex: Mixed legacy and manifest-aware rows are rejected because their split semantics would be ambiguous.
-        private static bool ResolveSourceMetadataMode(
+        // 260901Codex: 旧形式とmanifest対応の行が混在すると分割の意味が曖昧になるため、拒否する。
+        // 260908Codex: スナップショット作成でも、通常学習と同じメタデータ完全性の検証を使う。
+        internal static bool ResolveSourceMetadataMode(
             IReadOnlyList<SpectrumTrainingSample> samples,
             string operationName)
         {
@@ -1174,7 +693,7 @@ namespace MineraScope
             return true;
         }
 
-        // 260622Codex: Build the optional open-set detector beside the classifier without making classifier training depend on it.
+        // 260622Codex: 分類学習の必須条件にせず、分類器とともに任意のオープンセット検知器を構築する。
         private void TrySaveUnknownDetector(
             Model model,
             NDArray xTrain,
@@ -1210,27 +729,6 @@ namespace MineraScope
         //   SpectrumBatchPredictionWorkflow へ差し替わって以降、唯一の呼び出し元だった MineralPredictionWorkflow.RunAsync
         //   ごと到達不能になっていた。判定の正本は SpectrumBatchPredictionWorkflow + SpectrumPredictionBlockFormatter。
         //   このクラスは学習専用になった。
-        // 261016Codex: 学習中に所有するネイティブ配列を、候補更新とスコープ終了時に解放する。
-        private sealed class TrainingWeightArrays(List<NDArray>? values) : IDisposable
-        {
-            private List<NDArray>? _values = values;
-
-            public void Replace(List<NDArray> replacement)
-            {
-                Dispose();
-                _values = replacement;
-            }
-
-            public void Dispose()
-            {
-                if (_values is null)
-                    return;
-                foreach (var value in _values)
-                    value.Dispose();
-                _values = null;
-            }
-        }
-
     }
 }
 

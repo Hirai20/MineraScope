@@ -9,7 +9,7 @@ using Crystallography;
 using MemoryPack;
 using System.Collections.Generic;
 using System.Diagnostics;
-// 260902Codex: Keep measurement-time progress text stable regardless of the Windows display culture.
+// 260902Codex: Windowsの表示カルチャにかかわらず、測定時間の進捗文字列を一定にする。
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -70,7 +70,7 @@ namespace MineraScope
         private readonly SimulationExecutionService _simulationExecutionService;
         // 260511Codex: キャリブレーション画面は閉じても破棄せず、入力値を保持するため 1 インスタンスだけ持ちます。
         private readonly EdxCalibrationForm _edxCalibrationForm;
-        // 260626Codex: Detector physics travels with generation requests without adding detector-editing UI to GeneratorForm.
+        // 260626Codex: GeneratorFormに検出器編集UIを加えず、生成要求に検出器の物理条件を含める。
         private DetectorProfile _detectorProfile = DetectorProfile.CreateLegacyTest();
         // 260513Codex: DTSA-II spectrum 生成だけを中止するため、学習処理とは別の CTS を持ちます。
         // 260514Codex: DTSA-II spectrum 生成とモデル作成は別々の CTS を持ち、同じ中止ボタンから現在の処理だけ止めます。
@@ -79,8 +79,6 @@ namespace MineraScope
         // 260528Claude: 鉱物選択や分解能変更で再計算する組成リストを Task.Run に逃がすため、最新の計算だけを残せる CTS を持ちます。
         private CancellationTokenSource _solutionUpdateCts;
 
-        // 260507Codex: 下部ドロワーの標準高さを UI 初期化と開閉処理で共有します。
-        private const float BottomDrawerDefaultHeight = 180F;
         // 260508Codex: GeneratorForm の設定ファイル名を保存・復元で共有します。
         private const string UserSettingsFileName = "GeneratorFormSettings.json";
 
@@ -165,16 +163,17 @@ namespace MineraScope
             numericBoxResolution.Value = settings.Resolution;
             numericBoxEpochs.Value = settings.Epochs;
             numericBoxBatchSize.Value = settings.BatchSize;
-            numericBoxUnknownDistanceScale.Value = settings.UnknownDistanceScale;
             numericBoxEarlyStopping.Value = settings.EarlyStopping;
             numericBoxValidationSplit.Value = settings.ValidationSplit;
             numericBoxProbeCurrent.Value = settings.ProbeCurrent;
             numericBoxLiveTime.Value = settings.LiveTime;
             numericBoxBeamEnergy.Value = settings.BeamEnergy;
             numericBoxCarbonThickness.Value = settings.CarbonThickness;
-            numericBoxcarbonrandam.Value = settings.CarbonThicknessJitterPercent;
             // 260901Codex: B 導入前の保存設定には値が無いため、既存ユーザーだけ従来の単一時間を維持します。
             checkBoxMeasurementTimePresetB.Checked = settings.MeasurementTimePresetBEnabled ?? false;
+            // 260916Claude (Phase 5): 学習方式と OCN 設定は旧設定ファイルに無ければ Designer 既定値 (従来分類 / 42 / 500 / 50) を保つ。
+            radioButtonOcnTraining.Checked = settings.TrainingMethod == SoftmaxOcnTrainingMethodName;
+            radioButtonStandardTraining.Checked = !radioButtonOcnTraining.Checked;
         }
 
         // 260507Codex: 次回起動で戻す対象を明示し、CheckedListBox のチェック状態は保存しません。
@@ -193,7 +192,8 @@ namespace MineraScope
                     Resolution = numericBoxResolution.Value,
                     Epochs = numericBoxEpochs.Value,
                     BatchSize = numericBoxBatchSize.Value,
-                    UnknownDistanceScale = numericBoxUnknownDistanceScale.Value,
+                    // 261001Codex: 新しい通常モデルは復元したUI設定ではなく、固定の半径倍率を使う。
+                    UnknownDistanceScale = 1d,
                     EarlyStopping = numericBoxEarlyStopping.Value,
                     ValidationSplit = numericBoxValidationSplit.Value,
                     ProbeCurrent = numericBoxProbeCurrent.Value,
@@ -202,7 +202,10 @@ namespace MineraScope
                     MeasurementTimePresetBEnabled = checkBoxMeasurementTimePresetB.Checked,
                     BeamEnergy = numericBoxBeamEnergy.Value,
                     CarbonThickness = numericBoxCarbonThickness.Value,
-                    CarbonThicknessJitterPercent = numericBoxcarbonrandam.Value
+                    // 261021Codex: 蒸着膜厚のランダム化を廃止し、通常画面の保存設定でも無効にする。
+                    CarbonThicknessJitterPercent = 0d,
+                    // 261021Codex: 公開版では従来分類と分類＋OCNの選択だけを保存する。
+                    TrainingMethod = radioButtonOcnTraining.Checked ? SoftmaxOcnTrainingMethodName : StandardTrainingMethodName
                 });
         }
 
@@ -213,18 +216,20 @@ namespace MineraScope
 
             // 260527Codex: DTSA-II spectrum 生成だけを先に実行できるよう、実行ボタンは常時表示します。
             buttonRunSpectrumGeneration.Visible = true;
-            buttonModelTrain.Text = "モデルを作成";
+            // 261015Codex: 静的なボタン表示名と間隔を、Designerでまとめて管理する。
             // 260513Codex: 中止ボタンの Click 接続は Designer 側で持ち、ここでは初期状態だけをそろえます。
             buttonCancel.Enabled = false;
             // 260527Codex: Designer 上の statusStrip1 を進捗表示として使うため、初期値だけ code-behind でそろえます。
             InitializeSimulationStatus();
 
-            UpdateAdvancedSettingsButtonText();
+            // 261021Codex: 表示文言はDesignerに任せ、チェック状態だけを同期する。
+            SynchronizeAdvancedSettingsCheckBox();
             // 260901Codex: 新規起動の Designer 既定値と復元済み設定のどちらにも同じ表示規則を適用します。
             ApplyMeasurementTimePresetUiState();
+            // 260916Claude (Phase 5): OCN 専用の設定欄・dataset 表示は OCN 選択時だけ見せる。
+            // 261021Codex: 説明欄を削除したため、学習方式に連動する表示更新は不要になった。
         }
 
-        // 260513Codex: 詳細設定は最初から下部ドロワー内にあるため、初期状態は非表示と高さ 0 にそろえます。
         private DetectorProfile ReadDetectorProfileFromUi()
         {
             var profile = _detectorProfile.Clone();
@@ -232,12 +237,11 @@ namespace MineraScope
             return DetectorProfile.CreateWithDefaults(profile);
         }
 
+        // 261021Codex: 配置と行の高さはDesignerに任せ、初期状態の非表示とスクロールだけを設定する。
         private void ConfigureBottomDrawerInitialState()
         {
-            groupBoxAdvancedSettings.Dock = DockStyle.Fill;
             panelBottomDrawer.Visible = false;
             panelBottomDrawer.AutoScroll = true;
-            SetBottomDrawerRowHeight(0F);
         }
 
         // 260511Codex: キャリブレーション画面は再表示時に既存インスタンスを前面化して値を保持します。
@@ -259,8 +263,10 @@ namespace MineraScope
         }
 
         // 260901Codex: B は測定時間と本数を固定するため、使用しない単一条件の入力欄を隠します。
-        private void checkBoxMeasurementTimePresetB_CheckedChanged(object sender, EventArgs e) =>
-            ApplyMeasurementTimePresetUiState();
+        // 261021Codex: OCN説明欄を削除したため、測定条件変更時の更新対象からも除く。
+        // 261021Codex: Designerのイベント入口を保ち、共通の表示更新へ直接委譲する。
+        private void checkBoxMeasurementTimePresetB_CheckedChanged(object sender, EventArgs e)
+            => ApplyMeasurementTimePresetUiState();
 
         private void ApplyMeasurementTimePresetUiState()
         {
@@ -269,29 +275,17 @@ namespace MineraScope
             numericBoxSpectraPerMineral.Visible = !usePresetB;
         }
 
-        // 260513Codex: 下部ドロワーは詳細設定専用なので、中身を差し替えず表示と高さだけを切り替えます。
+        // 261021Codex: 表示だけを切り替え、行の高さはDesignerのAutoSizeに任せる。
         private void SetAdvancedSettingsVisible(bool visible)
         {
             panelBottomDrawer.Visible = visible;
-            SetBottomDrawerRowHeight(visible ? BottomDrawerDefaultHeight : 0F);
             tableLayoutPanelMain.PerformLayout();
-            UpdateAdvancedSettingsButtonText();
+            SynchronizeAdvancedSettingsCheckBox();
         }
 
-        // 260513Codex: 下部ドロワー用の Row だけを高さ変更し、詳細設定の開閉を表現します。
-        private void SetBottomDrawerRowHeight(float height)
+        // 261021Codex: 下部ドロワーの表示状態をCheckBoxへ同期する。
+        private void SynchronizeAdvancedSettingsCheckBox()
         {
-            if (tableLayoutPanelMain.RowStyles.Count <= 3)
-                return;
-
-            tableLayoutPanelMain.RowStyles[3].SizeType = SizeType.Absolute;
-            tableLayoutPanelMain.RowStyles[3].Height = height;
-        }
-
-        // 260513Codex: 下部ドロワーの表示状態を CheckBox に反映します。
-        private void UpdateAdvancedSettingsButtonText()
-        {
-            checkBoxAdvanced.Text = "詳細設定を表示";
             if (checkBoxAdvanced.Checked != panelBottomDrawer.Visible)
                 checkBoxAdvanced.Checked = panelBottomDrawer.Visible;
         }
@@ -342,14 +336,16 @@ namespace MineraScope
                     (double)numericBoxResolution.Value / 100,
                     (int)numericBoxParallel.Value,
                     // 260622Claude: カーボン蒸着膜厚を spectrum ごとに振るばらつき幅 (%) を生成へ渡す。
-                    numericBoxcarbonrandam.Value),
+                    // 261021Codex: ばらつき入力欄を廃止し、新規生成では指定した蒸着膜厚を固定する。
+                    0d),
                 new ModelTrainingSettings(
                     (int)numericBoxEpochs.Value,
                     (int)numericBoxBatchSize.Value,
                     (int)numericBoxEarlyStopping.Value,
                     (float)numericBoxValidationSplit.Value / 100f,
                     // 260622Claude: 未知判定で既知とみなす距離に掛ける倍率を学習へ渡す。
-                    numericBoxUnknownDistanceScale.Value),
+                    // 261001Codex: 新モデルの倍率を固定し、保存済みモデルは記録したしきい値を保持する。
+                    1d),
                 // 260511Codex: 1 回だけの CheckedListBox helper を避け、選択対象はその場で配列化します。
                 checkedListBoxMinerals.CheckedItems.Cast<SolidSolution>().ToArray());
 
@@ -358,7 +354,7 @@ namespace MineraScope
                 SpectrumTimeAllocations = checkBoxMeasurementTimePresetB.Checked
                     ? SpectrumTimeSchedule.MeasurementTimeB.CreateAllocations()
                     : [],
-                // 260907Codex: The fixed B checkbox keeps its current UI but now asks the workflow to plan compositions across every live time together.
+                // 260907Codex: 固定のBチェックのUIを保ち、全ライブタイムをまとめた組成計画をワークフローへ要求する。
                 SpectrumTimeSchedule = checkBoxMeasurementTimePresetB.Checked
                     ? SpectrumTimeSchedule.MeasurementTimeB
                     : null
@@ -400,7 +396,7 @@ namespace MineraScope
             if (requireDtsaPath && string.IsNullOrWhiteSpace(request.Paths.DtsaFolder))
                 return "DTSA-II のフォルダを指定してください。";
 
-            // 260626Codex: Fail early when the selected folder is not the dtsa2.msi install root.
+            // 260626Codex: 選択フォルダーがdtsa2.msiのインストール先でなければ早期に失敗させる。
             string dtsaValidationError = requireDtsaPath
                 ? DtsaMsiInstallation.GetValidationError(request.Paths.DtsaFolder)
                 : null;
@@ -411,7 +407,6 @@ namespace MineraScope
         }
 
         // 260513Codex: DTSA-II spectrum 生成だけを CancellationTokenSource で中止できるようにします。
-        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private async void buttonRunSpectrumGeneration_Click(object sender, EventArgs e)
         {
             var request = CreateModelCreationRequest();
@@ -644,7 +639,6 @@ namespace MineraScope
         }
 
         // 260416Codex: 端成分 UI 更新の分岐を早期 return ベースに整理
-        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private void UpdateEndmemberUI()
         {
             if (checkedListBoxMinerals.SelectedItem is not SolidSolution selectedSolution)
@@ -736,6 +730,7 @@ namespace MineraScope
                 var preview = new List<string>(CompositionListPreviewCount);
                 try
                 {
+                    // 261018Codex: 制約で候補が返らない間も、各候補の検査前にプレビューの中止を反映する。
                     foreach (var ratio in selectedSolution.EnumerateCandidateFractionsLazy(resolution, token))
                     {
                         token.ThrowIfCancellationRequested();
@@ -792,7 +787,6 @@ namespace MineraScope
         #endregion
 
         // 260416Codex: 追加・更新で共通の固溶体生成処理をまとめる
-        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private bool TryCreateSolutionFromInputs(out SolidSolution solution)
         {
             // 261018Codex: 入力変換が失敗した場合は追加・更新の保存処理へ進めない。
@@ -831,6 +825,8 @@ namespace MineraScope
         private void checkedListBoxMinerals_ItemCheck(object sender, ItemCheckEventArgs e)
         {
             // 260511Codex: ItemCheck 反映後に、選択中鉱物の候補表示だけを遅延更新します。
+            // 260916Claude (Phase 5): OCN の dataset 表示 (class 数) も反映後に更新する。
+            // 261021Codex: OCN説明欄を削除したため、選択結果の更新だけを遅延実行する。
             BeginInvoke(new Action(UpdateSelectedSolution));
         }
 
@@ -859,7 +855,6 @@ namespace MineraScope
         #endregion
         #region 更新メソッド
         // 260416Codex: 更新時の入力変換も追加処理と揃える
-        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private void buttonUpdateMineral_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMinerals.SelectedIndex;
@@ -881,7 +876,6 @@ namespace MineraScope
         #endregion
         #region 削除メソッド
         // 260416Codex: 削除後の保存と再バインドも共通 helper を使って読みやすくします。
-        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private void buttonDeleteMineral_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMinerals.SelectedIndex;
@@ -952,7 +946,7 @@ namespace MineraScope
         private void SetStatusWithElapsed(string text, int value, int maximum) =>
             SetStatusStrip($"{text} (経過 {_operationStopwatch.Elapsed:hh\\:mm\\:ss})", value, maximum);
 
-        // 260902Codex: Indeterminate animation makes long pool preparation visibly active before the first count arrives.
+        // 260902Codex: 最初の件数通知前も、長いpool準備が進行中だと分かる不定進捗アニメーションを表示する。
         private void SetStatusMarqueeWithElapsed(string text) =>
             SetStatusStrip(
                 $"{text} (経過 {_operationStopwatch.Elapsed:hh\\:mm\\:ss})",
@@ -987,10 +981,10 @@ namespace MineraScope
                 TrainLog(FormatSimulationProgressLog(progress));
         }
 
-        // 260902Codex: Preparation progress is reported by the worker and rendered on the UI thread with pool/file counts.
+        // 260902Codex: workerが準備進捗を通知し、UIスレッドでpool数・ファイル数を表示する。
         private void ReportSpectrumPoolPreparationProgress(SpectrumPoolPreparationProgress progress)
         {
-            // 260908Codex: Candidate scans have no known total or single live time; show their count and keep the activity indicator moving.
+            // 260908Codex: 候補の走査では総数や単一のライブタイムが不明なので、件数を表示して動作表示を継続する。
             string liveTimeText = progress.LiveTime > 0
                 ? $" ({progress.LiveTime.ToString("G", CultureInfo.InvariantCulture)}秒)"
                 : string.Empty;
@@ -1077,9 +1071,15 @@ namespace MineraScope
         //分類モデル
         private async void buttonModelTrain_Click(object sender, EventArgs e)
         {
+
+            // 260928Codex: 両方式で分類器を学習し、組合せ方式では昇格前に学習型Unknown headを追加する。
+            // 260918Claude: pool 確認から学習完了（または途中の return）までを 1 つの実行中区間として登録する。
+
             // 260416Codex: 学習開始も request -> plan -> workflow の流れに揃え、今後の統合実行へつなげます。
             var request = CreateModelCreationRequest();
-            // 261016Codex: データ準備を始める前に分類の最小クラス数を確認する。
+            // 261001Codex: 非同期の準備開始前に、選択方式を取得する。
+            int? softmaxOcnSeed = radioButtonOcnTraining.Checked ? 42 : null;
+            // 261001Codex: 分類では2種類以上の鉱物クラスを選択する必要がある。
             if (request.SelectedMineralSolutions.Count < 2)
             {
                 MessageBox.Show(this, "分類する鉱物を2種類以上選択してください。", "モデル作成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1092,7 +1092,8 @@ namespace MineraScope
                 return;
             }
 
-            // 260901Codex: Do not recover Pending entries while another process may still be producing their EMSA files.
+            // 260901Codex: 別プロセスがEMSAを書いている可能性がある間は、Pending項目を復旧しない。
+            // 260917Codex: 公開済みスペクトルだけを読み、別アプリによる生成や他モデルの準備との共存を許す。
             if (!SpectrumPoolMutationLease.TryAcquireReadOnly(out var poolMutationLease, out string leaseFailureReason))
             {
                 MessageBox.Show(this, leaseFailureReason, "モデル作成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1103,6 +1104,7 @@ namespace MineraScope
             _operationStopwatch.Restart();
             int trainingPreparationPoolCount = request.SelectedMineralSolutions.Count
                 * request.GetEffectiveSpectrumTimeAllocations().Count;
+            // 260917Codex: 中断からの復旧も含め、Pending項目はシミュレーション側が管理する。
             TrainLog($"学習準備を開始: {trainingPreparationPoolCount} pool の生成完了済み EMSA を確認します。");
             SetStatusMarqueeWithElapsed("学習準備中: 生成完了データ確認");
             buttonModelTrain.Enabled = false;
@@ -1111,18 +1113,18 @@ namespace MineraScope
 
             IReadOnlyList<SpectrumTrainingPool> trainingPools;
             IReadOnlyList<SpectrumPoolShortage> shortages;
-            // 260908Codex: Let the existing cancel button stop preparation before training begins.
+            // 260908Codex: 既存の中止ボタンで、学習開始前の準備を停止できるようにする。
             using var preparationCancellationTokenSource = new CancellationTokenSource();
             _modelTrainingCancellationTokenSource = preparationCancellationTokenSource;
             buttonCancel.Enabled = true;
             try
             {
-                // 260901Codex: 停止済みrunの完成ファイルを回収してから、全時間の厳格な学習pool選択をUIスレッド外で行います。
-                // 261021Codex: 生成中のpoolを書き換えず、公開済みスペクトルだけを学習へ渡す。
+                // 260901Codex: 全時間の厳格な学習pool選択をUIスレッド外で行います。
+                var preparationProgress = new Progress<SpectrumPoolPreparationProgress>(ReportSpectrumPoolPreparationProgress);
+                // 260908Codex: 復旧と選択でスコープ内のmanifest読込を共用し、各工程をUIとファイルへ記録する。
+                // 260917Codex: manifestの修復を保存できるシミュレーション用ワークフローは再利用しない。
                 var trainingPoolWorkflow = new SpectrumPoolWorkflow(
                     new SpectrumPoolRepository(new SpectrumConditionKeyBuilder()), _simulationPlanBuilder, persistManifestRepairs: false);
-                var preparationProgress = new Progress<SpectrumPoolPreparationProgress>(ReportSpectrumPoolPreparationProgress);
-                // 260908Codex: Share scoped manifest reads across recovery and selection, logging each phase to the UI and file.
                 var preparation = await Task.Run(
                     () => trainingPoolWorkflow.PrepareTrainingPools(
                         request,
@@ -1137,9 +1139,10 @@ namespace MineraScope
                 preparationCancellationTokenSource.Token.ThrowIfCancellationRequested();
                 trainingPools = preparation.Pools;
                 shortages = preparation.Shortages;
+                // 260917Codex: 未完成のシミュレーションファイルを、この学習要求へ採用しない理由を説明する。
                 TrainLog("生成完了済みデータの確認が終了しました。生成中・未完了のデータは学習に使用しません。");
             }
-            // 260908Codex: User cancellation stops before model creation and still releases the pool lease.
+            // 260908Codex: ユーザーの中止でモデル作成前に停止し、poolの利用権も確実に解放する。
             catch (OperationCanceledException) when (preparationCancellationTokenSource.IsCancellationRequested)
             {
                 TrainLog("学習準備をキャンセルしました。");
@@ -1161,9 +1164,9 @@ namespace MineraScope
             }
             finally
             {
-                // 260901Codex: Training only needs the mutation lease through recovery and the immutable sample snapshot.
+                // 260901Codex: 学習サンプルの選択が固定した時点で、poolの利用権を解放する。
                 poolMutationLease!.Dispose();
-                // 260908Codex: Clear the preparation token before later model training installs its own token.
+                // 260908Codex: 後続のモデル学習が独自トークンを設定する前に、準備用トークンを解除する。
                 if (ReferenceEquals(_modelTrainingCancellationTokenSource, preparationCancellationTokenSource))
                     _modelTrainingCancellationTokenSource = null;
                 buttonCancel.Enabled = false;
@@ -1183,7 +1186,8 @@ namespace MineraScope
                 return;
             }
 
-            var trainingPlan = _modelTrainingWorkflow.CreatePlan(request, trainingPools);
+            var trainingPlan = _modelTrainingWorkflow.CreatePlan(request, trainingPools,
+                softmaxOcnSeed: softmaxOcnSeed);
             var validationMessage = _modelTrainingWorkflow.Validate(trainingPlan);
             if (validationMessage is not null)
             {
@@ -1191,7 +1195,7 @@ namespace MineraScope
                 return;
             }
 
-            // 260619Codex: Confirm before allowing the workflow to replace an existing model folder.
+            // 260619Codex: ワークフローに既存モデルフォルダーの置換を許す前に確認する。
             if (Directory.Exists(trainingPlan.ModelOutputFolder))
             {
                 string overwriteMessage =
@@ -1211,9 +1215,8 @@ namespace MineraScope
             }
 
             // 260511Codex: FormMain にはモデル群の親フォルダを保持し、個別モデル名フォルダは comboBox 側で選ばせます。
-            ModelOutputPath = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
-                ? DefaultStoragePaths.ModelsFolder
-                : request.Paths.ModelOutputFolder;
+            // 261014Codex: workflowと同じ保存先を画面に保持する。
+            ModelOutputPath = request.Paths.ResolveModelRootFolder();
 
             // 260514Codex: モデル作成中だけ中止ボタンから CancellationToken を要求できるようにします。
             using var cancellationTokenSource = new CancellationTokenSource();
@@ -1263,9 +1266,10 @@ namespace MineraScope
                 if (trainingResult.Status != ModelTrainingStatus.Promoted)
                     throw new InvalidOperationException($"未対応のモデル作成結果です: {trainingResult.Status}");
 
+                // 261001Codex: ユーザーが選択した名前を、検知器の種別やhead学習の失敗から独立させる。
                 FormMain?.RefreshModelPathList(request.ModelName);
                 SetStatusWithElapsed("モデル作成完了", ProgressScale, ProgressScale);
-                // 261021Claude: 定量を省略して保存した分類器も利用できるが、省略は明示する。
+                // 260930Codex: 定量を省略して保存した分類器も利用できるが、省略は明示する。
                 if (trainingResult.CompletionMessage is not null)
                 {
                     TrainLog(trainingResult.CompletionMessage);

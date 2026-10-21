@@ -36,43 +36,43 @@ namespace MineraScope
         // 260517Codex: 現在表示中の PTS ファイルをクリック後のグラフタイトルへ反映します。
         private string? _currentPtsFilePath;
 
-        // 260522Codex: Cache clicked spectra by pixel and binning size so experiments do not reuse another bin.
+        // 260522Codex: クリックしたスペクトルを画素とビニングサイズでキャッシュし、別ビンを実験で再利用しないようにする。
         private readonly Dictionary<(Point Pixel, int BinSize, int? LeadingSweepCount), PtsPixelSpectrum> _pixelSpectrumCache = [];
 
         // 260716Claude: 最後にグラフ表示したスペクトルを CSV エクスポート用に保持する（SEM クリック・マップクリック共通）。
         // 260825Codex: 表示時の分析条件と分類結果も保持し、単一の自己記述 CSV へ渡す。
         private DisplayedSpectrumExportContext? _lastDisplayedSpectrum;
 
-        // 260522Codex: Keep the first binning candidates small enough for experiments while covering low-count spectra.
-        // 260710Codex: Include small bins so mineral maps can be generated with finer spatial resolutions.
+        // 260522Codex: 最初のビニング候補は実験向けに小さくしつつ、低カウントスペクトルも扱えるようにする。
+        // 260710Codex: 小さいビンを含め、より高い空間分解能の鉱物マップを生成できるようにする。
         private static readonly int[] BinningSizes = [1, 2, 3, 4, 5, 7, 8, 10, 20];
 
-        // 260522Codex: Default to 10x10 as the first low-count classification baseline.
+        // 260522Codex: 低カウント分類の最初の基準として10x10を既定値にする。
         private const int DefaultBinningSize = 10;
 
-        // 260612Codex: The loaded PTS sweep count drives the research-only leading-sweep selector.
+        // 260612Codex: 読み込んだPTSの走査回数で、研究専用の先頭走査選択を構成する。
         private int _loadedSweepCount;
 
-        // 260523Codex: Treat tiny mouse movement as a click so ScalablePictureBox drag panning stays separate.
+        // 260523Codex: ごく小さなマウス移動はクリックと見なし、ScalablePictureBoxのドラッグ移動と区別する。
         private const int ScalableSemClickMoveTolerance = 4;
 
-        // 260523Codex: Keep ownership of the image assigned to scalablePictureBoxSEM so replaced SEM images can be disposed.
+        // 260523Codex: scalablePictureBoxSEMへ設定した画像の所有権を保持し、置換時に旧SEM画像を破棄できるようにする。
         private PseudoBitmap? _semPseudoBitmap;
 
-        // 260527Codex: Prevent duplicate or rapid .pts drops from opening the same file concurrently.
+        // 260527Codex: 重複や連続した.ptsのドロップで、同じファイルを同時に開かないようにする。
         private bool _isPtsDropLoading;
 
-        // 260527Codex: Ignore rapid image clicks while the previous PTS read/classification is still running.
+        // 260527Codex: 前のPTS読み取り・分類が実行中なら、短時間に続く画像クリックを無視する。
         private bool _isSpectrumClickBusy;
 
-        // 260523Codex: Remember the ScalablePictureBox left-button start point until MouseUp2 decides click vs pan.
+        // 260523Codex: MouseUp2がクリックと移動を判別するまで、ScalablePictureBoxの左ボタン開始位置を保持する。
         // 260526Claude: SEM/マップ両ボックスで共有するため名前を一般化。
         private Point? _scalableMouseDownPoint;
 
         // 260519Codex: 後から完了した古いクリック読み取りが最新表示を上書きしないようにします。
         private int _spectrumReadVersion;
 
-        // 260522Codex: One service instance keeps the loaded classification model warm across clicks.
+        // 260522Codex: 1つのサービスインスタンスで、クリック間も読み込んだ分類モデルを維持する。
         // 260529Claude: マップ実行後もモデルを解放しない。clear_session() の繰り返しが TF の eager context/スレッドプールをリークさせ、stale なリソース変数で次の predict が abort するため、起動中は常駐させる。
         private readonly MineralClassificationPredictionService _classificationService = new();
 
@@ -93,21 +93,21 @@ namespace MineraScope
         // 260528Claude: 凡例ハイライト用に colorizer 出力を保持。palette だけ差し替えて bitmap を作り直すための源データ。
         private MineralMapImage? _mapImage;
 
-        // 260717Codex: Keep one global mineral-name palette alive across PTS drops and mapping-condition changes.
+        // 260717Codex: PTSのドロップやマップ条件の変更をまたいで、鉱物名の共通パレットを保持する。
         private readonly MineralColorPalette _mineralColorPalette;
         private string? _mineralColorPaletteLoadWarning;
 
-        // 260528Codex: Keep legend highlighting independent from ListBox.SelectedIndex timing.
+        // 260528Codex: 凡例の強調表示をListBox.SelectedIndexの更新タイミングから独立させる。
         private int _highlightLegendIndex = -1;
 
-        // 260527Codex: Name the shared prediction-service gate used by click and full-map classification.
+        // 260527Codex: クリックと全体マップの分類で共用する予測サービスのゲートに名前を付ける。
         private bool IsInteractiveClassificationBusy => _isMappingBusy || _isSpectrumClickBusy;
 
         // 260416Codex: AnalyzerForm の UI 配線をフォーム本体にまとめて保守しやすくします。
         public AnalyzerForm()
         {
             InitializeComponent();
-            // 260717Codex: Load persisted colors before any map can register its TOP20 minerals.
+            // 260717Codex: マップがTOP20の鉱物を登録する前に、保存済みの色を読み込む。
             _mineralColorPalette = MineralColorPalette.Load(out _mineralColorPaletteLoadWarning);
             // 260716Claude: 前回選択したマッピングモデル名を復元する (ModelCatalog 代入時の一覧構築で使う)。
             // 260727Claude: 壊れた設定は既定値へフォールバックし、理由は FormMain_Load でまとめて知らせる。
@@ -124,26 +124,26 @@ namespace MineraScope
             // 260523Claude: .pts ドロップを復活。フォーム本体は Designer で DragEnter/DragDrop 済みなので AllowDrop だけ立て、
             // 子孫側は再帰で有効化する（ScalablePictureBox は内部 pictureBox がドロップ先になり、Designer では再帰配線できないため）。
             AllowDrop = true;
-            // 260527Codex: scalablePictureBoxSEM itself is already wired by the Designer; only its descendants need runtime wiring.
+            // 260527Codex: scalablePictureBoxSEM自体はDesignerで接続済みなので、子要素だけを実行時に接続する。
             ControlDropHelper.EnableRecursive(this, AnalyzerForm_DragEnter, AnalyzerForm_DragDrop, scalablePictureBoxSEM);
         }
 
-        // 260522Codex: Store binning choices as typed combo items instead of parsing display text later.
+        // 260522Codex: ビニング候補は表示文字列を後で解析せず、型付きのコンボ項目として保持する。
         private sealed record BinningOption(int Size)
         {
             public override string ToString() => $"{Size}×{Size}";
         }
 
-        // 260612Codex: Keep combo box items typed so the displayed text and sweep value cannot diverge.
+        // 260612Codex: 表示文字列と走査値が食い違わないよう、コンボ項目に型を持たせる。
         private sealed record SweepOption(int Count)
         {
             public override string ToString() => Count.ToString(CultureInfo.InvariantCulture);
         }
 
-        // 260612Codex: Pair the SEM image with the PTS acquisition sweep count discovered during load.
+        // 260612Codex: SEM画像と、読み込み時に取得したPTSの取得走査回数を組にする。
         private sealed record LoadedPtsData(PseudoBitmap SemImage, int TotalFrames);
 
-        // 260522Codex: Populate the binning selector once, defaulting to the low-count experimental baseline.
+        // 260522Codex: ビニング選択を一度だけ構成し、低カウント実験の基準を既定値にする。
         private void InitializeBinningOptions()
         {
             comboBoxBinning.BeginUpdate();
@@ -166,13 +166,13 @@ namespace MineraScope
             }
         }
 
-        // 260522Codex: Fall back to the planned default if the designer state is ever empty.
+        // 260522Codex: Designerの状態が空の場合は、予定した既定値を使う。
         private int GetSelectedBinningSize() =>
             comboBoxBinning.SelectedItem is BinningOption option
                 ? option.Size
                 : DefaultBinningSize;
 
-        // 260612Codex: Populate one candidate per available PTS sweep and default to the full acquisition.
+        // 260612Codex: 利用可能なPTS走査ごとに候補を作り、全取得分を既定値にする。
         private void InitializeSweepOptions(int totalFrames)
         {
             _loadedSweepCount = Math.Max(0, totalFrames);
@@ -192,7 +192,7 @@ namespace MineraScope
             }
         }
 
-        // 260612Codex: Return the selected leading sweep count exactly; PTSFile normalizes the max value to full-read.
+        // 260612Codex: 選択した先頭走査回数をそのまま返し、最大値の全読込への正規化はPTSFileに任せる。
         private int? GetSelectedLeadingSweepCount()
         {
             if (_loadedSweepCount <= 0 || comboBox1.SelectedItem is not SweepOption option)
@@ -229,7 +229,7 @@ namespace MineraScope
 
         // 260716Claude: 次回起動時に戻すのはマッピングモデルの選択だけ。アプリ終了時は FormMain からも呼ばれる。
         // 260807Codex: 現在はマッピングモデルの選択と未学習検知設定を保存し、PTS 表示やマップ結果は保存しない。
-        // 260717Codex: Save both UI selection and dirty mineral colors on hide or application shutdown.
+        // 260717Codex: 非表示化やアプリ終了時に、UIの選択と変更済み鉱物色を両方保存する。
         internal void SaveUserSettings()
         {
             // 260728Claude: 上書き可否の判定は FormUserSettingsStore.Save が持つので、ここは値の組み立てだけ。
@@ -245,7 +245,7 @@ namespace MineraScope
             SaveMineralColorPalette();
         }
 
-        // 260717Codex: Report persistence failures because silently losing fixed publication colors would be misleading.
+        // 260717Codex: 固定した発表用の色が黙って失われないよう、保存失敗を通知する。
         private void SaveMineralColorPalette()
         {
             if (_mineralColorPalette.TrySave(out string? error))
@@ -258,7 +258,7 @@ namespace MineraScope
                 MessageBoxIcon.Warning);
         }
 
-        // 260717Codex: Delay a corrupt-palette warning until the user actually starts mineral mapping.
+        // 260717Codex: 破損パレットの警告は、ユーザーが実際に鉱物マッピングを始めるまで遅延する。
         private void ShowMineralColorPaletteLoadWarning()
         {
             if (string.IsNullOrWhiteSpace(_mineralColorPaletteLoadWarning))
@@ -288,7 +288,7 @@ namespace MineraScope
             {
                 ClearLoadedPtsData();
                 UseWaitCursor = true;
-                // 260612Codex: Load the SEM image and sweep count together so the selector matches the active PTS file.
+                // 260612Codex: SEM画像と走査回数を一緒に読み、選択候補を現在のPTSファイルと一致させる。
                 LoadedPtsData? loadedPts = await Task.Run(() => LoadPtsData(filePath));
 
                 if (loadedPts is null)
@@ -316,15 +316,15 @@ namespace MineraScope
             }
             finally
             {
-                // 260818Codex: Release the drop guard first so a cursor-property failure cannot permanently block later drops.
+                // 260818Codex: カーソル設定の失敗で後続のドロップが永久に止まらないよう、先にドロップ制御を解除する。
                 _isPtsDropLoading = false;
                 UseWaitCursor = false;
             }
         }
 
         // 260519Codex: PTS の SEM画像だけをバックグラウンド側で読み込みます。
-        // 260523Codex: Read the PTS SEM byte image and flatten it into ScalablePictureBox's row-major source data.
-        // 260612Codex: Return the SEM image with the acquisition sweep count used by the research selector.
+        // 260523Codex: PTSのSEMバイト画像を読み、ScalablePictureBoxの行優先の元データへ平坦化する。
+        // 260612Codex: SEM画像と、研究用選択に使う取得走査回数を返す。
         private static LoadedPtsData? LoadPtsData(string filePath)
         {
             using var pts = new PTSFile(filePath);
@@ -415,7 +415,7 @@ namespace MineraScope
             viewer.ShowAreaRectangle = false;
             if (next is null)
             {
-                // 260527Codex: Clear the viewer without drawing a 1x1 fallback image, which shows ScalablePictureBox's green out-of-range color.
+                // 260527Codex: 1x1の代替画像ではScalablePictureBoxの範囲外色である緑が出るため、それを描かずに表示を消去する。
                 viewer.SkipDrawing = true;
                 viewer.pictureBox.Image = null;
                 viewer.Refresh();
@@ -449,7 +449,7 @@ namespace MineraScope
             return true;
         }
 
-        // 260523Codex: Designer-connected ScalablePictureBox MouseDown2 starts click-vs-pan tracking.
+        // 260523Codex: Designerで接続したScalablePictureBoxのMouseDown2で、クリックと移動の追跡を始める。
         private bool scalablePictureBoxSEM_MouseDown2(object sender, MouseEventArgs e, PointD pt)
         {
             _scalableMouseDownPoint = e.Button == MouseButtons.Left && e.Clicks == 1
@@ -458,7 +458,7 @@ namespace MineraScope
             return false;
         }
 
-        // 260523Codex: Designer-connected ScalablePictureBox MouseUp2 reads the clicked image pixel without blocking pan/zoom behavior.
+        // 260523Codex: Designerで接続したScalablePictureBoxのMouseUp2で、移動・拡大縮小を妨げずにクリック画素を読む。
         // 260526Claude: sender で SEM とマップを分岐。SEM は中心ビニング、マップは作成時条件で該当ブロックを再分類する。
         private bool scalablePictureBoxSEM_MouseUp2(object sender, MouseEventArgs e, PointD pt)
         {
@@ -515,7 +515,7 @@ namespace MineraScope
             }
         }
 
-        // 260523Codex: Keep ScalablePictureBox click handling tolerant of tiny hand movement but not drag panning.
+        // 260523Codex: ScalablePictureBoxのクリック判定では、わずかな手ぶれは許容し、ドラッグ移動は区別する。
         private bool IsScalableClick(Point mouseUpPoint)
         {
             if (_scalableMouseDownPoint is not { } mouseDownPoint)
@@ -525,7 +525,7 @@ namespace MineraScope
                 Math.Abs(mouseUpPoint.Y - mouseDownPoint.Y) <= ScalableSemClickMoveTolerance;
         }
 
-        // 260523Codex: Convert ScalablePictureBox source coordinates into an image pixel index.
+        // 260523Codex: ScalablePictureBoxの元座標を画像の画素インデックスへ変換する。
         // 260526Claude: 対象 PseudoBitmap を引数化。SEM は端へクランプ、マップは範囲外を無視する。
         private static bool TryGetImagePixel(PseudoBitmap? bitmap, PointD sourcePoint, bool clamp, out int imageX, out int imageY)
         {
@@ -546,7 +546,7 @@ namespace MineraScope
             return true;
         }
 
-        // 260527Codex: Match PseudoBitmap's display sampler, where integer source coordinates represent pixel centers.
+        // 260527Codex: 整数の元座標を画素中心とするPseudoBitmapの表示サンプリングに合わせる。
         private static int ToDisplayedPixelIndex(double sourceCoordinate)
             => (int)Math.Floor(sourceCoordinate + 0.5);
 
@@ -580,7 +580,7 @@ namespace MineraScope
             await DisplaySpectrumAndClassifyAsync(context, modelPath, readVersion, mapBlock: null);
         }
 
-        // 260523Codex: Draw the actual clamped binning rectangle on the SEM image after a pixel is selected.
+        // 260523Codex: 画素選択後、境界内に収めた実際のビニング矩形をSEM画像へ描く。
         // 260716Claude: SEM クリック・マップクリック共通の選択枠表示に統合。矩形は表示系の「整数座標=ピクセル中心」
         //   に合わせてピクセル端 (-0.5) 基準へ修正し、マップ側にも同じ範囲の黄枠を映す。
         private void ShowBinningArea(PtsPixelSpectrum pixelSpectrum)
@@ -661,7 +661,8 @@ namespace MineraScope
 
             // 260626Claude: 分類モデルの前処理を読み、学習時と同じ低エネルギーマスクをクリック分析にも自動適用する。
             //   preprocessing.json が無い既存モデルは None = マスク無しで従来どおり。
-            // 261016Codex: 壊れた前処理記録を通常操作の例外境界で処理する。
+            // 260930Claude: 記録が壊れているモデルは学習時と違う入力で分類してしまうため、理由を出して止めます。
+            // 260930Codex: メタデータ破損の失敗を、クリック解析のUI境界内で処理する。
             SpectrumPreprocessing preprocessing;
             try
             {
@@ -729,7 +730,7 @@ namespace MineraScope
             }
         }
 
-        // 260522Codex: Read or reuse the clicked spectrum for the selected binning size.
+        // 260522Codex: 選択したビニングサイズに対応するクリック位置のスペクトルを読み込むか再利用する。
         private async Task<PtsPixelSpectrum?> GetPixelSpectrumAsync(string filePath, Point pixel, int binSize, int? leadingSweepCount)
         {
             var cacheKey = (Pixel: pixel, BinSize: binSize, LeadingSweepCount: leadingSweepCount);
@@ -789,7 +790,7 @@ namespace MineraScope
             if (IsInteractiveClassificationBusy)
                 return;
 
-            // 260717Codex: Warn before an empty fallback palette can assign replacement colors.
+            // 260717Codex: 空の代替パレットで置換色を割り当てる前に警告する。
             ShowMineralColorPaletteLoadWarning();
 
             if (string.IsNullOrWhiteSpace(_currentPtsFilePath))
@@ -828,7 +829,7 @@ namespace MineraScope
                 if (buildVersion != _mapBuildVersion || !string.Equals(_currentPtsFilePath, filePath, StringComparison.Ordinal))
                     return;
 
-                // 260717Codex: Resolve and display colors only after stale-map checks pass.
+                // 260717Codex: 古いマップではないことを確認してから、色を解決・表示する。
                 ApplyMineralMap(result);
                 // 260807Codex: ON 要求を適用できなかった理由を、生成済みマップを表示した後に通知する。
                 if (result.UnknownDetectionRequested && !result.UnknownDetectionApplied)
@@ -889,7 +890,7 @@ namespace MineraScope
             try
             {
                 await Task.Run(() => MineralMapImageExporter.ExportCurrentView(outputDir, map, image, map.LabelNames));
-                // 260717Codex: A successful export is a persistence boundary for newly assigned or manually changed colors.
+                // 260717Codex: 出力成功時を、新しく割り当てた色や手動変更した色を保存する境界とする。
                 SaveMineralColorPalette();
                 SetMappingStatus($"エクスポート完了: {outputDir}", 0);
             }
@@ -996,7 +997,7 @@ namespace MineraScope
             };
         }
 
-        // 260717Codex: Rebuild map pixels and legend from the same persisted palette after classification or a manual color edit.
+        // 260717Codex: 分類後や手動で色を編集した後は、同じ保存済みパレットからマップ画素と凡例を再構築する。
         private void ApplyMineralMap(PtsClassificationMapResult result)
         {
             MineralMapImage image = MineralMapColorizer.Build(result, _mineralColorPalette);
@@ -1014,22 +1015,22 @@ namespace MineraScope
             _isSyncingViewports = true;
             try { ReplacePseudoBitmap(scalablePictureBoxMap, ref _mapPseudoBitmap, mapImage); }
             finally { _isSyncingViewports = false; }
-            // 260604Codex: Map bitmap rebuilds reset its own viewport, so restore the SEM-aligned view immediately.
+            // 260604Codex: マップ画像の再構築で表示範囲がリセットされるため、直ちにSEMにそろえた表示へ戻す。
             SyncMapViewToSem(scalablePictureBoxSEM.Zoom, scalablePictureBoxSEM.Center);
             // 260716Claude: ReplacePseudoBitmap が消した黄枠も SEM 側から復元する（凡例ハイライトの rebuild 後や
             //   マップ新規作成後も、直前のクリック位置が両画像に出続ける）。
             SyncMapAreaToSem();
         }
 
-        // 260604Codex: Designer-connected SEM viewport changes drive the mineral map viewport.
+        // 260604Codex: Designerで接続したSEM表示範囲の変更を、鉱物マップの表示範囲へ反映する。
         private void scalablePictureBoxSEM_DrawingAreaChanged(object sender, double zoom, PointD center)
             => SyncMapViewToSem(zoom, center);
 
-        // 260716Claude: Designer-connected map viewport changes drive the SEM viewport (SyncMapViewToSem の逆方向)。
+        // 260716Claude: Designerで接続したマップの表示範囲変更を、SEMの表示範囲へ反映する（SyncMapViewToSemの逆方向）。
         private void scalablePictureBoxMap_DrawingAreaChanged(object sender, double zoom, PointD center)
             => SyncSemViewToMap(zoom, center);
 
-        // 260604Codex: Convert SEM image coordinates into mineral-map block coordinates for synchronized viewing.
+        // 260604Codex: 同期表示のため、SEM画像座標を鉱物マップのブロック座標へ変換する。
         private void SyncMapViewToSem(double semZoom, PointD semCenter)
         {
             // 260716Claude: 相互同期化に伴い、同期中の再入は止める。
@@ -1044,7 +1045,7 @@ namespace MineraScope
                 (semCenter.X + 0.5) / binSize - 0.5,
                 (semCenter.Y + 0.5) / binSize - 0.5);
             double mapZoom = semZoom * binSize;
-            // 260710Codex: Upstream ScalablePictureBox now owns the zoom cap, so synchronized zoom is applied directly.
+            // 260710Codex: ズーム上限は上流のScalablePictureBoxが管理するため、同期した倍率を直接適用する。
             _isSyncingViewports = true;
             try { scalablePictureBoxMap.ZoomAndCenter = (mapZoom, mapCenter); }
             finally { _isSyncingViewports = false; }
@@ -1083,7 +1084,7 @@ namespace MineraScope
         }
 
         // 260526Claude: 完了時に上位20＋Other＋未判定の凡例を listBoxLegend へ反映する（色見本は owner-draw）。
-        // 260527Codex: textBox1 is limited to map summary and timing diagnostics; the persistent legend stays in listBoxLegend.
+        // 260527Codex: textBox1はマップ要約と時間診断に限定し、常設の凡例はlistBoxLegendに表示する。
         private void ShowMapLegend(MineralMapImage image, PtsClassificationMapResult result)
         {
             _highlightLegendIndex = -1;
@@ -1094,7 +1095,7 @@ namespace MineraScope
                 foreach (var entry in image.Legend)
                     listBoxLegend.Items.Add(entry);
                 // 260526Claude: owner-draw では ListBox が項目幅を測れないため、最長行を実測して HorizontalExtent に渡す。
-                // 260607Codex: Size the owner-drawn legend from the same percentage text that will be rendered.
+                // 260607Codex: オーナー描画の凡例サイズを、実際に描く割合の文字列から求める。
                 listBoxLegend.HorizontalExtent = MeasureLegendMaxWidth(image.Legend, result.BlockCount);
             }
             finally
@@ -1110,7 +1111,7 @@ namespace MineraScope
                 // 260827Claude: クリック結果欄・.txt と同じ 3 状態で出す。「なし」だけでは OFF 指定とモデル非対応を
                 //   区別できず、同じ画面で語彙が割れていた。
                 // 260828Codex: 未適用理由は警告へ分離し、要約には実適用の二状態だけを表示する。
-                $"未学習検知: {MineralUnknownDetector.DescribeApplication(result.UnknownDetectionApplied)}",
+                $"未学習検知: {MineralUnknownDetector.Describe(result.UnknownDetection)}",
             };
 
             // 260527Claude: 格子が表示枠より大きいと縮小描画でスカラー値が平均されカテゴリ色が混ざる（案2 の安全条件）。
@@ -1130,7 +1131,7 @@ namespace MineraScope
             textBox1.Lines = lines.ToArray();
         }
 
-        // 260527Codex: Keep timing diagnostics compact enough for the map summary textbox.
+        // 260527Codex: 時間診断をマップ要約欄へ収まる簡潔な形にする。
         private static string FormatDuration(TimeSpan value)
             => value.TotalMilliseconds < 1000
                 ? string.Format(CultureInfo.InvariantCulture, "{0:F0} ms", value.TotalMilliseconds)
@@ -1224,10 +1225,17 @@ namespace MineraScope
                 result.UnknownScore is { } unknownScore &&
                 result.UnknownThreshold is { } unknownThreshold)
             {
-                string comparisonOperator = result.IsUnknown ? ">" : "≤";
+                // 261001Claude: 方式ごとに意味の違う値へ別の語を当てる。語が方式を示すので見出しには方式を書かない。
+                //   未学習率は判定境界が常に 0.5 で固定なので、距離のようにしきい値の行を並べない。
                 lines.Add("未学習検知:");
-                lines.Add($"  学習分布からの距離 {FormatUnknownDetectionValueForDisplay(unknownScore)}");
-                lines.Add($"  {comparisonOperator} しきい値 {FormatUnknownDetectionValueForDisplay(unknownThreshold)}");
+                if (result.UnknownDetection == UnknownDetectionMethod.LearnedHead)
+                    lines.Add($"  未学習率 {SpectrumPredictionBlockFormatter.FormatPercent((float)unknownScore)}%");
+                else
+                {
+                    string comparisonOperator = result.IsUnknown ? ">" : "≤";
+                    lines.Add($"  学習分布からの距離 {FormatUnknownDetectionValueForDisplay(unknownScore)}");
+                    lines.Add($"  {comparisonOperator} しきい値 {FormatUnknownDetectionValueForDisplay(unknownThreshold)}");
+                }
             }
             else
                 lines.Add("未学習検知: 未適用");
@@ -1250,7 +1258,7 @@ namespace MineraScope
             lines.Add($"  モデル: {context.ModelName}");
             lines.Add($"  ビニング: {context.DescribeBinning()}");
             lines.Add($"  sweep: {context.DescribeSweep()}");
-            lines.Add($"  未学習検知: {MineralUnknownDetector.DescribeApplication(result.UnknownDetectionApplied)}");
+            // 261001Claude: 未学習検知は本文の行が方式と適用有無の両方を示すので、条件欄へ重ねない。
 
             return lines;
         }
@@ -1279,7 +1287,7 @@ namespace MineraScope
         private const int LegendTextGap = 6;
         private const int LegendTrailingPadding = 4;
 
-        // 260607Codex: Legend rows show each classified map category as a share of the whole map.
+        // 260607Codex: 凡例の各行で、分類したカテゴリのマップ全体に対する割合を示す。
         private int MeasureLegendMaxWidth(IReadOnlyList<MineralMapLegendEntry> entries, int totalBlockCount)
         {
             int swatchSize = listBoxLegend.ItemHeight - LegendPadding * 2;
@@ -1288,7 +1296,7 @@ namespace MineraScope
             foreach (var entry in entries)
             {
                 Size textSize = TextRenderer.MeasureText(entry.FormatLabel(totalBlockCount), listBoxLegend.Font);
-                // 260607Codex: Keep the width update local instead of carrying a pass-through variable.
+                // 260607Codex: 単純な受け渡し変数を持たず、幅の更新をその場で行う。
                 max = Math.Max(max, swatchAndGap + textSize.Width + LegendTrailingPadding);
             }
             return max;
@@ -1296,10 +1304,10 @@ namespace MineraScope
 
         // 260528Claude: 凡例で同じ項目を再クリックしたら選択解除。MouseDown は ListBox 既定の選択処理より先に発火し、
         // ここで SelectedIndex=-1 を直接代入しても直後の基底処理で再選択される。BeginInvoke で基底処理後に解除する。
-        // 260528Codex: SelectedIndex can already be updated here, so the highlight state must not depend on it.
+        // 260528Codex: この時点ではSelectedIndexが更新済みの場合があるため、強調状態をそれに依存させない。
         private void listBoxLegend_MouseDown(object sender, MouseEventArgs e)
         {
-            // 260717Codex: Right-click selects the target row for the Designer-owned color-edit context menu.
+            // 260717Codex: 右クリックで対象行を選び、Designerが管理する色編集のコンテキストメニューに渡す。
             if (e.Button == MouseButtons.Right)
             {
                 int contextIndex = listBoxLegend.IndexFromPoint(e.Location);
@@ -1317,18 +1325,18 @@ namespace MineraScope
             if (idx < 0)
                 return;
 
-            // 260528Codex: Toggle our own highlight state instead of racing ListBox native selection.
+            // 260528Codex: ListBox標準の選択と競合せず、独自の強調状態を切り替える。
             _highlightLegendIndex = _highlightLegendIndex == idx ? -1 : idx;
             listBoxLegend.Invalidate();
             RebuildMapBitmapForSelection();
         }
 
         // 260528Claude: 凡例選択が変わったらマップのハイライト表示を作り直す。マウス・キーボード・プログラム更新の全経路がここに集約される。
-        // 260528Codex: Native selection is visual noise only now; the MouseDown handler owns map highlight changes.
+        // 260528Codex: 標準の選択表示は不要なので、マップの強調変更はMouseDownハンドラーで管理する。
         private void listBoxLegend_SelectedIndexChanged(object sender, EventArgs e)
             => listBoxLegend.Invalidate();
 
-        // 260717Codex: Apply a user-selected RGB color only to the chosen mineral and refresh the current map immediately.
+        // 260717Codex: ユーザーが選択したRGB色を対象鉱物だけに適用し、現在のマップを直ちに更新する。
         private void changeLegendColorToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (_classificationMap is null ||
@@ -1375,7 +1383,7 @@ namespace MineraScope
                     e.Bounds.Top,
                     e.Bounds.Right - swatchRect.Right - LegendTextGap,
                     e.Bounds.Height);
-                // 260607Codex: Draw mineral ratios instead of raw category block counts.
+                // 260607Codex: カテゴリの生ブロック数ではなく、鉱物の割合を描く。
                 TextRenderer.DrawText(
                     e.Graphics,
                     entry.FormatLabel(_classificationMap?.BlockCount ?? 0),

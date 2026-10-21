@@ -13,10 +13,12 @@ namespace MineraScope
         IReadOnlyList<SpectrumTrainingPool> TrainingPools,
         ModelTrainingSettings Settings,
         DetectorProfile DetectorProfile,
-        // 260619Codex: Store overwrite consent in the plan so workflow callers cannot replace models accidentally.
+        // 260619Codex: 上書きの同意を計画内に保持し、ワークフローの呼び出し側による意図しない置換を防ぐ。
         bool AllowOverwriteExistingModel,
-        // 260901Codex: Explicit multi-time requests carry strict counts and reproducibility metadata into promotion.
-        TrainingDataProvenanceSpecification? TrainingDataProvenance = null);
+        // 260901Codex: 明示的な複数時間要求の厳密な件数と再現性メタデータを、昇格処理まで渡す。
+        TrainingDataProvenanceSpecification? TrainingDataProvenance = null,
+        // 260928Codex: Seedがnullでなければ、分類器と学習型Unknown headを一体で昇格する。
+        int? SoftmaxOcnSeed = null);
 
     // 260901Codex: 正式モデルとして利用可能になったかを、学習処理の正常終了とは分けて表します。
     internal enum ModelTrainingStatus
@@ -29,7 +31,7 @@ namespace MineraScope
     internal enum ModelTrainingFailureKind
     {
         TrainingDataLoadFailed,
-        // 261016Codex: 学習不能な件数を読込失敗と区別する。
+        // 260930Codex: 件数不足と学習入力の読込不能を区別する。
         InsufficientTrainingSamples
     }
 
@@ -41,13 +43,14 @@ namespace MineraScope
             ModelTrainingFailureKind? failureKind,
             string? failureReason,
             string? preservedArtifactsFolder,
-            // 261021Claude: 昇格した結果だけに、定量を省略した通知を付ける。
+            // 260930Codex: 昇格した結果だけに、任意の定量処理の完了通知を付ける。
             string? completionMessage = null)
         {
             Status = status;
             FailureKind = failureKind;
             FailureReason = failureReason;
             PreservedArtifactsFolder = preservedArtifactsFolder;
+            // 260930Codex: 成果物を再読込せず、保存モデルの要約をフォームへ渡す。
             CompletionMessage = completionMessage;
         }
 
@@ -59,11 +62,11 @@ namespace MineraScope
 
         public string? PreservedArtifactsFolder { get; }
 
-        // 261021Claude: 要求した定量がすべて学習済みなら、通知は不要とする。
+        // 260930Codex: 要求した定量がすべて学習済みなら、通知は不要とする。
         public string? CompletionMessage { get; }
 
-        // 261021Claude: 定量の省略は鉱物ごとに列挙せず、理由をまとめて1回通知する（非公開版と同じ文言）。
-        public static ModelTrainingResult CreatePromoted(IReadOnlyList<TrainingModelMetrics>? modelMetrics = null)
+        // 260930Codex: 任意の定量の省略は、鉱物ごとに列挙せずまとめて通知する。
+        public static ModelTrainingResult CreatePromoted(IReadOnlyList<TrainingModelMetrics>? modelMetrics = null, string? ocnFailureReason = null)
         {
             var skipped = modelMetrics?.Where(metric => metric.Target == "regression" && metric.Status == "skipped").ToArray()
                 ?? Array.Empty<TrainingModelMetrics>();
@@ -71,12 +74,20 @@ namespace MineraScope
             if (skipped.Length > 0)
             {
                 bool anyRegressionTrained = modelMetrics!.Any(metric => metric.Target == "regression" && metric.Status == "trained");
+                // 260930Codex: 要約全体を一度だけ選び、両方の文で同じ条件に従う。
                 completionMessage = (anyRegressionTrained
                     ? "分類モデルと学習可能な定量モデルを作成しました。\r\n一部の定量モデルはデータ数不足のため作成していません。"
                     : "分類モデルのみ作成しました。\r\n定量モデルはデータ数不足のため作成していません。")
                     + "\r\n\r\n" + string.Join("\r\n", skipped.Select(metric => metric.SkipReason).Distinct());
             }
-
+            // 261001Codex: 分類器の昇格成功後にだけ、任意のheadの失敗を通知する。
+            if (ocnFailureReason is not null)
+            {
+                // 261001Codex: 任意の通知を直接追加し、文言と区切りを保持する。
+                string ocnNotice = "分類モデルを作成しました。OCN判定器は作成できませんでした。\r\n理由: " + ocnFailureReason;
+                completionMessage = string.IsNullOrEmpty(completionMessage)
+                    ? ocnNotice : completionMessage + "\r\n\r\n" + ocnNotice;
+            }
             return new(
                 ModelTrainingStatus.Promoted,
                 failureKind: null,
@@ -101,7 +112,7 @@ namespace MineraScope
     // 260514Codex: モデル学習の検証、tmp 保存先の管理、成功時の正式フォルダ昇格を Form から分離します。
     internal sealed class ModelTrainingWorkflow
     {
-        // 260619Codex: Share the overwrite guard message between preflight and promotion-time checks.
+        // 260619Codex: 事前検査と昇格時の確認で、上書き防止のメッセージを共用する。
         private const string OverwriteNotAllowedMessage = "同じ名前のモデルが既に存在するため、上書き許可なしでは作成できません。";
 
         private readonly DeepLearning _deepLearning;
@@ -121,13 +132,13 @@ namespace MineraScope
         public ModelTrainingPlan CreatePlan(
             ModelCreationRequest request,
             IReadOnlyList<SpectrumTrainingPool> trainingPools,
-            // 260619Codex: UI callers pass true only after the user confirms overwriting an existing model.
-            bool allowOverwriteExistingModel = false)
+            // 260619Codex: UIの呼び出し側は、ユーザーが既存モデルの上書きを確認した場合だけtrueを渡す。
+            bool allowOverwriteExistingModel = false,
+            int? softmaxOcnSeed = null)
         {
-            string modelRootFolder = string.IsNullOrWhiteSpace(request.Paths.ModelOutputFolder)
-                ? DefaultStoragePaths.ModelsFolder
-                : request.Paths.ModelOutputFolder;
-            string modelOutputFolder = Path.Combine(modelRootFolder, request.ModelName);
+            // 260917Claude: ルートの既定値はModelCreationPathsに置き、GUIとOCN学習で共用する。
+            // 261014Codex: 画面と同じ既定保存先を使う。
+            string modelOutputFolder = Path.Combine(request.Paths.ResolveModelRootFolder(), request.ModelName);
 
             return new ModelTrainingPlan(
                 modelOutputFolder,
@@ -135,30 +146,31 @@ namespace MineraScope
                 request.Training,
                 request.SemEdxCondition.GetDetectorProfile(),
                 allowOverwriteExistingModel,
-                // 260907Codex: A composition/time schedule needs provenance even when the legacy explicit-allocation list is empty.
+                // 260907Codex: 旧形式の明示割当一覧が空でも、組成・時間の予定表には由来情報が必要である。
                 request.SpectrumTimeAllocations.Count == 0 && !request.UsesCompositionTimePlan
                     ? null
                     : new TrainingDataProvenanceSpecification(
                         request.GetEffectiveSpectrumTimeAllocations(),
                         TrainingDataProvenanceSpecification.DefaultSelectionSeed,
                         TrainingDataProvenanceSpecification.DefaultSplitSeed,
-                        request.Training.ValidationSplit));
+                        request.Training.ValidationSplit),
+                softmaxOcnSeed);
         }
 
         // 260514Codex: target 未設定や pool 不足は学習開始前に止めます。
         public string? Validate(ModelTrainingPlan plan)
         {
-            // 260930Codex: Reject invalid learning rates before training starts.
+            // 260930Codex: 学習開始前に不正な学習率を拒否する。
             if (!float.IsFinite(plan.Settings.LearningRate) || plan.Settings.LearningRate <= 0)
                 return "分類の学習率は0より大きい有限の値にしてください。";
-            // 261016Codex: 時間別poolの個数ではなく、異なる鉱物クラスを数える。
+            // 261001Codex: 選択鉱物が0個・1個の場合は、同じ分類前提条件で拒否する。
             if (plan.TrainingPools.Select(pool => pool.MineralName).Distinct(StringComparer.Ordinal).Count() < 2)
                 return "分類する鉱物を2種類以上選択してください。";
 
             if (plan.TrainingPools.Any(pool => pool.Samples.Count == 0))
                 return "学習可能な spectrum がない鉱物があります。";
 
-            // 261016Codex: 実際の非層化分割と同じ件数で、更新不能な分類器の作成を防ぐ。
+            // 260930Codex: モデル作成前に分類の件数検証を通し、定量の件数は任意条件とする。
             if (plan.Settings.BatchSize <= 0)
                 return "バッチサイズは1以上にしてください。";
             if (!float.IsFinite(plan.Settings.ValidationSplit) || plan.Settings.ValidationSplit <= 0 || plan.Settings.ValidationSplit >= 1)
@@ -169,10 +181,15 @@ namespace MineraScope
             if (countFailure is not null)
                 return $"分類モデルを作成できません: {countFailure}";
 
+            // 260928Codex: 疑似的にクラスを隠すエピソードには、学習開始前に十分な異なるクラスが必要である。
+            // 261001Codex: 時間別pool数ではなく異なる鉱物数を数え、通常分類と同じ前提条件を使う。
+            if (plan.SoftmaxOcnSeed is < 0)
+                return "OCNの学習Seedは0以上にしてください。";
+
             return ValidateTrainingSources(plan);
         }
 
-        // 260901Codex: Reject partial metadata and any multi-time imbalance before TensorFlow starts.
+        // 260901Codex: TensorFlowの開始前に、不完全なメタデータと複数時間の比率不整合を拒否する。
         private static string? ValidateTrainingSources(ModelTrainingPlan plan)
         {
             SpectrumTrainingSample[] samples = plan.TrainingPools
@@ -246,7 +263,7 @@ namespace MineraScope
             return null;
         }
 
-        // 260901Codex: Validate the provenance copy independently of request construction for direct workflow callers.
+        // 260901Codex: ワークフローを直接呼ぶ場合に備え、要求構築とは独立して由来情報のコピーを検証する。
         private static string? ValidateTimeAllocations(IReadOnlyList<SpectrumTimeAllocation> allocations)
         {
             if (allocations.Count == 0)
@@ -267,7 +284,7 @@ namespace MineraScope
             return null;
         }
 
-        // 260901Codex: Use the same tolerance as SEM condition identity validation.
+        // 260901Codex: SEM条件の識別検証と同じ許容誤差を使う。
         private static bool LiveTimesMatch(double left, double right) =>
             Math.Abs(left - right) <= 1e-9;
 
@@ -284,10 +301,16 @@ namespace MineraScope
         // 260901Codex: 正式フォルダへの昇格が完了した時点でだけ Promoted を返します。
         private ModelTrainingResult Run(ModelTrainingPlan plan, IProgress<TrainingProgress>? progress, CancellationToken cancellationToken)
         {
-            // 260930Codex: Hold the output lease through promotion and abandoned-backup cleanup.
+            // 260917Codex: 削除処理より前に取得し、拒否された2回目の実行が1回目の出力を消さないようにする。
             using var outputLease = PathOperationLease.Acquire(plan.ModelOutputFolder, "ModelOutput");
-            // 260930Codex: Use the committed private staging convention recognized by the model catalog.
+            // 260917Codex: 専用の作業領域を使い、意図的に.tmpで終わる名前を付けたモデルとの衝突も避ける。
+            // 260928Codex: 原子的な昇格のため同じボリュームで準備し、TensorFlowの深いSavedModelパスを短く保つ。
             string temporaryOutputFolder = Path.Combine(Path.GetDirectoryName(plan.ModelOutputFolder)!, $".{Guid.NewGuid():N}.tmp");
+            // 260928Codex: 正規化したheadのスナップショットを、昇格する成果物の外に置く。
+            string? headDatasetFolder = plan.SoftmaxOcnSeed is null ? null
+                : Path.Combine(Path.GetTempPath(), "MineraScopeHeadData", Guid.NewGuid().ToString("N"));
+            // 261001Codex: 任意のhead作成に失敗しても、有効な分類器は破棄しない。
+            string? ocnFailureReason = null;
             _logAction("モデル作成開始");
             _logAction($"保存先（正式）: {plan.ModelOutputFolder}");
             _logAction($"保存先（仮）: {temporaryOutputFolder}");
@@ -296,18 +319,27 @@ namespace MineraScope
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // 260901Codex: Direct workflow callers receive the same strict multi-time preflight as the UI.
+                // 260901Codex: ワークフローを直接呼ぶ場合も、UIと同じ厳密な複数時間の事前検査を行う。
                 string? validationError = Validate(plan);
                 if (validationError is not null)
                     throw new InvalidOperationException(validationError);
 
-                // 260619Codex: Stop before expensive training when overwrite consent was not included in the plan.
+                // 260619Codex: 計画に上書き同意がなければ、高負荷な学習より前に停止する。
                 if (Directory.Exists(plan.ModelOutputFolder) && !plan.AllowOverwriteExistingModel)
                     throw new InvalidOperationException(OverwriteNotAllowedMessage);
 
-                if (Directory.Exists(temporaryOutputFolder))
-                    Directory.Delete(temporaryOutputFolder, recursive: true);
-
+                if (headDatasetFolder is not null)
+                {
+                    try
+                    {
+                        ClassificationTrainingDataset.Create(plan.TrainingPools, plan.Settings, headDatasetFolder, cancellationToken, _logAction);
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException and not TrainingInputChangedException)
+                    {
+                        ocnFailureReason = exception.Message;
+                        _logAction($"OCN学習準備を省略します: {ocnFailureReason}");
+                    }
+                }
                 Directory.CreateDirectory(temporaryOutputFolder);
                 var trainingResult = _deepLearning.RunTraining(
                     plan.TrainingPools,
@@ -319,8 +351,9 @@ namespace MineraScope
                     temporaryOutputFolder,
                     progress,
                     cancellationToken,
-                    // 260930Codex: Train with the value preserved in this model creation request.
-                    classificationLearningRate: plan.Settings.LearningRate);
+                    // 260918Codex: 通常のモデル作成でも、学習設定に記録したSoftmax学習率を使う。
+                    classificationLearningRate: plan.Settings.LearningRate,
+                    captureClassifierFeatures: headDatasetFolder is not null && ocnFailureReason is null);
                 if (trainingResult.Status == DeepLearningTrainingStatus.NotCompleted)
                 {
                     string failureReason = trainingResult.FailureReason
@@ -328,7 +361,7 @@ namespace MineraScope
                     var failureKind = trainingResult.FailureKind switch
                     {
                         DeepLearningTrainingFailureKind.TrainingDataLoadFailed => ModelTrainingFailureKind.TrainingDataLoadFailed,
-                        // 261016Codex: 件数不足でも既存の正式モデルを保持する。
+                        // 260930Codex: 学習処理の直接呼び出しが件数不足で拒否された場合、既存の正式モデルを保持する。
                         DeepLearningTrainingFailureKind.InsufficientTrainingSamples => ModelTrainingFailureKind.InsufficientTrainingSamples,
                         null => throw new InvalidOperationException("未完了の学習結果に理由種別がありません。"),
                         _ => throw new InvalidOperationException($"未対応の学習失敗理由です: {trainingResult.FailureKind}")
@@ -346,13 +379,13 @@ namespace MineraScope
                 if (trainingResult.Status != DeepLearningTrainingStatus.Completed)
                     throw new InvalidOperationException($"未対応の学習結果です: {trainingResult.Status}");
 
-                // 260901Codex: Provenance is part of the temporary model and must succeed before formal promotion.
+                // 260901Codex: 由来情報も一時モデルの一部とし、正式な昇格前に保存を成功させる。
                 if (plan.TrainingDataProvenance is not null)
                     TrainingDataProvenanceWriter.Write(
                         temporaryOutputFolder,
                         plan.TrainingDataProvenance,
                         plan.TrainingPools);
-                // 260906Codex: Keep the observed validation results in the temporary model so incomplete runs are never promoted as results.
+                // 260906Codex: 観測した検証結果を一時モデルに保持し、不完全な実行を結果として昇格させない。
                 TrainingResultsWriter.Write(
                     temporaryOutputFolder,
                     new TrainingResultsSpecification(
@@ -360,17 +393,42 @@ namespace MineraScope
                         plan.Settings.BatchSize,
                         plan.Settings.EarlyStoppingPatience,
                         plan.Settings.ValidationSplit,
-                        DeepLearningDataSplitter.DefaultRandomState,
-                        DeepLearning.EarlyStoppingMonitor,
-                        // 260930Codex: Persist the actual classification optimizer rate with the model.
-                        ClassificationLearningRate: plan.Settings.LearningRate),
+                        // 261021Codex: 公開版の既存引数順と保存形式を変えず、学習率を名前で渡す。
+                        ClassificationLearningRate: plan.Settings.LearningRate,
+                        SplitSeed: DeepLearningDataSplitter.DefaultRandomState,
+                        EarlyStoppingMonitor: DeepLearning.EarlyStoppingMonitor),
                     trainingResult.ModelMetrics);
                 WriteDetectorMetadata(plan.DetectorProfile, temporaryOutputFolder);
 
+                // 260928Codex: headの学習と再読込検証が終わってから、分類＋OCNモデルを公開する。
+                if (headDatasetFolder is not null && ocnFailureReason is null)
+                {
+                    ClassificationTrainingDatasetInfo frozen = ClassificationTrainingDataset.ReadInfo(headDatasetFolder, cancellationToken);
+                    foreach (ClassificationTrainingSampleInfo sample in frozen.Samples)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (sample.SourceSha256 != ClassificationTrainingDataset.ComputeFileSha256(sample.FilePath, cancellationToken))
+                            throw new IOException($"分類＋OCNの学習中に入力が変更されました: {sample.FilePath}");
+                    }
+                    // 261001Codex: 上限は共通とし、中止時は要求した処理全体を中断する。
+                    try
+                    {
+                        SoftmaxOcnHeadTraining.TrainAndSave(temporaryOutputFolder, headDatasetFolder,
+                            plan.SoftmaxOcnSeed!.Value, "ModelCreation", cancellationToken, _logAction,
+                            plan.Settings.Epochs, plan.Settings.EarlyStoppingPatience, trainingResult.ClassifierFeatures);
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException and not OutOfMemoryException and not TrainingInputChangedException)
+                    {
+                        ocnFailureReason = exception.Message;
+                        File.Delete(Path.Combine(ModelArtifactPaths.GetClassificationFolder(temporaryOutputFolder), SoftmaxOcnHeadArtifact.FileName));
+                        _logAction($"OCN判定器を作成できませんでした: {ocnFailureReason}");
+                    }
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
                 PromoteTemporaryFolder(temporaryOutputFolder, plan.ModelOutputFolder, plan.AllowOverwriteExistingModel);
-                // 261021Claude: 分類器と学習できた定量モデルを正式に保存してから通知する。
-                return ModelTrainingResult.CreatePromoted(trainingResult.ModelMetrics);
+                // 260930Codex: 分類器と利用可能な定量モデルを正式に保存してから通知する。
+                return ModelTrainingResult.CreatePromoted(trainingResult.ModelMetrics, ocnFailureReason);
             }
             catch (Exception exception)
             {
@@ -386,6 +444,11 @@ namespace MineraScope
                 TryDeleteTemporaryFolder(temporaryOutputFolder);
 
                 throw;
+            }
+            finally
+            {
+                if (headDatasetFolder is not null)
+                    TryDeleteTemporaryFolder(headDatasetFolder);
             }
         }
 
@@ -423,7 +486,7 @@ namespace MineraScope
             }
         }
 
-        // 260626Codex: Record the detector profile beside trained artifacts so later predictions can trace training spectra.
+        // 260626Codex: 学習スペクトルを後の予測から追跡できるよう、学習成果物とともに検出器プロファイルを記録する。
         private static void WriteDetectorMetadata(DetectorProfile detectorProfile, string modelRootFolder)
         {
             detectorProfile.WriteToModelFolder(modelRootFolder);
@@ -439,12 +502,12 @@ namespace MineraScope
         {
             _logAction("モデル保存先の仮フォルダを正式フォルダへ昇格します。");
 
-            // 260917Codex: An independently named model ending in .previous is not this run's disposable backup.
+            // 260917Codex: .previousで終わる別名のモデルは、この実行で削除してよいバックアップではない。
             string backupOutputFolder = $"{modelOutputFolder}.{Guid.NewGuid():N}.previous";
 
             if (Directory.Exists(modelOutputFolder))
             {
-                // 260619Codex: Re-check at promotion time so a late-created folder is not overwritten silently.
+                // 260619Codex: 昇格時にも再確認し、後から作られたフォルダーを暗黙に上書きしない。
                 if (!allowOverwriteExistingModel)
                     throw new InvalidOperationException(OverwriteNotAllowedMessage);
 
@@ -519,7 +582,7 @@ namespace MineraScope
         //   GUID を要求するので、利用者が名付けた `sample.previous` は残ります。判定は ModelCatalog.IsTrainingWorkFolder と
         //   同じ綴りにして、片方だけが work folder とみなす状態を作りません。`.tmp` はモデル名を含まないため対象外です。
         private static bool IsPromotionBackupName(string folderName, string modelName) =>
-            // 260930Codex: Match the entire model name so model.child backups cannot be deleted by model cleanup.
+            // 260930Codex: モデル名全体を照合し、modelの削除処理でmodel.childのバックアップを消さないようにする。
             folderName.Split('.') is [.., var id, "previous"] && Guid.TryParseExact(id, "N", out _)
             && string.Equals(folderName, $"{modelName}.{id}.previous", StringComparison.OrdinalIgnoreCase);
     }

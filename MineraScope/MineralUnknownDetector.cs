@@ -5,7 +5,16 @@ using Tensorflow.NumPy;
 
 namespace MineraScope
 {
-    // 260622Codex: Stores and evaluates the open-set detector built from Dense(64) embeddings of the classifier.
+    // 261001Claude: 未学習をどの方式で判定したか。モデルは距離しきい値かOCN判定器のどちらか一方を保存物として持ち、
+    //   利用者が方式を選ぶのではないので、「適用したか」ではなく方式そのものを結果に載せます。
+    internal enum UnknownDetectionMethod
+    {
+        None,
+        Distance,
+        LearnedHead
+    }
+
+    // 260622Codex: 分類器のDense(64)埋め込みから構築した、オープンセット検知器を保存・評価する。
     internal sealed class MineralUnknownDetector
     {
         public const string FileName = "unknownDetector.json";
@@ -16,8 +25,14 @@ namespace MineraScope
         // 260827Claude: 「要求したか」と「実際に適用したか」の組み合わせを表示語へ変換する。マップ要約・クリック結果欄・
         //   保存する .txt の 3 か所が同じ語彙を使う必要があるので、文言をここへ 1 つだけ置く。
         // 260828Codex: 併設 .txt を廃止し、未適用の理由は別の警告で伝えるため、通常表示は二状態へ簡略化する。
-        public static string DescribeApplication(bool applied)
-            => applied ? "適用" : "未適用";
+        // 261001Claude: 二状態を方式名へ広げます。利用者は選択中のモデルがどちらで未学習を判定するか知る必要があり、
+        //   「適用」とだけ出すと距離しきい値とOCN判定器を区別できません。
+        public static string Describe(UnknownDetectionMethod method) => method switch
+        {
+            UnknownDetectionMethod.Distance => "距離しきい値",
+            UnknownDetectionMethod.LearnedHead => "OCN判定器",
+            _ => "未適用"
+        };
 
         private const int CurrentVersion = 2;
         private const double DefaultThresholdQuantile = 1.0d;
@@ -210,6 +225,21 @@ namespace MineraScope
         public MineralUnknownDetectionResult Evaluate(float[,] embeddings, int row)
             => Evaluate(embeddings, row, new double[EmbeddingDim]);
 
+        // 260919Claude: 学習型しきい値実験（UnknownHeadExperiment）用の、Evaluate内部のクラス別距離。この実験では
+        //   埋め込みと距離尺度を保ち、固定のクラス別規則だけを置き換える。Evaluate自体は通常機能の判定を保つ。
+        internal void Distances(float[] embedding, double[] destination)
+        {
+            if (embedding.Length != EmbeddingDim)
+                throw new ArgumentException($"{EmbeddingDim} values are required.", nameof(embedding));
+            if (destination.Length != LabelCount)
+                throw new ArgumentException($"{LabelCount} values are required.", nameof(destination));
+            var diff = new double[EmbeddingDim];
+            for (int label = 0; label < _means.Length; label++)
+                destination[label] = Score(embedding, _means[label], diff);
+        }
+
+        internal IReadOnlyList<double> Thresholds => _thresholds;
+
         public MineralUnknownDetectionResult Evaluate(float[,] embeddings, int row, double[] diff)
         {
             if (embeddings.GetLength(1) != EmbeddingDim)
@@ -363,7 +393,7 @@ namespace MineraScope
             return thresholds;
         }
 
-        // 260622Codex: Calibrate each label from its true known samples so broad solid-solution classes get broader accepted regions.
+        // 260622Codex: 各ラベルを実際の学習済み鉱物サンプルで較正し、広い固溶体クラスには広い受容領域を与える。
         private static void AddKnownScores(
             MineralUnknownDetector detector,
             float[,] embeddings,
@@ -574,7 +604,7 @@ namespace MineraScope
         }
     }
 
-    // 260622Codex: Carries the open-set score while keeping the closed-set top-1 prediction available for context.
+    // 260622Codex: オープンセット得点を渡しつつ、文脈としてクローズドセットのTop-1予測も利用可能に保つ。
     internal readonly record struct MineralUnknownDetectionResult(
         bool IsUnknown,
         // 260828Codex: 判定時の精度を CSV まで維持するため、距離としきい値は double のまま運ぶ。

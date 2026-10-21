@@ -7,7 +7,7 @@ namespace MineraScope
     internal sealed class PtsClassificationMapResult
     {
         public const int UnclassifiedLabelId = -1;
-        // 260622Codex: Unknown means a usable spectrum was classified but falls outside the known embedding distribution.
+        // 260622Codex: Unknownは、利用可能なスペクトルを分類した結果、学習済み鉱物の埋め込み分布の外と判定したことを意味する。
         public const int UnknownLabelId = -2;
 
         // 260526Claude: 行優先フラット配列 by * GridWidth + bx。未判定は UnclassifiedLabelId。
@@ -22,7 +22,8 @@ namespace MineraScope
             int? leadingSweepCount,
             // 260807Codex: ユーザー要求とモデル能力による実適用を区別して保持する。
             bool unknownDetectionRequested,
-            bool unknownDetectionApplied,
+            // 261001Claude: 実適用の有無ではなく方式を受け取る。マップ要約と .txt が方式名を出すため。
+            UnknownDetectionMethod unknownDetection,
             int gridWidth,
             int gridHeight,
             int[] top1LabelId,
@@ -38,7 +39,7 @@ namespace MineraScope
             if (binSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(binSize));
 
-            // 260612Codex: The map stores its sweep limit so later detail clicks replay the same read condition.
+            // 260612Codex: マップに走査上限を保持し、後の詳細クリックでも同じ読込条件を再現する。
             if (leadingSweepCount is <= 0)
                 throw new ArgumentOutOfRangeException(nameof(leadingSweepCount));
 
@@ -58,7 +59,7 @@ namespace MineraScope
             LeadingSweepCount = leadingSweepCount;
             // 260807Codex: 表示条件と再現情報の両方を結果オブジェクトへ固定する。
             UnknownDetectionRequested = unknownDetectionRequested;
-            UnknownDetectionApplied = unknownDetectionApplied;
+            UnknownDetection = unknownDetection;
             GridWidth = gridWidth;
             GridHeight = gridHeight;
             Timings = timings;
@@ -74,14 +75,17 @@ namespace MineraScope
 
         public int BinSize { get; }
 
-        // 260612Codex: Null represents all sweeps, while a value represents the first N completed sweeps.
+        // 260612Codex: nullは全走査、値があれば先頭N回の完了走査を表す。
         public int? LeadingSweepCount { get; }
 
         // 260807Codex: ユーザーがマップ作成時に未学習検知を要求したかを記録する。
         public bool UnknownDetectionRequested { get; }
 
+        // 261001Claude: どの方式で Unknown を判定したか。保存物が方式を決めるので、結果にも方式のまま載せる。
+        public UnknownDetectionMethod UnknownDetection { get; }
+
         // 260807Codex: 検知器と特徴抽出器が揃い、実際に Unknown 判定を適用したかを示す。
-        public bool UnknownDetectionApplied { get; }
+        public bool UnknownDetectionApplied => UnknownDetection != UnknownDetectionMethod.None;
 
         public int GridWidth { get; }
 
@@ -102,7 +106,7 @@ namespace MineraScope
         public IReadOnlyList<string> LabelNames => _labelNames;
     }
 
-    // 260527Codex: Carries map-generation timing diagnostics so UI can show whether reading or inference dominates.
+    // 260527Codex: マップ生成の時間診断を渡し、読込と推論のどちらが支配的かUIで示せるようにする。
     internal sealed record PtsClassificationMapTimings(
         TimeSpan ModelPreparation,
         TimeSpan ReadAndAggregate,

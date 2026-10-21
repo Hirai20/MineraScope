@@ -35,8 +35,16 @@ namespace MineraScope
                         yield return new(SpectrumBlockRowKind.Field, "Nearest known", classification.NearestKnownMineral);
                 }
                 // 260703Claude: 距離スコアは既知判定でも出力し、未学習検知の距離分布 (箱ひげ図) を全スペクトルで解析できるようにする。
-                if (classification.UnknownScore.HasValue && classification.UnknownThreshold.HasValue)
-                    yield return new(SpectrumBlockRowKind.Field, "Unknown score", $"{FormatScore(classification.UnknownScore.Value)} / {FormatScore(classification.UnknownThreshold.Value)}");
+                // 261001Claude: 項目名自体が方式を表すようにする。旧ラベル "Unknown score" は距離と未学習率のどちらも指しうるため、
+                //   CSV を後から読む側がモデルの方式を知らないと単位を取り違える。値の書式は従来どおり距離のみ「値 / しきい値」で、
+                //   未学習率は判定境界が常に 0.5 で固定なので率だけを出す。
+                if (classification.UnknownScore is { } unknownScore)
+                {
+                    if (classification.UnknownDetection == UnknownDetectionMethod.LearnedHead)
+                        yield return new(SpectrumBlockRowKind.Field, "未学習率", $"{FormatPercent((float)unknownScore)}%");
+                    else if (classification.UnknownThreshold is { } unknownThreshold)
+                        yield return new(SpectrumBlockRowKind.Field, "学習分布からの距離", $"{FormatScore(unknownScore)} / {FormatScore(unknownThreshold)}");
+                }
             }
 
             if (item.Endmembers.Count > 0)

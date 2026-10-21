@@ -235,6 +235,9 @@ namespace MineraScope
         // 260622Claude: カーボン蒸着膜厚を spectrum ごとに振るばらつき幅 (%)。旧設定ファイルに無いとき (JSON 欠落時) は既定 20 を保つ。
         public double CarbonThicknessJitterPercent { get; set; } = 20;
 
+        // 261021Codex: 旧設定は従来分類のまま読み、新しい組合せ方式の選択だけを保存する。
+        public string? TrainingMethod { get; set; }
+
         public DetectorProfile GetDetectorProfile() =>
             MineraScope.DetectorProfile.CreateWithDefaults(DetectorProfile, DetectorName);
     }

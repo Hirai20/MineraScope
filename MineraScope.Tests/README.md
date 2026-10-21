@@ -78,3 +78,15 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 ```powershell
 dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --model-selection-smoke
 ```
+
+## 分類＋OCNとプロセス間共有
+
+<!-- 261021Codex: 公開版の通常契約と任意の合成実学習を区別する。 -->
+通常テストに保存済みOCN判定器の整合性、少数クラスの分割、読み取りと生成の共存、生成同士の排他、JSONの一貫した公開、読み取り専用の学習準備を含みます。テスト専用の子プロセスと一時フォルダーだけを使います。
+
+```powershell
+dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --product-ocn-smoke
+dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --training-sample-smoke
+```
+
+追加検証は2〜7種類の合成データによる分類＋OCNの学習・保存・再読込、単発・ファイル・マップ用バッチの判定一致、中止と入力変更時の既存モデル保持、件数不足の定量モデルの省略、分類モデルのみの上書き保存を確認します。実測データや利用者のモデルは使いません。

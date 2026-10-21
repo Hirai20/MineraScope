@@ -6,6 +6,19 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261021Codex: 利用者のモデルを使わず、定量省略と既存出力の保持を実学習で確認する。
+            if (args.Length == 1 && args[0] == "--training-sample-smoke")
+            {
+                RegressionPromotionTests.RunNativeSmoke();
+                Console.WriteLine("PASS: Regression omission and safe model promotion");
+                return 0;
+            }
+            // 261021Codex: 通常モデルの合成データだけで分類＋OCNの作成・保存・推論を検証する。
+            if (args.Length == 1 && args[0] == "--product-ocn-smoke")
+            {
+                ProductOcnTests.RunNativeSmoke();
+                return 0;
+            }
             // 261021Codex: プロセス間共有の合成テスト専用入口。
             if (args.Length == 3 && args[0] == "--concurrency-child")
                 return ConcurrencyTests.RunChild(args[1], args[2]);
@@ -66,6 +79,9 @@ namespace MineraScope.Tests
 
             List<(string Name, Action Run)> suites =
             [
+                // 261021Codex: 研究用実験を含めず、保存済みheadの整合性と通常OCNの契約を検証する。
+                ("Saved OCN artifact integrity", SavedOcnArtifactTests.Run),
+                ("Product OCN contracts", ProductOcnTests.Run),
                 // 261021Codex: 別プロセス間の生成・読み取り共有とJSON公開を検証する。
                 ("Cross-process spectrum pool concurrency", ConcurrencyTests.Run),
                 // 260930Codex: Filesystem failure checks verify promotion and backup cleanup without TensorFlow.

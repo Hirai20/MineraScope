@@ -11,7 +11,13 @@ namespace MineraScope
         string SpectrumOutputFolder,
         string ScriptOutputFolder,
         string DtsaFolder,
-        string ModelOutputFolder);
+        string ModelOutputFolder)
+    {
+        // 260917Claude: モデル一式を保存するフォルダー。設定が空ならアプリの既定値を使う。
+        // 261014Codex: 保存先の既定値を、画面とworkflowで共通に解決する。
+        public string ResolveModelRootFolder() =>
+            string.IsNullOrWhiteSpace(ModelOutputFolder) ? DefaultStoragePaths.ModelsFolder : ModelOutputFolder;
+    }
 
     // 260507Codex: pool の conditionKey に含める現行 EDX 条件を明示します。
     internal sealed record SemEdxCondition(
@@ -23,13 +29,13 @@ namespace MineraScope
     {
         public DetectorProfile? DetectorProfile { get; init; } = MineraScope.DetectorProfile.CreateLegacyTest(DetectorName);
 
-        // 260626Codex: System.Text.Json needs an unambiguous constructor when reading manifests with the added detector profile field.
+        // 260626Codex: 検出器プロファイル欄を追加したmanifestを読む際、System.Text.Jsonが曖昧なく使えるコンストラクターを用意する。
         public SemEdxCondition()
             : this(string.Empty, 0, 0, 0, 0)
         {
         }
 
-        // 260626Codex: New callers pass the editable detector profile while the old DetectorName field remains for JSON compatibility.
+        // 260626Codex: 新しい呼び出し側は編集可能な検出器プロファイルを渡し、旧DetectorNameはJSON互換性のため保持する。
         public SemEdxCondition(
             DetectorProfile detectorProfile,
             double carbonCoatThickness,
@@ -58,15 +64,15 @@ namespace MineraScope
         int ParallelCount,
         double CarbonThicknessJitterPercent);
 
-    // 260901Codex: Keep each measurement-time target explicit so one request can reuse independent condition-key pools.
+    // 260901Codex: 各測定時間の目標を明示し、1要求で独立した条件キーのpoolを再利用できるようにする。
     internal sealed record SpectrumTimeAllocation(
         double LiveTime,
         int TargetSpectrumCount);
 
-    // 260907Codex: A schedule keeps the total per mineral separate from time weights so Preset B can allocate exact counts without treating 1000 as a special value.
+    // 260907Codex: 鉱物ごとの総数と時間重みを分け、1000を特別扱いせずPreset Bの正確な件数を配分する。
     internal sealed record SpectrumTimeWeight(double LiveTime, int Weight);
 
-    // 260907Codex: Preset B owns one composition/time plan across all active live times; the UI can keep using its fixed default while later settings expose this DTO.
+    // 260907Codex: Preset Bは全ライブタイム共通の組成・時間計画を持ち、後でこのDTOを設定に公開するまでUIは固定の既定値を使える。
     internal sealed record SpectrumTimeSchedule(
         int TotalSpectrumCount,
         IReadOnlyList<SpectrumTimeWeight> TimeWeights)
@@ -115,7 +121,7 @@ namespace MineraScope
 
     // 260507Codex: 学習条件は conditionKey から外し、モデル作成時だけ使う設定として分離します。
     // 260622Claude: UnknownDistanceScale は未知判定で既知とみなす距離に掛ける倍率 (大きいほど Unknown を出しにくい)。
-    // 260930Codex: Preserve the historical rate when loading settings written before LearningRate existed.
+    // 260918Codex: 逆シリアル化で、新規要求とLearningRate追加前の実験JSONを区別する。
     [JsonConverter(typeof(ModelTrainingSettingsJsonConverter))]
     internal sealed record ModelTrainingSettings(
         int Epochs,
@@ -124,37 +130,43 @@ namespace MineraScope
         float ValidationSplit,
         double UnknownDistanceScale)
     {
-        // 260930Codex: New ordinary classifiers use 1e-4; historical JSON retains 1e-3.
+        // 260918Codex: 新規Softmax分類要求はAdam 1e-4を使い、この欄の追加前に作成したJSONは変換処理で1e-3を保持する。
         public const float DefaultClassificationLearningRate = 1e-4f;
         internal const float LegacyClassificationLearningRate = 1e-3f;
+
         public float LearningRate { get; init; } = DefaultClassificationLearningRate;
     }
 
-    // 260930Codex: Record the effective rate while accepting the existing Pascal-case and camel-case settings.
+    // 260918Codex: LearningRate欠落は設定追加前のSeed成果物を表し、再開時も記録済みの従来のAdam学習率を保持する。
     internal sealed class ModelTrainingSettingsJsonConverter : JsonConverter<ModelTrainingSettings>
     {
         public override ModelTrainingSettings Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             using JsonDocument document = JsonDocument.ParseValue(ref reader);
             JsonElement root = document.RootElement;
+
             T ReadRequired<T>(string name, Func<JsonElement, T> read) =>
                 TryGetProperty(root, name, out JsonElement property) ? read(property) : default!;
+
             var settings = new ModelTrainingSettings(
                 ReadRequired(nameof(ModelTrainingSettings.Epochs), property => property.GetInt32()),
                 ReadRequired(nameof(ModelTrainingSettings.BatchSize), property => property.GetInt32()),
                 ReadRequired(nameof(ModelTrainingSettings.EarlyStoppingPatience), property => property.GetInt32()),
                 ReadRequired(nameof(ModelTrainingSettings.ValidationSplit), property => property.GetSingle()),
                 ReadRequired(nameof(ModelTrainingSettings.UnknownDistanceScale), property => property.GetDouble()));
+
             return settings with
             {
-                LearningRate = TryGetProperty(root, nameof(ModelTrainingSettings.LearningRate), out JsonElement rate)
-                    ? rate.GetSingle() : ModelTrainingSettings.LegacyClassificationLearningRate
+                LearningRate = TryGetProperty(root, nameof(ModelTrainingSettings.LearningRate), out JsonElement learningRate)
+                    ? learningRate.GetSingle()
+                    : ModelTrainingSettings.LegacyClassificationLearningRate
             };
         }
 
         public override void Write(Utf8JsonWriter writer, ModelTrainingSettings value, JsonSerializerOptions options)
         {
             string Name(string property) => options.PropertyNamingPolicy?.ConvertName(property) ?? property;
+
             writer.WriteStartObject();
             writer.WriteNumber(Name(nameof(value.Epochs)), value.Epochs);
             writer.WriteNumber(Name(nameof(value.BatchSize)), value.BatchSize);
@@ -173,13 +185,14 @@ namespace MineraScope
                     property = candidate.Value;
                     return true;
                 }
+
             property = default;
             return false;
         }
     }
 
     // 260507Codex: モデル作成対象は checkedListBoxMineral のチェック済み SolidSolution だけに統一します。
-    // 260901Codex: Optional allocations extend model creation without changing legacy single-time constructors.
+    // 260901Codex: 任意の割当指定でモデル作成を拡張し、従来の単一時間用コンストラクターは変えない。
     internal sealed record ModelCreationRequest(
         ModelCreationPaths Paths,
         // 260508Codex: 学習成果物はモデル保存先の直下ではなく、画面のモデル名フォルダ配下へ保存します。
@@ -189,15 +202,15 @@ namespace MineraScope
         ModelTrainingSettings Training,
         IReadOnlyList<SolidSolution> SelectedMineralSolutions)
     {
-        // 260901Codex: An empty list means the existing SemEdxCondition.LiveTime and Simulation target are used.
+        // 260901Codex: 一覧が空なら、既存のSemEdxCondition.LiveTimeとSimulationの目標を使う。
         public IReadOnlyList<SpectrumTimeAllocation> SpectrumTimeAllocations { get; init; } = [];
 
-        // 260907Codex: Non-null selects the global composition/time planner. Empty allocations alone retain compatibility for earlier explicit-time callers.
+        // 260907Codex: null以外なら全体の組成・時間計画を使う。割当一覧だけが空の場合は、以前の明示時間指定の互換性を保つ。
         public SpectrumTimeSchedule? SpectrumTimeSchedule { get; init; }
 
         public bool UsesCompositionTimePlan => SpectrumTimeSchedule is not null;
 
-        // 260901Codex: Validate the shared schedule once before pool resolution so invalid or duplicate conditions cannot reserve manifests.
+        // 260901Codex: pool解決前に共通の予定表を一度検証し、不正・重複条件によるmanifest予約を防ぐ。
         public IReadOnlyList<SpectrumTimeAllocation> GetEffectiveSpectrumTimeAllocations()
         {
             SpectrumTimeAllocation[] allocations = SpectrumTimeSchedule is not null
@@ -219,14 +232,14 @@ namespace MineraScope
                     if (Math.Abs(allocations[i].LiveTime - allocations[j].LiveTime) <= 1e-9)
                         throw new InvalidOperationException($"測定時間 {allocations[i].LiveTime} 秒が重複しています。");
 
-            // 260901Codex: One mineral batch needs at least one condition-homogeneous job for every active time.
+            // 260901Codex: 鉱物バッチごとに、有効な各時間に対して条件が均一なジョブを最低1つ用意する。
             if (allocations.Length > Math.Max(1, Simulation.ParallelCount))
                 throw new InvalidOperationException("並列数は測定時間条件数以上にしてください。");
 
             return allocations;
         }
 
-        // 260901Codex: Existing single-condition pool code receives a derived request with only live time and target count changed.
+        // 260901Codex: 既存の単一条件pool処理には、ライブタイムと目標件数だけを変えた派生要求を渡す。
         public ModelCreationRequest ForSpectrumTimeAllocation(SpectrumTimeAllocation allocation) =>
             this with
             {

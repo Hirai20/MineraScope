@@ -4,13 +4,13 @@ using System.Threading;
 
 namespace MineraScope
 {
-    // 260527Codex: Builds PTS mineral maps by reading bounded block-count tiles and classifying each tile in batches.
+    // 260527Codex: ブロック件数を制限したタイル単位でPTSを読み、各タイルをバッチ分類して鉱物マップを作る。
     internal static class PtsClassificationMapWorkflow
     {
-        // 260527Codex: Use a larger inference batch to reduce TensorFlow call overhead while keeping input memory modest.
+        // 260527Codex: 入力メモリを抑えつつ、大きな推論バッチでTensorFlow呼び出しの負荷を減らす。
         public const int InferenceBatchSize = 8192;
 
-        // 260527Codex: This budget applies only to the temporary int[counts] tile, not to the full map result.
+        // 260527Codex: この上限は一時的なint[counts]タイルだけに適用し、マップ全体の結果には適用しない。
         public const long TileMemoryBudgetBytes = 1024L * 1024 * 1024;
 
         public static PtsClassificationMapResult Run(
@@ -32,11 +32,11 @@ namespace MineraScope
             if (binSize <= 0)
                 throw new ArgumentOutOfRangeException(nameof(binSize));
 
-            // 260612Codex: Keep the workflow contract aligned with PTSFile sweep-limit semantics.
+            // 260612Codex: ワークフローの契約を、PTSFileの走査上限の意味に合わせる。
             if (leadingSweepCount is <= 0)
                 throw new ArgumentOutOfRangeException(nameof(leadingSweepCount));
 
-            // 260604Codex: Correlate map progress with TensorFlow batch logs across native process aborts.
+            // 260604Codex: ネイティブプロセス中断をまたぎ、マップ進捗とTensorFlowバッチログを対応付ける。
             long mapRunId = TensorFlowPredictionDebugLog.NextMapRunId();
             // 260807Codex: モデル読込前なので、開始ログにはユーザー要求だけを記録する。
             TensorFlowPredictionDebugLog.Write(
@@ -72,7 +72,9 @@ namespace MineraScope
             var stageTimer = Stopwatch.StartNew();
             string[] labelNames = service.GetLabelNames(modelPath);
             // 260807Codex: モデル読込後に検知器と特徴抽出器の両方が揃った場合だけ実適用とする。
-            bool unknownApplied = detectUnknown && service.HasUnknownDetector;
+            // 261001Claude: 方式の決定はserviceの保存物が持つ規則へ寄せる。
+            UnknownDetectionMethod unknownDetection = service.DescribeUnknownDetection(detectUnknown);
+            bool unknownApplied = unknownDetection != UnknownDetectionMethod.None;
             modelPreparationTicks += stageTimer.ElapsedTicks;
             TensorFlowPredictionDebugLog.Write(
                 "map-labels-ready",
@@ -96,7 +98,7 @@ namespace MineraScope
             var rowToBlock = new int[InferenceBatchSize];
             int rowsInChunk = 0;
             int processedBlocks = 0;
-            // 260604Codex: Number TensorFlow predict chunks within a map run for post-crash log correlation.
+            // 260604Codex: クラッシュ後のログ照合用に、マップ内のTensorFlow予測チャンクへ番号を付ける。
             int chunkIndex = 0;
 
             for (int tileIndex = 0, startBlockY = 0; startBlockY < gridHeight; tileIndex++, startBlockY += tileBlockRows)
@@ -160,7 +162,7 @@ namespace MineraScope
                     }
                 }
 
-                // 260604Codex: Do not spend a diagnostic chunk id on empty tile tails.
+                // 260604Codex: 空のタイル末尾では、診断用チャンクIDを消費しない。
                 // 260807Codex: 最終チャンクも同じ実適用条件で分類する。
                 if (rowsInChunk > 0)
                     inferenceTicks += ClassifyChunk(service, modelPath, unknownApplied, batch, rowToBlock, rowsInChunk, top1LabelId, cancellationToken, mapRunId, ++chunkIndex, tileIndex);
@@ -195,7 +197,7 @@ namespace MineraScope
                 leadingSweepCount,
                 // 260807Codex: 要求値と実適用値を分けて結果へ残す。
                 detectUnknown,
-                unknownApplied,
+                unknownDetection,
                 gridWidth,
                 gridHeight,
                 top1LabelId,
@@ -203,7 +205,7 @@ namespace MineraScope
                 timings);
         }
 
-        // 260527Codex: Derive the tallest tile that stays under the temporary count-array budget.
+        // 260527Codex: 一時カウント配列の上限内に収まる、最大のタイル高さを求める。
         private static int CalculateTileBlockRows(int gridWidth, int channelCount, int gridHeight)
         {
             long bytesPerBlockRow = Math.Max(1, (long)gridWidth * channelCount * sizeof(int));
@@ -230,7 +232,7 @@ namespace MineraScope
             if (rowsInChunk == 0)
                 return 0;
 
-            // 260604Codex: Mark the exact map chunk that enters TF.NET before the native runtime can abort.
+            // 260604Codex: ネイティブランタイムが中断する前に、TF.NETへ入る正確なマップチャンクを記録する。
             TensorFlowPredictionDebugLog.Write(
                 "map-chunk-start",
                 $"mapRun={mapRunId} chunk={chunkIndex} tile={tileIndex} rows={rowsInChunk}");
@@ -249,11 +251,11 @@ namespace MineraScope
             return elapsedTicks;
         }
 
-        // 260527Codex: Convert Stopwatch ticks to TimeSpan without assuming Stopwatch frequency equals TimeSpan ticks.
+        // 260527Codex: Stopwatchの周波数がTimeSpanのtickと同じと仮定せず、経過tickをTimeSpanへ変換する。
         private static TimeSpan ElapsedTime(long stopwatchTicks)
             => TimeSpan.FromSeconds((double)stopwatchTicks / Stopwatch.Frequency);
 
-        // 260612Codex: Keep map diagnostics explicit about whether the read used all sweeps or a leading subset.
+        // 260612Codex: 全走査か先頭部分かを、マップ診断に明示する。
         private static string FormatSweepLimit(int? leadingSweepCount)
             => leadingSweepCount.HasValue
                 ? leadingSweepCount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
