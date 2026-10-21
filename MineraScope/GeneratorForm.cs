@@ -411,6 +411,7 @@ namespace MineraScope
         }
 
         // 260513Codex: DTSA-II spectrum 生成だけを CancellationTokenSource で中止できるようにします。
+        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private async void buttonRunSpectrumGeneration_Click(object sender, EventArgs e)
         {
             var request = CreateModelCreationRequest();
@@ -421,7 +422,7 @@ namespace MineraScope
                 return;
             }
 
-            // 260901Codex: Keep recovery and every DTSA-II batch under one cross-process pool mutation lease.
+            // 260901Codex: 復旧とすべてのDTSA-IIバッチを、共通のプロセス間pool変更用利用権の下で実行する。
             if (!SpectrumPoolMutationLease.TryAcquire(out var poolMutationLease, out string leaseFailureReason))
             {
                 MessageBox.Show(this, leaseFailureReason, "スペクトル生成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -505,12 +506,6 @@ namespace MineraScope
                 foreach (var result in results)
                     LogSimulationExecutionResult(result);
 
-                if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
-                {
-                    TrainLog("spectrum 生成をキャンセルしました。");
-                    SetStatusWithElapsed("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
-                }
-
                 // 260901Codex: 全時間poolの検証は大量のEMSAを読むため、終了後の集計もUIスレッド外で行います。
                 var finalState = await Task.Run(() =>
                     (Counts: _spectrumPoolWorkflow.GetStatusCounts(request, validateCompletedSpectra: false),
@@ -518,6 +513,14 @@ namespace MineraScope
                 TrainLog(
                     $"manifest status: Completed {finalState.Counts.Completed} 件 / Failed {finalState.Counts.Failed} 件 / " +
                     $"Missing {finalState.Counts.Missing} 件 / Pending {finalState.Counts.Pending} 件");
+                // 261018Codex: 中止後も集計ログは残し、通常の完了・不足表示でキャンセル状態を上書きしない。
+                if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
+                {
+                    TrainLog("spectrum 生成をキャンセルしました。");
+                    SetStatusWithElapsed("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
+                    return;
+                }
+
                 SetStatusWithElapsed(
                     $"manifest status: Completed {finalState.Counts.Completed} / Failed {finalState.Counts.Failed} / Missing {finalState.Counts.Missing} / Pending {finalState.Counts.Pending}",
                     toolStripProgressBar1.Value,
@@ -563,7 +566,7 @@ namespace MineraScope
             }
             finally
             {
-                // 260901Codex: Release after the last batch checkpoint; the OS also releases the file handle on a hard crash.
+                // 260901Codex: 最後のバッチのチェックポイント後に解放し、強制終了時もOSがファイルハンドルを解放する。
                 poolMutationLease!.Dispose();
                 if (ReferenceEquals(_simulationCancellationTokenSource, cancellationTokenSource))
                     _simulationCancellationTokenSource = null;
@@ -641,6 +644,7 @@ namespace MineraScope
         }
 
         // 260416Codex: 端成分 UI 更新の分岐を早期 return ベースに整理
+        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private void UpdateEndmemberUI()
         {
             if (checkedListBoxMinerals.SelectedItem is not SolidSolution selectedSolution)
@@ -666,9 +670,10 @@ namespace MineraScope
             if (members.Length == 1)
             {
                 // 260416Codex: 単一端成分時の表示設定を最短経路にする
-                ApplyMember(EndmemberControl1, members[0]);
-                EndmemberControl2.Enabled = true;
-                EndmemberControl2.Visible = true;
+                // 261018Codex: 削除した固定欄を再参照せず、現在のリストに必要な2行を確保して表示する。
+                EnsureEndmemberControlCount(2);
+                ApplyMember(endmemberControls[0], members[0]);
+                ShowDefaultEndmemberControls();
                 return;
             }
 
@@ -731,7 +736,7 @@ namespace MineraScope
                 var preview = new List<string>(CompositionListPreviewCount);
                 try
                 {
-                    foreach (var ratio in selectedSolution.EnumerateCandidateFractionsLazy(resolution))
+                    foreach (var ratio in selectedSolution.EnumerateCandidateFractionsLazy(resolution, token))
                     {
                         token.ThrowIfCancellationRequested();
                         preview.Add(FormatFractionMap(selectedSolution, ratio));
@@ -787,14 +792,25 @@ namespace MineraScope
         #endregion
 
         // 260416Codex: 追加・更新で共通の固溶体生成処理をまとめる
+        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private bool TryCreateSolutionFromInputs(out SolidSolution solution)
         {
-            var members = CollectEndmemberMinerals();
-            if (members.Length == 0)
+            // 261018Codex: 入力変換が失敗した場合は追加・更新の保存処理へ進めない。
+            solution = null!;
+            Mineral[] members;
+            try
             {
-                solution = null!;
+                members = CollectEndmemberMinerals();
+            }
+            catch (FormatException)
+            {
+                MessageBox.Show(this, "端成分の化学式の数値を確認してください。", "鉱物の追加・更新",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
+
+            if (members.Length == 0)
+                return false;
 
             solution = new SolidSolution(
                 textBoxMineralName.Text.Trim(),
@@ -843,9 +859,14 @@ namespace MineraScope
         #endregion
         #region 更新メソッド
         // 260416Codex: 更新時の入力変換も追加処理と揃える
+        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private void buttonUpdateMineral_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMinerals.SelectedIndex;
+            // 261018Codex: 未選択時は入力変換や鉱物DBの読み書きを行わない。
+            if (selectedIndex < 0)
+                return;
+
             // 260416Codex: 更新時も追加時と同じ入力変換を使う
             if (!TryCreateSolutionFromInputs(out var updatedSolution))
                 return;
@@ -860,9 +881,14 @@ namespace MineraScope
         #endregion
         #region 削除メソッド
         // 260416Codex: 削除後の保存と再バインドも共通 helper を使って読みやすくします。
+        // 261021Codex: 公開版へ検証済みの入力・表示・中止処理を反映する。
         private void buttonDeleteMineral_Click(object sender, EventArgs e)
         {
             int selectedIndex = checkedListBoxMinerals.SelectedIndex;
+            // 261018Codex: 未選択で保存・再バインドし、鉱物のチェック状態が失われるのを防ぐ。
+            if (selectedIndex < 0)
+                return;
+
             SaveAndBindSolutions(
                 _mineralDatabaseRepository.Load()
                 .Where((_, index) => index != selectedIndex)

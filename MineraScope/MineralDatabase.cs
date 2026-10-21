@@ -302,7 +302,8 @@ namespace MineraScope
             try
             {
                 for (int i = 0; i < Members.Length; i++)
-                    constraint = constraint.Replace(Members[i].Name, ratios[i].ToString());
+                    // 261018Codex: 制約式の小数点を固定し、OSの数値表記による解析失敗で制約が無効になるのを防ぐ。
+                    constraint = constraint.Replace(Members[i].Name, ratios[i].ToString(CultureInfo.InvariantCulture));
 
                 return new Processor().Solve(constraint).Bool;
             }

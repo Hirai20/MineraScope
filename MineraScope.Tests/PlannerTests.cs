@@ -8,6 +8,8 @@ namespace MineraScope.Tests
         // 260907Codex: Cover candidate counts above, equal to and below the requested total without invoking simulation.
         public static void Run()
         {
+            // 261018Codex: 数値表記が異なる環境でも、生成する組成と計画を変えない。
+            CompositionConstraintsAreCultureIndependent();
             LargestRemainderPreservesTotals();
             TooFewSpectraRejectsSchedule();
             foreach (var (totalCount, gridCount, timeCount) in new[]
@@ -26,6 +28,41 @@ namespace MineraScope.Tests
                 VerifyPlan(totalCount, gridCount, allocations);
             }
             UnevenTimeSlotsAvoidCompositionBias();
+        }
+
+        // 261018Codex: 制約の内側・境界・外側と、実際の候補・計画を確認し、テスト後は元のカルチャへ戻す。
+        private static void CompositionConstraintsAreCultureIndependent()
+        {
+            var solution = new SolidSolution("Constrained", "",
+                [new Mineral("A", "SiO2"), new Mineral("B", "MgO")],
+                ["A <= 0.5", "B >= 0.5"]);
+            var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+            string? expectedFingerprint = null;
+            try
+            {
+                foreach (string culture in new[] { "ja-JP", "en-US", "de-DE", "fr-FR" })
+                {
+                    System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(culture);
+                    TestAssert.True(solution.CapableComposition([0.4, 0.6]), $"{culture}: 制約内の組成を拒否した。");
+                    TestAssert.True(solution.CapableComposition([0.5, 0.5]), $"{culture}: 制約の境界を拒否した。");
+                    TestAssert.True(!solution.CapableComposition([0.9, 0.1]), $"{culture}: 制約違反の組成を許可した。");
+                    var candidates = solution.EnumerateCandidateFractionsLazy(0.1).ToArray();
+                    TestAssert.Equal(6, candidates.Length, $"{culture}: 制約を満たす候補数が変わった。");
+                    TestAssert.True(candidates.All(ratio => ratio[0] <= 0.5 + 1e-10 && ratio[1] >= 0.5 - 1e-10),
+                        $"{culture}: 候補に制約違反の組成が含まれる。");
+                    var plan = new SpectrumCompositionTimePlanner().Create(solution, 0.1,
+                        [new SpectrumTimeAllocation(50, 12)], new Dictionary<double, string> { [50] = "constraint-culture-test" });
+                    TestAssert.Equal(12, plan.Entries.Count, $"{culture}: 生成本数が変わった。");
+                    TestAssert.True(plan.Entries.All(entry => entry.EndmemberFractions["A"] <= 0.5
+                        && entry.EndmemberFractions["B"] >= 0.5), $"{culture}: 生成計画に制約違反の組成が含まれる。");
+                    expectedFingerprint ??= plan.PlanFingerprint;
+                    TestAssert.Equal(expectedFingerprint, plan.PlanFingerprint, $"{culture}: 生成計画が環境で変わった。");
+                }
+            }
+            finally
+            {
+                System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+            }
         }
 
         // 260907Codex: Deliberately supply unsorted times to test the documented remainder tie-break rather than input order.
