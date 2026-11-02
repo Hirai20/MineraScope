@@ -18,6 +18,8 @@ namespace MineraScope
             string[] outputFiles = property.OutputFiles;
             bool jitterCarbon = property.CarbonCoatThicknessJitterPercent > 0;
             DetectorProfile detector = DetectorProfile.CreateWithDefaults(property.DetectorProfile, property.DetectorName);
+            // 261030Claude: 層を参照する前にこのメソッド自身で窓の前提を確かめ、不正な窓を DTSA-II へ渡さない。
+            detector.ValidateWindow();
 
             builder.AppendLine("# -*- coding: utf-8 -*-");
             builder.AppendLine("import sys");
@@ -122,6 +124,18 @@ namespace MineraScope
                 + ", " + ToInvariantString(detector.ResolutionFwhmAtMnKa) + ")");
             AppendBodyLine(builder, "\tdp = det.getDetectorProperties()");
             AppendBodyLine(builder, "\tsp = dp.getProperties()");
+            // 261030Claude: 窓なしでは何も出力せず、DTSA-II の SDD 既定 (窓なし) と既存のスクリプトを保つ。
+            //   支持グリッドは入れないので開口率は 1.0 とし、厚さは nm から m へ直して渡す。
+            //   setWindow は純 Au・Ni の窓層を検出器側の GoldLayer・NickelLayer へ書き写すため、検出器の層より先に窓を付けて後の設定で上書きする。
+            if (detector.Window == DetectorWindowKind.Layers)
+            {
+                AppendBodyLine(builder, "\twindow = epd.XRayWindow(1.0)");
+                foreach (var layer in detector.WindowLayers!)
+                    AppendBodyLine(builder, "\twindow.addLayer(epq.Material(epq.MaterialFactory.createCompound(" + ToPythonString(layer.Formula)
+                        + "), epq.ToSI.gPerCC(" + ToInvariantString(layer.DensityGPerCm3)
+                        + ")), " + ToInvariantString(layer.ThicknessNm / 1.0e9) + ")");
+                AppendBodyLine(builder, "\tdet.setWindow(window)");
+            }
             AppendBodyLine(builder, "\tsp.setDetectorPosition(JMath.toRadians(" + ToInvariantString(detector.Elevation)
                 + "), JMath.toRadians(" + ToInvariantString(detector.Azimuth)
                 + "), " + ToInvariantString(detector.SpecimenToDetectorDistance / 1000.0)

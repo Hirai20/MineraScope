@@ -318,7 +318,23 @@ namespace MineraScope
             && SameDouble(left.GoldLayer, right.GoldLayer)
             && SameDouble(left.NickelLayer, right.NickelLayer)
             && SameDouble(left.DeadLayer, right.DeadLayer)
-            && left.Window == right.Window;
+            && left.Window == right.Window
+            && SameWindowLayers(left.WindowLayers, right.WindowLayers);
+
+        // 261030Claude: 窓の層は順序どおりに比べる。組成式は大小文字で元素が変わる (Co と CO) ため、SameText でなく Ordinal で比べる。
+        private static bool SameWindowLayers(List<DetectorWindowLayer>? left, List<DetectorWindowLayer>? right)
+        {
+            if (left is null || right is null)
+                return left is null && right is null;
+
+            return left.Count == right.Count
+                && left.Zip(right).All(pair =>
+                    pair.First is not null
+                    && pair.Second is not null
+                    && string.Equals(pair.First.Formula, pair.Second.Formula, StringComparison.Ordinal)
+                    && SameDouble(pair.First.DensityGPerCm3, pair.Second.DensityGPerCm3)
+                    && SameDouble(pair.First.ThicknessNm, pair.Second.ThicknessNm));
+        }
 
         private static bool SameConstraints(List<string>? left, List<string>? right)
         {

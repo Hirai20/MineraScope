@@ -19,8 +19,11 @@ namespace MineraScope
         public SpectrumGenerationConditionSnapshot CreateSnapshot(
             SolidSolution solution,
             double resolutionStep,
-            SemEdxCondition semEdxCondition) =>
-            new()
+            SemEdxCondition semEdxCondition)
+        {
+            // 261030Claude: 生成と学習はどちらもここで条件キーを作るため、不正な窓では pool を作らず再利用もしない。
+            semEdxCondition.GetDetectorProfile().ValidateWindow();
+            return new()
             {
                 MineralName = solution.Name,
                 MineralFormula = solution.Formula,
@@ -36,6 +39,7 @@ namespace MineraScope
                 CompositionResolution = resolutionStep,
                 SemEdxCondition = semEdxCondition
             };
+        }
 
         // 260507Codex: snapshot JSON の SHA-256 を短縮せず使い、pool フォルダ名として衝突しにくくします。
         public string BuildKey(SpectrumGenerationConditionSnapshot snapshot)

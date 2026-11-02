@@ -104,6 +104,8 @@ namespace MineraScope.Tests
                 ("Feldspar overlap label policy", MineralLabelPolicyTests.Run),
                 ("Composition and time allocation", PlannerTests.Run),
                 ("Pool preview, reuse, cancellation, and recovery", PoolTests.Run),
+                // 261030Claude: 窓の層の永続化・検査・生成スクリプト・pool再利用を、DTSA-IIを起動せずに検証する。
+                ("Detector window layers", DetectorWindowTests.Run),
                 ("Training completeness and provenance", TrainingPoolTests.Run),
                 // 260907Codex: Assert preparation equivalence, bounded JSON reads, integrity, and cancellation independently of TensorFlow.
                 ("Training preparation performance and compatibility", PreparationTests.Run)

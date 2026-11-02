@@ -21,6 +21,11 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 
 DTSA-IIの計算、TensorFlowの学習、GUI操作、実データでの全工程の確認は含みません。
 
+## 検出器の窓の層
+
+<!-- 261103Claude: 窓の層の通常テストを公開版にも加える。 -->
+通常テストで、窓なしの条件キーと生成スクリプトが窓の追加前に記録した値と一致することを確かめます。あわせて、窓の層の読み書き、DTSA-IIスクリプトへの出力、不正な値の拒否、層の違うpoolを再利用しないことも検証します。スクリプトでは、金・ニッケルだけの窓層が検出器側の金・ニッケル層を置き換えないよう、検出器の層より先に窓を付けることを確かめます。DTSA-IIは起動しません。
+
 ## 分類学習率の検証
 
 <!-- 260930Codex: Native checks are optional and use only synthetic data. -->
