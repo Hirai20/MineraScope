@@ -121,7 +121,7 @@ $simulationBenchmarkOutput = Join-Path $env:TEMP ('ms-sim-' + (Get-Date -Format 
 dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --simulation-benchmark $simulationBenchmarkOutput
 ```
 
-Olivine・Pyroxeneの2鉱物×100本を新規poolへ生成し、すべての出力を既存のmanifest検証で確認します。検出器、SEM-EDX条件、組成刻み、並列数には保存済みGUI設定を使います。測定時間Bは使わず、保存済みの単一測定時間を使います。GUI設定と既存のpoolは変更しません。Ctrl+Cでは通常の中止処理で停止します。
+Olivine・Pyroxeneの2鉱物×100本を新規poolへ生成し、すべての出力を既存のmanifest検証で確認します。検出器、SEM-EDX条件、組成刻み、並列数には保存済みGUI設定を使います。測定時間Bは使わず、保存済みの単一測定時間を使います。生成条件の設定値と既存のpoolは変更しません。検出器一覧がまだ無い場合は、通常の初回起動と同じく旧設定から一覧を自動作成します。Ctrl+Cでは通常の中止処理で停止します。
 
 新規poolでは組成の予約順が乱択されるため、変更後の測定では第3引数に変更前の出力先を指定してください。基準側のmanifestだけを新規poolへ複製して全予約をPendingとし、スペクトルはコピーせずに生成し直します。`benchmark-plan.json`の完全一致をプロセス起動前に検査するので、物理条件やジョブ分割が異なれば生成を始めません。
 
@@ -133,3 +133,6 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 `benchmark-plan.json`のSHA-256でも予約の一致を確認できます。`benchmark-result.json`には完了件数と対応する`simulate-*.log`を記録します。比較にはログの`run end`の全体秒数と`resources end`の`averageCpuPercent`・`processStarts`・`maxActive`を使います。CPU使用率は当該runのJavaのCPU時間を論理CPU数で正規化した値で、PC全体の使用率ではありません。旧ログにCPU時間が無い場合は、同じ計測を入れた変更前の実行ファイルで採り直します。
 
 通常のビルド出力をGUIが使用中の場合は、`dotnet build MineraScope.sln -c Debug -p:OutDir=<専用の絶対パス>`で出力先を分け、そのフォルダーの`MineraScope.Tests.dll`を実行します。変更前後の実行ファイルは別々の出力先に保持し、それぞれ異なる新規poolで順番に測定してください。単回の比較値はばらつきを含むため、速度向上の一般的な保証としては扱いません。
+
+<!-- 261106Codex: プレビューの保護対象と設定一覧の初回移行を区別する。 -->
+GUIなし生成のdryrunはpoolの予約・復旧・manifest更新を行いません。起動ログは出力し、検出器一覧が無ければ旧設定から一覧を初回移行します。窓の組成式は末尾のLF・CRLFも拒否し、同じ物理へ改行の有無だけで別の条件キーを作らないことを検証します。

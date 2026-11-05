@@ -177,7 +177,7 @@ namespace MineraScope
         }
 
         // 261103Claude: 組成を指定する窓は、端成分と同じく MineraScope が式を読み、元素ごとの個数を addElementByStoiciometry で渡す。
-        //   DTSA-II の createCompound も内部で同じ処理をするので、DTSA-II 自身の原子量で重量比が決まり、研究側の校正と同じ窓になる。
+        // 261106Codex: createCompoundと同じ原子数比を渡し、重量比はDTSA-II自身の原子量から求める。
         //   開口率が無ければ今までどおり XRayWindow(1.0) と書く。既製の窓は DTSA-II の名前で作り、その版に無い名前は理由を付けて失敗させる。
         private static void AppendWindow(StringBuilder builder, DetectorProfile detector)
         {

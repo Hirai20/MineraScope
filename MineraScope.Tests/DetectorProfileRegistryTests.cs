@@ -45,10 +45,7 @@ namespace MineraScope.Tests
               "MeasurementTimePresetBEnabled": false,
               "BeamEnergy": 20,
               "CarbonThickness": 0.02,
-              "TrainingMethod": "Standard",
-              "OcnTrainingSeed": null,
-              "OcnMaxEpochs": null,
-              "OcnPatience": null
+              "TrainingMethod": "Standard"
             }
             """;
 

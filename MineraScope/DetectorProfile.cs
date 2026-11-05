@@ -23,7 +23,8 @@ namespace MineraScope
     public sealed record DetectorWindowLayer
     {
         // 261103Claude: 端成分と同じ「元素記号＋個数」の並び。CompositionParser は合わない部分を黙って捨てるので、窓では式全体を読み切れることを先に確かめる。
-        private static readonly Regex FormulaPattern = new("^(?:[A-Z][a-z]?(?:[0-9]+(?:\\.[0-9]+)?)?)+$", RegexOptions.CultureInvariant);
+        // 261106Codex: $は末尾改行の手前でも一致するため、入力の厳密な終端まで検査する。
+        private static readonly Regex FormulaPattern = new("^(?:[A-Z][a-z]?(?:[0-9]+(?:\\.[0-9]+)?)?)+\\z", RegexOptions.CultureInvariant);
 
         public string Formula { get; init; } = string.Empty;
         public double DensityGPerCm3 { get; init; }

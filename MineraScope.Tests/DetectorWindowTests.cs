@@ -137,6 +137,9 @@ namespace MineraScope.Tests
                 ("an empty formula", Layered(Polymer with { Formula = "" })),
                 ("a blank formula", Layered(Polymer with { Formula = "  " })),
                 ("a formula with surrounding spaces", Layered(Polymer with { Formula = " C5H8O2" })),
+                // 261106Codex: 同じ物理へ別の条件キーを作る末尾改行も拒否する。
+                ("a formula with a trailing newline", Layered(Polymer with { Formula = "C5H8O2\n" })),
+                ("a formula with a trailing CRLF", Layered(Polymer with { Formula = "C5H8O2\r\n" })),
                 ("a zero density", Layered(Polymer with { DensityGPerCm3 = 0 })),
                 ("a negative density", Layered(Polymer with { DensityGPerCm3 = -1.15 })),
                 ("a NaN density", Layered(Polymer with { DensityGPerCm3 = double.NaN })),
