@@ -22,7 +22,8 @@ namespace MineraScope
             SemEdxCondition semEdxCondition)
         {
             // 261030Claude: 生成と学習はどちらもここで条件キーを作るため、不正な窓では pool を作らず再利用もしない。
-            semEdxCondition.GetDetectorProfile().ValidateWindow();
+            // 261106Codex: 窓以外も入力値を検査し、不正な条件でpoolを作らない。
+            (semEdxCondition.DetectorProfile ?? semEdxCondition.GetDetectorProfile()).Validate();
             return new()
             {
                 MineralName = solution.Name,

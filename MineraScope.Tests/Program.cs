@@ -103,9 +103,13 @@ namespace MineraScope.Tests
                 // 260930Codex: Check four feldspar compositions without loading TensorFlow.
                 ("Feldspar overlap label policy", MineralLabelPolicyTests.Run),
                 ("Composition and time allocation", PlannerTests.Run),
+                // 261106Codex: 膜厚0と本数の範囲を実生成なしで確認する。
+                ("Headless simulation overrides", SimulationHeadlessRunnerTests.Run),
                 ("Pool preview, reuse, cancellation, and recovery", PoolTests.Run),
                 // 261030Claude: 窓の層の永続化・検査・生成スクリプト・pool再利用を、DTSA-IIを起動せずに検証する。
                 ("Detector window layers", DetectorWindowTests.Run),
+                // 261106Codex: 一覧の移行・必須項目・退避からの復旧を確認する。
+                ("Detector profile list", DetectorProfileRegistryTests.Run),
                 // 261106Codex: 公式版の配置・版選択・直接起動引数を外部プロセスなしで確認する。
                 ("DTSA-II official installation layout and launch", DtsaInstallationTests.Run),
                 ("Training completeness and provenance", TrainingPoolTests.Run),

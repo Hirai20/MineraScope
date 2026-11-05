@@ -33,6 +33,52 @@ dotnet run --project MineraScope\MineraScope.csproj
 - Jythonのキャッシュは`%LOCALAPPDATA%\MineraScope\JythonCache`に作ります。
 - 生成に使ったDTSA-IIのフォルダーとEPQの版は、生成ごとのログ（`Documents\MineraScope\Logs\simulate-*.log`）に記録します。
 
+<!-- 261106Codex: 公開版の検出器登録と移行規則を説明する。 -->
+<!-- 261103Claude: 検出器の値は検出器名で一覧から引く。 -->
+## 検出器
+
+スペクトルの生成に使う検出器（SDD）の値は、検出器名ごとに`%LOCALAPPDATA%\MineraScope\DetectorProfiles.json`へ登録します。生成・モデル作成は、画面の「検出器名」と完全に一致する名前の検出器の値を使います。GUIなしの生成と基準値の採取も同じ規則で引きます。
+
+<!-- 261105Codex: 登録一覧だけで基本項目の欠落を拒否し、任意項目と旧形式の読込を区別する。 -->
+
+- 登録されていない名前では、処理を始めずに理由を表示します。既定値やほかの検出器の値で代用しません。
+- 名前は自由な文字列で、書式は解釈しません。空の名前、前後の空白、改行などの制御文字は使えません。大文字・小文字か全角・半角だけが違う名前は、別の検出器として登録できません。名前はファイル名やフォルダー名に使いません。
+- 一覧のファイルが無いときは、起動時に`GeneratorFormSettings.json`の検出器を、その名前と値のまま登録します。
+- 登録画面はまだ無いので、当面は`DetectorProfiles.json`を直接編集します。項目名は大文字・小文字を区別し、知らない項目や基本項目の欠落があるとファイルを読み込みません（有効な退避コピー`.bak`があれば理由を通知してそちらを使います）。値は読み込み時と生成時に検査し、範囲外の値を既定値で埋めずに拒否します。範囲はDTSA-IIの検出器編集画面に合わせ、チャネル数は2048だけです。
+- 一覧の各検出器では、下の例にある`Name`から`Window`までの16項目をすべて書いてください。0が有効な項目も0を明記します。`WindowLayers`・`WindowOpenAreaFraction`・`WindowPreset`は、次の窓の方式に従います。この必須項目の検査は登録用一覧だけに適用し、旧設定・既存pool・モデルの検出器JSONには従来の読込規則を使います。
+- 窓（`Window`）は次から選びます。
+  - `NoWindow`: 窓なし。
+  - `Layers`: 層ごとに組成式（`Formula`）・密度（`DensityGPerCm3`、g/cm³）・厚さ（`ThicknessNm`、nm）を書きます。組成式は鉱物の端成分と同じ「元素記号＋個数」の並びで、括弧は使えません。支持グリッドがある場合だけ、開口率を`WindowOpenAreaFraction`（0より大きく1以下）に書きます。1（グリッドなし）は書かない場合と同じに扱います。
+  - `Preset`: DTSA-IIの既製の窓（`XRayWindowFactory.WindowTypes`の名前）を`WindowPreset`に書きます。`Custom Table`と`No window`は使えません。入れたDTSA-IIの版に無い名前は、生成時に理由を付けて失敗します。
+- 同じ名前のまま値を書き換えると、名前が同じで値の違うpoolやモデルができます。poolは値で区別されるので混ざりませんが、名前では区別できなくなります。
+
+```json
+{
+  "Version": 1,
+  "Detectors": [
+    {
+      "Name": "example",
+      "ChannelCount": 2048,
+      "ChannelWidth": 10,
+      "ZeroOffset": 0,
+      "ResolutionFwhmAtMnKa": 126,
+      "DetectorArea": 30,
+      "Elevation": 35,
+      "Azimuth": 90,
+      "SpecimenToDetectorDistance": 50,
+      "OptimalWorkingDistance": 10,
+      "SiThickness": 0.45,
+      "AluminumLayer": 20,
+      "GoldLayer": 6,
+      "NickelLayer": 0,
+      "DeadLayer": 0.2,
+      "Window": "Layers",
+      "WindowLayers": [ { "Formula": "C5H8O2", "DensityGPerCm3": 1.15, "ThicknessNm": 50 } ]
+    }
+  ]
+}
+```
+
 ## GitHub Setup
 
 After creating a GitHub repository, initialize Git locally, commit the current files, and push to `main`.

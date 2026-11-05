@@ -1,4 +1,4 @@
-// 261106Codex: 公式DTSA-IIの配置検証・直接起動へ切り替える。
+// 261106Codex: 公開版の通常UIを保ち、登録した検出器の値を生成と学習へ渡す。
 // 260727Claude: 手書きの Form 本体なので、誤って付いていた「生成コード」マーカーのコメントを外す
 //   (付いたままだとアナライザーがこのファイルを生成コード扱いで素通しし、未使用 using や死んだメンバーを
 //    検出できず、nullable 注釈コンテキストも無効になって CS8669 が出る)。
@@ -26,13 +26,10 @@ namespace MineraScope
         //public (string Name, double Mol)[]               Atoms1;
         public (string ElementName, double Weight)[][] Atoms1;
         public (string Name, double Mol)[] Atoms2;
-        public string DetectorName;
         [MemoryPackIgnore]
         public DetectorProfile DetectorProfile;
         //　カーボン蒸着厚　（nm）
         public double CarbonCoatThickness;
-        // 260622Claude: カーボン蒸着厚を spectrum ごとに ±x% 振る幅 (0 で無効)。既知範囲を広げるための生成時ばらつき。
-        public double CarbonCoatThicknessJitterPercent;
         // 加速電圧（kV）
         public double BeamEnergy;
         //シミュレーション回数
@@ -71,8 +68,10 @@ namespace MineraScope
         private readonly SimulationExecutionService _simulationExecutionService;
         // 260511Codex: キャリブレーション画面は閉じても破棄せず、入力値を保持するため 1 インスタンスだけ持ちます。
         private readonly EdxCalibrationForm _edxCalibrationForm;
-        // 260626Codex: GeneratorFormに検出器編集UIを加えず、生成要求に検出器の物理条件を含める。
-        private DetectorProfile _detectorProfile = DetectorProfile.CreateLegacyTest();
+        // 261103Claude: 検出器の値は名前欄の名前で一覧 (DetectorProfiles.json) から引く。旧設定の値は一覧への移行にだけ使い、
+        //   一覧へ移せていない間は保存時にそのまま書き残して失わないようにする。
+        private DetectorProfileRegistry _detectorProfileRegistry = null!;
+        private UserSettingsLoad<GeneratorFormUserSettings> _userSettingsLoad;
         // 260513Codex: DTSA-II spectrum 生成だけを中止するため、学習処理とは別の CTS を持ちます。
         // 260514Codex: DTSA-II spectrum 生成とモデル作成は別々の CTS を持ち、同じ中止ボタンから現在の処理だけ止めます。
         private CancellationTokenSource _simulationCancellationTokenSource;
@@ -145,19 +144,20 @@ namespace MineraScope
         {
             // 260727Claude: 壊れた設定は既定値へフォールバックし、理由は FormMain_Load でまとめて知らせる。
             var loaded = FormUserSettingsStore.Load<GeneratorFormUserSettings>(UserSettingsFileName);
+            // 261103Claude: 一覧の移行は設定の読込結果を使うので、Designer 既定値を残す早期 return より前に一覧を読む。
+            _userSettingsLoad = loaded;
+            _detectorProfileRegistry = DetectorProfileRegistry.Load(loaded);
+            if (_detectorProfileRegistry.LoadError is string detectorProfilesError)
+                TrainLog(detectorProfilesError);
 
             // 260728Claude: 保存済みの値が手に入らなかったとき (初回起動 / 本体も .bak も読めなかった) は Designer 既定値を残す。
             //   既定構築した設定オブジェクトは数値が軒並み 0 なので、そのまま適用すると Designer 既定値
             //   (Epochs 500 / BatchSize 16 / spectrum 1000 など) を 0 で潰し、終了時保存でその値が永続化されてしまう。
             if (!loaded.HasStoredValues)
-            {
-                _detectorProfile = DetectorProfile.CreateLegacyTest(textBoxDetectorName.Text);
                 return;
-            }
 
             var settings = loaded.Settings;
-            _detectorProfile = settings.GetDetectorProfile();
-            textBoxDetectorName.Text = _detectorProfile.Name;
+            textBoxDetectorName.Text = settings.GetSelectedDetectorName();
             textBoxModelName.Text = settings.ModelName;
             numericBoxSpectraPerMineral.Value = settings.TargetSpectrumCount;
             numericBoxParallel.Value = settings.ParallelCount;
@@ -173,20 +173,26 @@ namespace MineraScope
             // 260901Codex: B 導入前の保存設定には値が無いため、既存ユーザーだけ従来の単一時間を維持します。
             checkBoxMeasurementTimePresetB.Checked = settings.MeasurementTimePresetBEnabled ?? false;
             // 260916Claude (Phase 5): 学習方式と OCN 設定は旧設定ファイルに無ければ Designer 既定値 (従来分類 / 42 / 500 / 50) を保つ。
+            // 260928Codex: 旧Ocn設定はモデル種別を暗黙に変えず、Standardへ戻す。
             radioButtonOcnTraining.Checked = settings.TrainingMethod == SoftmaxOcnTrainingMethodName;
             radioButtonStandardTraining.Checked = !radioButtonOcnTraining.Checked;
+
         }
 
         // 260507Codex: 次回起動で戻す対象を明示し、CheckedListBox のチェック状態は保存しません。
         internal void SaveUserSettings()
         {
-            var detectorProfile = ReadDetectorProfileFromUi();
+            // 261103Claude: 一覧ができた後は検出器の値を書かず、一覧へ移せていない間は旧形式の値をそのまま残す。
+            //   保存済みの値が無かった起動では、読込結果の設定が新規構築なので両方とも null になる。
+            bool listed = _detectorProfileRegistry.WasStored;
+            var legacy = _userSettingsLoad.Settings;
             FormUserSettingsStore.Save(
                 UserSettingsFileName,
                 new GeneratorFormUserSettings
                 {
-                    DetectorName = detectorProfile.Name,
-                    DetectorProfile = detectorProfile,
+                    DetectorName = textBoxDetectorName.Text.Trim(),
+                    DetectorProfile = listed ? null : legacy.DetectorProfile,
+                    UsesDetectorProfileList = listed ? true : legacy.UsesDetectorProfileList,
                     ModelName = textBoxModelName.Text,
                     TargetSpectrumCount = numericBoxSpectraPerMineral.Value,
                     ParallelCount = numericBoxParallel.Value,
@@ -203,9 +209,7 @@ namespace MineraScope
                     MeasurementTimePresetBEnabled = checkBoxMeasurementTimePresetB.Checked,
                     BeamEnergy = numericBoxBeamEnergy.Value,
                     CarbonThickness = numericBoxCarbonThickness.Value,
-                    // 261021Codex: 蒸着膜厚のランダム化を廃止し、通常画面の保存設定でも無効にする。
-                    CarbonThicknessJitterPercent = 0d,
-                    // 261021Codex: 公開版では従来分類と分類＋OCNの選択だけを保存する。
+                    // 261106Codex: 公開版の分類・分類＋OCNの選択だけを保存する。
                     TrainingMethod = radioButtonOcnTraining.Checked ? SoftmaxOcnTrainingMethodName : StandardTrainingMethodName
                 });
         }
@@ -231,11 +235,18 @@ namespace MineraScope
             // 261021Codex: 説明欄を削除したため、学習方式に連動する表示更新は不要になった。
         }
 
-        private DetectorProfile ReadDetectorProfileFromUi()
+        // 261103Claude: 名前欄の検出器名を一覧から引く。開いたまま一覧を書き換えても反映されるよう、毎回読み直す (移行は起動時だけ)。
+        //   引けなければ理由を表示し、既定値や test の値で代わりに生成・学習しない。
+        private bool TryResolveDetectorProfile(string caption, out DetectorProfile detectorProfile)
         {
-            var profile = _detectorProfile.Clone();
-            profile.Name = textBoxDetectorName.Text.Trim();
-            return DetectorProfile.CreateWithDefaults(profile);
+            _detectorProfileRegistry = _detectorProfileRegistry.Reload();
+            bool resolved = _detectorProfileRegistry.TryResolve(textBoxDetectorName.Text, out detectorProfile, out string error);
+            // 261104Claude: 引けても退避コピーの値なら LoadError があるので、手で直した内容が効いていないことを知らせてから続ける。
+            string? message = resolved ? _detectorProfileRegistry.LoadError : error;
+            if (message is not null)
+                MessageBox.Show(this, message, caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            return resolved;
         }
 
         // 261021Codex: 配置と行の高さはDesignerに任せ、初期状態の非表示とスクロールだけを設定する。
@@ -265,9 +276,10 @@ namespace MineraScope
 
         // 260901Codex: B は測定時間と本数を固定するため、使用しない単一条件の入力欄を隠します。
         // 261021Codex: OCN説明欄を削除したため、測定条件変更時の更新対象からも除く。
-        // 261021Codex: Designerのイベント入口を保ち、共通の表示更新へ直接委譲する。
         private void checkBoxMeasurementTimePresetB_CheckedChanged(object sender, EventArgs e)
-            => ApplyMeasurementTimePresetUiState();
+        {
+            ApplyMeasurementTimePresetUiState();
+        }
 
         private void ApplyMeasurementTimePresetUiState()
         {
@@ -315,7 +327,7 @@ namespace MineraScope
 
         // 260424Codex: 画面入力の読み取りは partial に逃がさず、フォーム本体で request に変換します。
         // 260901Codex: B 選択時は生成と学習が同じ共通測定時間配分を使う request にします。
-        private ModelCreationRequest CreateModelCreationRequest()
+        private ModelCreationRequest CreateModelCreationRequest(DetectorProfile detectorProfile)
         {
             var request = new ModelCreationRequest(
                 // 260424Codex: Python スクリプトの保存先は固定パスへ集約した値を使います。
@@ -327,18 +339,16 @@ namespace MineraScope
                 // 260511Codex: Designer 改名後もモデル保存フォルダ名として画面のモデル名を渡します。
                 textBoxModelName.Text.Trim(),
                 new SemEdxCondition(
-                    ReadDetectorProfileFromUi(),
+                    detectorProfile,
                     numericBoxCarbonThickness.Value,
                     numericBoxBeamEnergy.Value,
                     numericBoxLiveTime.Value,
                     numericBoxProbeCurrent.Value),
+                // 261021Codex: 生成設定から膜厚ランダム化を削除し、SEM-EDX条件の指定膜厚だけを使う。
                 new SimulationExecutionSettings(
                     (int)numericBoxSpectraPerMineral.Value,
                     (double)numericBoxResolution.Value / 100,
-                    (int)numericBoxParallel.Value,
-                    // 260622Claude: カーボン蒸着膜厚を spectrum ごとに振るばらつき幅 (%) を生成へ渡す。
-                    // 261021Codex: ばらつき入力欄を廃止し、新規生成では指定した蒸着膜厚を固定する。
-                    0d),
+                    (int)numericBoxParallel.Value),
                 new ModelTrainingSettings(
                     (int)numericBoxEpochs.Value,
                     (int)numericBoxBatchSize.Value,
@@ -398,6 +408,7 @@ namespace MineraScope
                 return "DTSA-II のフォルダを指定してください。";
 
             // 260626Codex: 選択フォルダーがdtsa2.msiのインストール先でなければ早期に失敗させる。
+            // 261030Claude: 判定の対象を NIST 公式版の配置に変更。
             string dtsaValidationError = requireDtsaPath
                 ? DtsaInstallation.GetValidationError(request.Paths.DtsaFolder)
                 : null;
@@ -410,7 +421,10 @@ namespace MineraScope
         // 260513Codex: DTSA-II spectrum 生成だけを CancellationTokenSource で中止できるようにします。
         private async void buttonRunSpectrumGeneration_Click(object sender, EventArgs e)
         {
-            var request = CreateModelCreationRequest();
+            if (!TryResolveDetectorProfile("スペクトル生成", out var detectorProfile))
+                return;
+
+            var request = CreateModelCreationRequest(detectorProfile);
             string validationMessage = ValidateModelCreationRequest(request, requireDtsaPath: true, requireModelName: false);
             if (!string.IsNullOrEmpty(validationMessage))
             {
@@ -437,6 +451,8 @@ namespace MineraScope
             _operationStopwatch.Restart();
             int preparationPoolCount = request.SelectedMineralSolutions.Count
                 * request.GetEffectiveSpectrumTimeAllocations().Count;
+            // 261103Claude: どの検出器の値で生成したかを、ログだけで後から確かめられるようにする。
+            TrainLog(detectorProfile.Describe());
             TrainLog($"spectrum 生成準備を開始: {preparationPoolCount} pool の manifest と既存ファイルを確認します。");
             SetStatusMarqueeWithElapsed("spectrum 生成準備中: Pending回収");
             int reservedSpectrumCount = 0;
@@ -501,6 +517,8 @@ namespace MineraScope
                     });
                 foreach (var result in results)
                     LogSimulationExecutionResult(result);
+                // 261103Claude: DTSA-II の失敗理由 (C# で拾えない組成式の誤りなど) を不足のメッセージに添え、ログを開かなくても原因が分かるようにする。
+                string failureReasons = FormatSimulationFailureReasons(results);
 
                 // 260901Codex: 全時間poolの検証は大量のEMSAを読むため、終了後の集計もUIスレッド外で行います。
                 var finalState = await Task.Run(() =>
@@ -529,7 +547,7 @@ namespace MineraScope
                         toolStripProgressBar1.Value,
                         Math.Max(reservedSpectrumCount, 1));
                     MessageBox.Show(
-                        SpectrumPoolWorkflow.FormatShortageMessage(finalState.Shortages),
+                        SpectrumPoolWorkflow.FormatShortageMessage(finalState.Shortages) + failureReasons,
                         "スペクトル生成",
                         MessageBoxButtons.OK,
                         MessageBoxIcon.Information);
@@ -590,6 +608,23 @@ namespace MineraScope
                 ? $"DTSA-II キャンセル: {solutionName} ({spectrumCount} spectra)"
                 : $"DTSA-II 終了コード {result.ExitCode}: {solutionName} ({spectrumCount} spectra)");
             LogSimulationFailureDetail(result);
+        }
+
+        // 261103Claude: 重複を除いた失敗理由を先頭 3 件まで並べる。失敗が無ければ空文字を返す。
+        //   失敗したジョブだけが ExceptionMessage を持ち、生成スクリプトが書いた理由はそこに入っている。
+        private static string FormatSimulationFailureReasons(IEnumerable<SimulationExecutionResult> results)
+        {
+            string[] reasons = results
+                .Select(static result => result.ExceptionMessage)
+                .OfType<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (reasons.Length == 0)
+                return string.Empty;
+
+            return "\r\n\r\nDTSA-II の失敗理由:\r\n"
+                + string.Join("\r\n", reasons.Take(3).Select(static reason => "- " + TrimSimulationLogDetail(reason)))
+                + (reasons.Length > 3 ? $"\r\n- ほか {reasons.Length - 3} 件 (ログを参照)" : string.Empty);
         }
         #region EndmemberControl
         // EndmemberControlに端成分の情報を設定
@@ -1072,12 +1107,12 @@ namespace MineraScope
         //分類モデル
         private async void buttonModelTrain_Click(object sender, EventArgs e)
         {
-
-            // 260928Codex: 両方式で分類器を学習し、組合せ方式では昇格前に学習型Unknown headを追加する。
-            // 260918Claude: pool 確認から学習完了（または途中の return）までを 1 つの実行中区間として登録する。
+            // 261106Codex: 通常モデル作成も登録済みの検出器で開始する。
+            if (!TryResolveDetectorProfile("モデル作成", out var detectorProfile))
+                return;
 
             // 260416Codex: 学習開始も request -> plan -> workflow の流れに揃え、今後の統合実行へつなげます。
-            var request = CreateModelCreationRequest();
+            var request = CreateModelCreationRequest(detectorProfile);
             // 261001Codex: 非同期の準備開始前に、選択方式を取得する。
             int? softmaxOcnSeed = radioButtonOcnTraining.Checked ? 42 : null;
             // 261001Codex: 分類では2種類以上の鉱物クラスを選択する必要がある。
@@ -1106,6 +1141,8 @@ namespace MineraScope
             int trainingPreparationPoolCount = request.SelectedMineralSolutions.Count
                 * request.GetEffectiveSpectrumTimeAllocations().Count;
             // 260917Codex: 中断からの復旧も含め、Pending項目はシミュレーション側が管理する。
+            // 261103Claude: どの検出器の値の pool で学習したかを、ログだけで後から確かめられるようにする。
+            TrainLog(detectorProfile.Describe());
             TrainLog($"学習準備を開始: {trainingPreparationPoolCount} pool の生成完了済み EMSA を確認します。");
             SetStatusMarqueeWithElapsed("学習準備中: 生成完了データ確認");
             buttonModelTrain.Enabled = false;

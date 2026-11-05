@@ -43,13 +43,14 @@ namespace MineraScope
             double liveTime,
             double probeCurrent)
             : this(
-                MineraScope.DetectorProfile.CreateWithDefaults(detectorProfile).Name,
+                detectorProfile.Name,
                 carbonCoatThickness,
                 beamEnergy,
                 liveTime,
                 probeCurrent)
         {
-            DetectorProfile = MineraScope.DetectorProfile.CreateWithDefaults(detectorProfile);
+            // 261106Codex: 検査済みの値を既定値で補わず、そのまま複製する。
+            DetectorProfile = detectorProfile.Clone();
         }
 
         public DetectorProfile GetDetectorProfile() =>
@@ -57,12 +58,12 @@ namespace MineraScope
     }
 
     // 260507Codex: target は学習に使用したい件数、parallel は不足分生成のジョブ分割数として扱います。
-    // 260622Claude: CarbonThicknessJitterPercent は生成時にカーボン蒸着膜厚を spectrum ごとへ ±x% 振る幅 (0 で無効)。conditionKey には含めない。
+    // 260622Claude: 膜厚ばらつきの設定は旧形式の履歴。
+    // 261106Codex: 非対話生成も画面と同じ指定膜厚へ固定する。
     internal sealed record SimulationExecutionSettings(
         int TargetSpectrumCount,
         double ResolutionStep,
-        int ParallelCount,
-        double CarbonThicknessJitterPercent);
+        int ParallelCount);
 
     // 260901Codex: 各測定時間の目標を明示し、1要求で独立した条件キーのpoolを再利用できるようにする。
     internal sealed record SpectrumTimeAllocation(

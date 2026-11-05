@@ -26,7 +26,8 @@ namespace MineraScope.Tests
                 new ModelCreationPaths(Path.Combine(Root, "spectra"), Path.Combine(Root, "scripts"), Path.Combine(Root, "dtsa"), Path.Combine(Root, "models")),
                 "SyntheticTestModel",
                 new SemEdxCondition(DetectorProfile.CreateLegacyTest(), 0, 15, 1, 1),
-                new SimulationExecutionSettings(schedule.TotalSpectrumCount, 0.5, Math.Max(5, schedule.TimeWeights.Count), 0),
+                // 261106Codex: 本番と同じ固定膜厚の実行設定を使う。
+                new SimulationExecutionSettings(schedule.TotalSpectrumCount, 0.5, Math.Max(5, schedule.TimeWeights.Count)),
                 new ModelTrainingSettings(1, 4, 1, 0.2f, 1.5),
                 solutions.Length == 0 ? [CreateSolution()] : solutions)
             {

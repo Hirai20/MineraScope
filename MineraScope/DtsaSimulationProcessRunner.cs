@@ -276,7 +276,8 @@ namespace MineraScope
                 exitCode,
                 standardOutput,
                 standardError,
-                FailureDetail: null,
+                // 261106Codex: Java警告の後ろに埋もれるスクリプトの失敗理由を記録する。
+                FailureDetail: exitCode == 0 ? null : SimulationScriptGenerator.FindScriptError(standardError),
                 processId,
                 stopwatch.Elapsed,
                 savedFiles.CreateSnapshot());

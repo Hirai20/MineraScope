@@ -372,14 +372,19 @@ namespace MineraScope
             // 260901Codex: 初回起動は GUI の Designer 既定 ON、保存済み旧設定の null は互換 OFF として解釈します。
             var generatorLoad = FormUserSettingsStore.Load<GeneratorFormUserSettings>("GeneratorFormSettings.json");
             // 260901Codex: 設定ファイルがない baseline 採取も、GUI と同じ有効な数値条件で B を再現します。
-            var generator = generatorLoad.HasStoredValues
-                ? generatorLoad.Settings
-                : GeneratorFormUserSettings.CreateInitialDefaults();
+            var generator = GeneratorFormUserSettings.FromLoad(generatorLoad);
             bool useMeasurementTimePresetB = generatorLoad.HasStoredValues
                 ? generator.MeasurementTimePresetBEnabled ?? false
                 : true;
+            // 261106Codex: 基準値の採取も生成と同じ登録一覧から検出器を選ぶ。
+            var detectorProfiles = DetectorProfileRegistry.Load(generatorLoad);
             foreach (string warning in FormUserSettingsStore.DrainWarnings())
                 Log($"WARN: {warning}");
+            if (!detectorProfiles.TryResolve(generator.GetSelectedDetectorName(), out var detectorProfile, out string detectorError))
+            {
+                Log($"SKIP data: {detectorError}");
+                return null;
+            }
 
             string outputFolder = string.IsNullOrWhiteSpace(formMain.EdxOutputPath)
                 ? DefaultStoragePaths.TrainingDataFolder
@@ -407,7 +412,7 @@ namespace MineraScope
                     (formMain.ModelPath ?? string.Empty).Trim()),
                 generator.ModelName.Trim(),
                 new SemEdxCondition(
-                    generator.GetDetectorProfile(),
+                    detectorProfile,
                     generator.CarbonThickness,
                     generator.BeamEnergy,
                     generator.LiveTime,
@@ -415,8 +420,7 @@ namespace MineraScope
                 new SimulationExecutionSettings(
                     (int)generator.TargetSpectrumCount,
                     generator.Resolution / 100,
-                    (int)generator.ParallelCount,
-                    generator.CarbonThicknessJitterPercent),
+                    (int)generator.ParallelCount),
                 new ModelTrainingSettings(
                     (int)generator.Epochs,
                     (int)generator.BatchSize,

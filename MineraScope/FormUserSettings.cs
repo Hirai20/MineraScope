@@ -1,5 +1,7 @@
+// 261106Codex: 公開版の設定項目を保ち、検出器一覧の移行を共用する。
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MineraScope
 {
@@ -40,7 +42,7 @@ namespace MineraScope
             }
         }
 
-        // 260717Codex: Share the application settings root directly with the mineral color palette store.
+        // 260717Codex: アプリ設定のルートを、鉱物色パレットのストアと直接共有する。
         private static string GetPath(string fileName) =>
             Path.Combine(DefaultStoragePaths.SettingsFolder, fileName);
 
@@ -49,37 +51,50 @@ namespace MineraScope
         //   (保存中断で切れた FormMainSettings.json で実測)。
         // 260728Claude: 層2。本体が読めなければ .bak を試し、それも駄目なときだけ工場出荷既定値へ落ちる。
         public static UserSettingsLoad<T> Load<T>(string fileName)
+            where T : class, IVersionedUserSettings, new() =>
+            LoadFromPath<T>(GetPath(fileName));
+
+        // 261103Claude: 設定フォルダー以外 (テストの一時フォルダー) でも同じ 4 層の規則で読めるよう、パスを受け取る形を共用する。
+        //   readOptions は、手書きの綴り誤りを既定値で黙って読み飛ばさないよう未知の項目を拒否したいファイル (検出器の一覧) が渡す。
+        // 261104Claude: GUI が警告を引き取るのは起動時の 1 回だけなので、起動後に読み直す側は queueWarning を false にして、理由を結果の ReadError で受け取る。
+        public static UserSettingsLoad<T> LoadFromPath<T>(string path, JsonSerializerOptions? readOptions = null, bool queueWarning = true)
             where T : class, IVersionedUserSettings, new()
         {
-            string path = GetPath(fileName);
+            string fileName = Path.GetFileName(path);
             string backupPath = DurableJsonFile.GetBackupPath(path);
 
             // 260728Claude: 本体も退避も無い = 初回起動。既定値が正解なので保存も許可する。
             if (!File.Exists(path) && !File.Exists(backupPath))
                 return new UserSettingsLoad<T>(new T(), UserSettingsLoadOutcome.Missing);
 
-            if (TryRead(path, out T? primary, out string? primaryError))
+            if (TryRead(path, readOptions, out T? primary, out string? primaryError))
                 return new UserSettingsLoad<T>(primary!, UserSettingsLoadOutcome.Loaded);
 
-            if (TryRead(backupPath, out T? recovered, out _))
+            if (TryRead(backupPath, readOptions, out T? recovered, out _))
                 return Warn(
-                    new UserSettingsLoad<T>(recovered!, UserSettingsLoadOutcome.RecoveredFromBackup),
-                    $"{fileName} を読み込めなかったため、前回保存された内容 ({Path.GetFileName(backupPath)}) から復元しました。\r\n\r\n{primaryError}");
+                    new UserSettingsLoad<T>(recovered!, UserSettingsLoadOutcome.RecoveredFromBackup) { ReadError = primaryError },
+                    $"{fileName} を読み込めなかったため、前回保存された内容 ({Path.GetFileName(backupPath)}) から復元しました。\r\n\r\n{primaryError}",
+                    queueWarning);
 
             // 260728Claude: ここへ来たら実データは戻せない。壊れた本体は可能なら証跡として退避し、
             //   このファイルを「上書き禁止」に登録する (ロックが解けた後の終了時保存で正常値を潰さないため)。
-            UnsafeToOverwrite.Add(fileName);
+            UnsafeToOverwrite.Add(path);
+            string readError = primaryError + DurableJsonFile.Quarantine(path);
             return Warn(
-                new UserSettingsLoad<T>(new T(), UserSettingsLoadOutcome.FellBackToDefaults),
+                new UserSettingsLoad<T>(new T(), UserSettingsLoadOutcome.FellBackToDefaults) { ReadError = readError },
                 $"{fileName} と退避コピーのどちらも読み込めなかったため、既定値で開始します。\r\n" +
                 $"設定が失われるのを防ぐため、この起動では {fileName} を保存しません。\r\n\r\n" +
-                $"{primaryError}{DurableJsonFile.Quarantine(path)}");
+                readError,
+                queueWarning);
         }
 
         // 260728Claude: 警告を溜めてから結果を返す。呼び出し側が警告を持ち回らずに済むようにする。
-        private static UserSettingsLoad<T> Warn<T>(UserSettingsLoad<T> result, string warning)
+        private static UserSettingsLoad<T> Warn<T>(UserSettingsLoad<T> result, string warning, bool queueWarning)
             where T : class, IVersionedUserSettings, new()
         {
+            if (!queueWarning)
+                return result;
+
             lock (PendingWarnings)
                 PendingWarnings.Add(warning);
             return result;
@@ -87,7 +102,7 @@ namespace MineraScope
 
         // 260728Claude: 1 ファイルぶんの読み取り。存在しない・壊れている・新しすぎる のいずれも false を返し、
         //   呼び出し側が次の候補へ進めるようにする。
-        private static bool TryRead<T>(string path, out T? settings, out string? error)
+        private static bool TryRead<T>(string path, JsonSerializerOptions? readOptions, out T? settings, out string? error)
             where T : class, IVersionedUserSettings, new()
         {
             settings = null;
@@ -99,7 +114,7 @@ namespace MineraScope
 
             try
             {
-                T? parsed = JsonSerializer.Deserialize<T>(File.ReadAllText(path));
+                T? parsed = JsonSerializer.Deserialize<T>(File.ReadAllText(path), readOptions);
                 if (parsed is null)
                 {
                     error = $"{Path.GetFileName(path)} の内容を読み取れませんでした。";
@@ -130,15 +145,21 @@ namespace MineraScope
         //   途中まで書かれた JSON が残り、次回起動が不能になっていた。これがその破損の発生源。
         // 260728Claude: 実処理は DurableJsonFile。ここは「上書きしてよいか」の判定と版数の付与だけを担う。
         public static void Save<T>(string fileName, T settings)
+            where T : class, IVersionedUserSettings =>
+            SaveToPath(GetPath(fileName), settings);
+
+        // 261103Claude: 保存を拒否したかを返し、明示の登録操作 (検出器の一覧) が保存されなかったことを利用者へ伝えられるようにする。
+        public static bool SaveToPath<T>(string path, T settings)
             where T : class, IVersionedUserSettings
         {
             // 260728Claude: 読み込みで実データを復元できなかったファイルは、この run では書かない。
             //   呼び出し側ごとの bool ではなくここで拒否するので、新しい保存経路が増えても守り忘れが起きない。
-            if (UnsafeToOverwrite.Contains(fileName))
-                return;
+            if (UnsafeToOverwrite.Contains(path))
+                return false;
 
             settings.Version = CurrentVersion;
-            DurableJsonFile.Replace(GetPath(fileName), JsonSerializer.Serialize(settings, JsonOptions));
+            DurableJsonFile.Replace(path, JsonSerializer.Serialize(settings, JsonOptions));
+            return true;
         }
     }
 
@@ -165,6 +186,9 @@ namespace MineraScope
         // 260728Claude: 保存済みの値が手に入ったか。false なら Designer 既定値をそのまま残す。
         public bool HasStoredValues =>
             Outcome is UserSettingsLoadOutcome.Loaded or UserSettingsLoadOutcome.RecoveredFromBackup;
+
+        // 261104Claude: 本体を読めなかった理由 (退避先があればそのパスも含む)。起動後に読み直す側が画面へ出すために持つ。
+        public string? ReadError { get; init; }
     }
 
     // 260507Codex: FormMain では共通パス欄だけを保存し、解析ログや入力 spectrum 表示は保存しません。
@@ -190,7 +214,11 @@ namespace MineraScope
     // 260507Codex: GeneratorForm では生成・EDX・学習設定だけを保存し、鉱物詳細やログは保存しません。
     internal sealed class GeneratorFormUserSettings : IVersionedUserSettings
     {
-        // 260901Codex: Headless first-run paths need the same usable values as the GeneratorForm Designer, including B's 20-job budget.
+        // 261105Claude: 保存済みの値が無ければ初回既定値を使う。GUI なしの起動と一覧への移行が同じ規則になるよう 1 か所に置く。
+        public static GeneratorFormUserSettings FromLoad(UserSettingsLoad<GeneratorFormUserSettings> load) =>
+            load.HasStoredValues ? load.Settings : CreateInitialDefaults();
+
+        // 260901Codex: 非対話実行の初回パスでも、Bの20ジョブ枠を含むGeneratorForm Designerと同じ有効な値を使う。
         public static GeneratorFormUserSettings CreateInitialDefaults() =>
             new()
             {
@@ -209,13 +237,18 @@ namespace MineraScope
                 LiveTime = 120,
                 MeasurementTimePresetBEnabled = true,
                 BeamEnergy = 20,
-                CarbonThickness = 0.02,
-                CarbonThicknessJitterPercent = 10
+                // 261021Codex: 初期設定も指定した固定膜厚だけを持つ。
+                CarbonThickness = 0.02
             };
 
         public int Version { get; set; }
         public string DetectorName { get; set; } = string.Empty;
+        // 261103Claude: 検出器の値の正本は DetectorProfiles.json へ移した。旧形式の値は一覧への移行にだけ使い、一覧ができた後は書かない。
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public DetectorProfile? DetectorProfile { get; set; }
+        // 261103Claude: true は検出器の値を一覧から引く形式で保存した設定。一覧が無くなっても、名前だけの旧形式とみなして既定値を移し直さない。
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? UsesDetectorProfileList { get; set; }
         public string ModelName { get; set; } = string.Empty;
         public double TargetSpectrumCount { get; set; }
         public double ParallelCount { get; set; }
@@ -232,13 +265,15 @@ namespace MineraScope
         public bool? MeasurementTimePresetBEnabled { get; set; }
         public double BeamEnergy { get; set; }
         public double CarbonThickness { get; set; }
-        // 260622Claude: カーボン蒸着膜厚を spectrum ごとに振るばらつき幅 (%)。旧設定ファイルに無いとき (JSON 欠落時) は既定 20 を保つ。
-        public double CarbonThicknessJitterPercent { get; set; } = 20;
 
-        // 261021Codex: 旧設定は従来分類のまま読み、新しい組合せ方式の選択だけを保存する。
+        // 260916Claude (Phase 5): 学習方式は未指定なら従来分類として読み込む。
         public string? TrainingMethod { get; set; }
 
         public DetectorProfile GetDetectorProfile() =>
             MineraScope.DetectorProfile.CreateWithDefaults(DetectorProfile, DetectorName);
+
+        // 261103Claude: 一覧から引く検出器名。旧形式では DetectorProfile.Name が正本だったので、移行と同じ規則で名前を決める。
+        public string GetSelectedDetectorName() =>
+            DetectorProfile is null ? DetectorName : GetDetectorProfile().Name;
     }
 }

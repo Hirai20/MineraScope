@@ -319,7 +319,10 @@ namespace MineraScope
             && SameDouble(left.NickelLayer, right.NickelLayer)
             && SameDouble(left.DeadLayer, right.DeadLayer)
             && left.Window == right.Window
-            && SameWindowLayers(left.WindowLayers, right.WindowLayers);
+            && SameWindowLayers(left.WindowLayers, right.WindowLayers)
+            // 261106Codex: 開口率1は省略と同じにし、既製窓の名前はDTSA-IIと同じ規則で照合する。
+            && SameDouble(left.WindowOpenAreaFraction ?? 1.0, right.WindowOpenAreaFraction ?? 1.0)
+            && string.Equals(left.WindowPreset, right.WindowPreset, StringComparison.Ordinal);
 
         // 261030Claude: 窓の層は順序どおりに比べる。組成式は大小文字で元素が変わる (Co と CO) ため、SameText でなく Ordinal で比べる。
         private static bool SameWindowLayers(List<DetectorWindowLayer>? left, List<DetectorWindowLayer>? right)
