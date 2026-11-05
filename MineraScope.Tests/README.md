@@ -99,7 +99,7 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 <!-- 261106Codex: 公式版の配置・起動検証を公開版の通常テストへ加える。 -->
 ## 公式DTSA-IIの起動
 
-通常テストは20区分です。公式版の区分では、偽の配置を使い、自動検出・保存済みパスの優先・旧MSI版の拒否・起動引数を確認します。Polarisの版付きjar名とOberonの版なしjar名を扱い、同梱Javaがなければ拒否します。実際のDTSA-IIは起動しません。
+通常テストは21区分です。公式版の区分では、偽の配置を使い、自動検出・保存済みパスの優先・旧MSI版の拒否・起動引数を確認します。Polarisの版付きjar名とOberonの版なしjar名を扱い、同梱Javaがなければ拒否します。実際のDTSA-IIは起動しません。
 
 <!-- 261106Codex: 登録一覧と非対話入力の検証を通常テストへ加える。 -->
 ## 検出器登録とGUIなし生成の入力
@@ -107,3 +107,29 @@ dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.T
 「Detector profile list」では、合成した旧設定の移行、自由な名前の照合、重複名・未登録名・未知の項目・基本16項目の欠落の拒否、有効な退避コピーからの復旧、保存失敗時の保持を確認します。必須項目の検査は登録一覧だけに適用し、既存の設定・モデル・manifestの読込とpool再利用を保ちます。窓の区分では組成式、開口率、既製窓、値の範囲、丸めずに渡す軸とスクリプトの失敗理由も確認します。
 
 「Headless simulation overrides」では、MINERASCOPE_SIM_CARBONの0を蒸着なしとして受け付け、負値と非有限値を拒否します。MINERASCOPE_SIM_TARGETは1以上の整数に限り、小数や範囲外の値を拒否します。未指定は保存設定を使い、値はinvariant cultureで読みます。旧ランダム化設定を残したJSONも読めますが、生成の膜厚は画面と同じ入力値に固定します。実際のDTSA-II、利用者の設定・pool・モデルは使いません。
+
+<!-- 261106Codex: 通常の制御テストと任意の実DTSA-II比較を公開版へ加える。 -->
+<!-- 261103Codex: 制御可能な実行器による通常テストと、実DTSA-IIの任意比較を区別する。 -->
+## シミュレーションの実行順と比較生成
+
+通常テストの「Simulation scheduling and batch checkpoints」では、実Javaを起動せず、ジョブの終了と中止後の回収を合図で制御します。20並列・1000本の20ジョブ×50本、少数の不足、複数測定時間の分割、プレビューとの一致、全体の同時実行上限、バッチをまたぐ投入、バッチの全結果がそろってからの保存、保存の直列化、保存中のジョブ実行、進捗の件数と結果順を確認します。中止・保存失敗時は実行中ジョブの回収を待ち、部分保存をCompleted、未生成分をPendingに残すことも検証します。
+
+実際の速度を比較する場合は、ビルド後に次を明示実行します。GUIなし生成を含め、別の生成が`spectrum-pool-mutation.lock`を持っている間は実行できません。出力先は存在しない専用フォルダーを指定してください。通常テストには含みません。
+
+```powershell
+$simulationBenchmarkOutput = Join-Path $env:TEMP ('ms-sim-' + (Get-Date -Format 'yyMMdd-HHmmss'))
+dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --simulation-benchmark $simulationBenchmarkOutput
+```
+
+Olivine・Pyroxeneの2鉱物×100本を新規poolへ生成し、すべての出力を既存のmanifest検証で確認します。検出器、SEM-EDX条件、組成刻み、並列数には保存済みGUI設定を使います。測定時間Bは使わず、保存済みの単一測定時間を使います。GUI設定と既存のpoolは変更しません。Ctrl+Cでは通常の中止処理で停止します。
+
+新規poolでは組成の予約順が乱択されるため、変更後の測定では第3引数に変更前の出力先を指定してください。基準側のmanifestだけを新規poolへ複製して全予約をPendingとし、スペクトルはコピーせずに生成し直します。`benchmark-plan.json`の完全一致をプロセス起動前に検査するので、物理条件やジョブ分割が異なれば生成を始めません。
+
+```powershell
+$simulationBenchmarkAfter = Join-Path $env:TEMP ('ms-sim-after-' + (Get-Date -Format 'yyMMdd-HHmmss'))
+dotnet MineraScope.Tests/bin/x64/Debug/net10.0-windows10.0.26100.0/MineraScope.Tests.dll --simulation-benchmark $simulationBenchmarkAfter $simulationBenchmarkOutput
+```
+
+`benchmark-plan.json`のSHA-256でも予約の一致を確認できます。`benchmark-result.json`には完了件数と対応する`simulate-*.log`を記録します。比較にはログの`run end`の全体秒数と`resources end`の`averageCpuPercent`・`processStarts`・`maxActive`を使います。CPU使用率は当該runのJavaのCPU時間を論理CPU数で正規化した値で、PC全体の使用率ではありません。旧ログにCPU時間が無い場合は、同じ計測を入れた変更前の実行ファイルで採り直します。
+
+通常のビルド出力をGUIが使用中の場合は、`dotnet build MineraScope.sln -c Debug -p:OutDir=<専用の絶対パス>`で出力先を分け、そのフォルダーの`MineraScope.Tests.dll`を実行します。変更前後の実行ファイルは別々の出力先に保持し、それぞれ異なる新規poolで順番に測定してください。単回の比較値はばらつきを含むため、速度向上の一般的な保証としては扱いません。

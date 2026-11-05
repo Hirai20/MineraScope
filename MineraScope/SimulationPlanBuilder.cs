@@ -1,3 +1,4 @@
+// 261106Codex: 検証済みのバッチ横断実行・計測を公開版へ移す。
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,7 +14,7 @@ namespace MineraScope
         int SimulationId,
         string FileName,
         (string ElementName, double Weight)[] CompositionWeights,
-        // 260901Codex: A reservation carries its condition because one mineral batch can contain multiple live times.
+        // 260901Codex: 1つの鉱物バッチに複数のライブタイムが含まれるため、予約に条件を持たせる。
         string ConditionKey,
         SemEdxCondition SemEdxCondition,
         int TargetSpectrumCount);
@@ -40,7 +41,12 @@ namespace MineraScope
         string StandardError,
         string? ExceptionMessage,
         bool IsCanceled = false,
-        IReadOnlySet<string>? SavedSpectrumFiles = null);
+        IReadOnlySet<string>? SavedSpectrumFiles = null)
+    {
+        // 261105Claude: manifest の Pending 復帰はこの形を読むので、scheduler と service で作り方を共有する。
+        public static SimulationExecutionResult Canceled(IReadOnlyList<SpectrumSimulationReservation> reservations) =>
+            new(reservations, ExitCode: -1, StandardOutput: string.Empty, StandardError: string.Empty, ExceptionMessage: null, IsCanceled: true);
+    }
 
     // 260528Codex: DTSA-II 実行中の進捗を UI へ渡すため、外部実行 service から段階ごとに通知します。
     internal enum SimulationExecutionProgressKind
@@ -74,9 +80,12 @@ namespace MineraScope
 
     // 260507Codex: 実行 plan は予約済み spectrum を並列数で分割した batch の集合です。
     internal sealed record SimulationExecutionPlan(
-        IReadOnlyList<SimulationExecutionBatch> Batches);
+        IReadOnlyList<SimulationExecutionBatch> Batches,
+        // 261103Codex: 分割済みjob数とは別にrun全体の同時実行上限を伝える。
+        // 261105Claude: 既定値を持たせず、書き忘れた呼び出しが黙って直列にならないようにする。
+        int ParallelCount);
 
-    // 260901Codex: A dry-run reports workload size without creating reservations, scripts, folders, or manifests.
+    // 260901Codex: 試行確認は処理量だけを報告し、予約・スクリプト・フォルダー・manifestを作らない。
     internal sealed record SimulationExecutionPlanPreview(
         int BatchCount,
         int JobCount,
@@ -90,15 +99,13 @@ namespace MineraScope
             ModelCreationRequest request,
             IReadOnlyList<SpectrumSimulationReservation> reservations)
         {
-            if (reservations.Count == 0)
-                return new SimulationExecutionPlan([]);
-
+            // 261103Codex: 空計画でも要求された実行上限を保持する。
             int parallelCount = Math.Max(1, request.Simulation.ParallelCount);
             var batches = new List<SimulationExecutionBatch>();
 
             foreach (var group in reservations.GroupBy(item => item.SolutionName))
             {
-                // 260901Codex: Keep scripts condition-homogeneous, then share one parallel job budget across all active times.
+                // 260901Codex: スクリプト内の条件を均一にし、全時間で1つの並列ジョブ枠を共有する。
                 var conditionGroups = group
                     .GroupBy(item => item.ConditionKey, StringComparer.Ordinal)
                     .OrderBy(items => items.First().SemEdxCondition.LiveTime)
@@ -121,7 +128,7 @@ namespace MineraScope
 
                     foreach (var chunk in chunks.Where(chunk => chunk.Length > 0))
                     {
-                        // 260901Codex: Property live time comes from this condition group, never another job in the batch.
+                        // 260901Codex: プロパティのライブタイムは、同じバッチの別ジョブではなくこの条件群から取得する。
                         var property = CreateSimulationProperty(
                             chunk[0].SemEdxCondition,
                             request.Simulation,
@@ -147,10 +154,11 @@ namespace MineraScope
                 batches.Add(new SimulationExecutionBatch(group.Key, jobs));
             }
 
-            return new SimulationExecutionPlan(batches);
+            // 261103Codex: 予約・ジョブ分割を変えず、全バッチで共有する実行上限だけを添える。
+            return new SimulationExecutionPlan(batches, parallelCount);
         }
 
-        // 260901Codex: Reuse the production job-budget algorithm for a side-effect-free shortage preview.
+        // 260901Codex: 本番のジョブ枠配分を再利用し、副作用のない不足プレビューを行う。
         public SimulationExecutionPlanPreview CreatePreview(
             ModelCreationRequest request,
             IReadOnlyList<SpectrumPoolShortage> shortages)
@@ -181,7 +189,7 @@ namespace MineraScope
                 shortages.Sum(item => item.MissingCount));
         }
 
-        // 260901Codex: Preserve retry-sized jobs where possible, then proportionally compress multi-time work into one mineral batch.
+        // 260901Codex: 可能なら再試行用のジョブサイズを保ち、複数時間の作業を比率に応じて1鉱物バッチへ圧縮する。
         private static int[] AllocateJobCounts(
             IReadOnlyList<ConditionReservationGroup> conditionGroups,
             int parallelCount) =>
@@ -194,7 +202,7 @@ namespace MineraScope
                     .ToArray(),
                 parallelCount);
 
-        // 260901Codex: A shared demand shape keeps real-plan and dry-run job counts identical.
+        // 260901Codex: 共通の需要形式で、実計画と試行確認のジョブ件数を一致させる。
         private static int[] AllocateJobCounts(
             IReadOnlyList<ConditionJobDemand> demands,
             int parallelCount)
@@ -240,7 +248,7 @@ namespace MineraScope
                 MineralGroupName = mineralGroupName,
                 Atoms1 = atoms,
                 DetectorProfile = semEdxCondition.GetDetectorProfile(),
-                // 261106Codex: 条件キーと生成スクリプトへ同じ固定膜厚を渡す。
+                // 261021Codex: 条件キーと同じ指定膜厚を全スペクトルへ渡す。
                 CarbonCoatThickness = semEdxCondition.CarbonCoatThickness,
                 BeamEnergy = semEdxCondition.BeamEnergy,
                 Division = (int)(simulation.ResolutionStep * 100),
@@ -251,7 +259,7 @@ namespace MineraScope
                 OutputFiles = outputFiles
             };
 
-        // 260717Codex: Name the shared positive-integer ceiling division used by both job-size calculations.
+        // 260717Codex: 両方のジョブサイズ計算で使う、正整数の切上げ除算に名前を付ける。
         private static int DivideRoundUp(int value, int divisor) => (value + divisor - 1) / divisor;
 
         // 260507Codex: index の剰余で分散し、各ジョブの予約数が偏りすぎないようにします。
@@ -262,12 +270,12 @@ namespace MineraScope
                 .Select(group => group.Select(item => item.value).ToArray())
                 .ToArray();
 
-        // 260901Codex: Group metadata keeps job allocation deterministic without mixing condition-key pools.
+        // 260901Codex: 条件キーのpoolを混ぜず、グループ情報でジョブ配分を決定的にする。
         private sealed record ConditionReservationGroup(
             string ConditionKey,
             SpectrumSimulationReservation[] Reservations);
 
-        // 260901Codex: Only the counts and live time affect bounded job allocation.
+        // 260901Codex: 制限付きジョブ配分に影響するのは、件数とライブタイムだけである。
         private sealed record ConditionJobDemand(
             double LiveTime,
             int TargetSpectrumCount,

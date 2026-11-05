@@ -1,3 +1,4 @@
+// 261106Codex: 検証済みのバッチ横断実行・計測を公開版へ移す。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -9,7 +10,8 @@ using System.Threading.Tasks;
 
 namespace MineraScope
 {
-    // 260901Codex: Persist each mineral batch before the executor advances to the next one.
+    // 260901Codex: 実行処理が次の鉱物へ進む前に、各鉱物バッチを保存する。
+    // 261103Codex: バッチ間の実行順は独立とし、各バッチの全結果がそろった時に直列で保存する。
     internal delegate Task SimulationBatchCompletedCallback(
         SimulationExecutionBatch batch,
         IReadOnlyList<SimulationExecutionResult> results);
@@ -29,61 +31,57 @@ namespace MineraScope
         }
 
         // 260513Codex: batch 内は並列実行し、キャンセル時は後続 batch を起動せず実行済み結果だけを返します。
+        // 261103Codex: 全鉱物のjobを共通上限で投入し、中止後は未投入jobを起動しない。
         public async Task<IReadOnlyList<SimulationExecutionResult>> RunAsync(
             SimulationExecutionPlan plan,
-            IProgress<SimulationExecutionProgress>? progress = null,
-            CancellationToken cancellationToken = default,
-            // 260901Codex: Optional fourth parameter preserves every existing caller while enabling batch checkpoints.
-            SimulationBatchCompletedCallback? batchCompleted = null)
+            IProgress<SimulationExecutionProgress>? progress,
+            CancellationToken cancellationToken,
+            // 260901Codex: 任意の第4引数で、既存呼び出しを保ったままバッチのチェックポイントを有効にする。
+            // 261105Claude: 全呼び出しが渡すので必須にした。
+            SimulationBatchCompletedCallback batchCompleted)
         {
             ArgumentNullException.ThrowIfNull(plan);
 
             var progressScope = new SimulationProgressScope(plan, progress);
-            var results = new List<SimulationExecutionResult>();
             // 260717Claude: run 単位の永続ログ。GUI/headless どちらでも RunAsync 起点で必ず 1 ファイル残し、
             //   実行後に失敗原因 (watchdog kill・stderr) を追跡できるようにする。
             var runLog = SimulationRunLog.CreateForRun();
+            // 261103Codex: 変更前後で同じCPU時間計測を使い、runの最後まで集計する。
+            await using var metrics = new SimulationRunMetrics(runLog);
             // 260717Claude: 起動ゲートは run 単位で共有し、batch をまたいでも Process.Start の最小間隔を保つ。
-            var launchGate = new SimulationLaunchGate();
+            // 261105Claude: run 単位の共有物は 1 つにまとめ、job と attempt の層を通す引数を減らす。
+            var run = new SimulationRunContext(runLog, new SimulationLaunchGate(), metrics);
             var runStopwatch = Stopwatch.StartNew();
-            runLog.WriteLine($"run start: batches={progressScope.BatchCount}, jobs={progressScope.TotalJobCount}, spectra={progressScope.TotalSpectrumCount}");
-            // 261106Codex: 生成に使った公式DTSA-IIの配置とEPQ版をrunログへ残す。
+            // 261103Codex: 実際のrun上限を記録し、ジョブ件数と同時稼働数を混同しない。
+            runLog.WriteLine($"run start: batches={progressScope.BatchCount}, jobs={progressScope.TotalJobCount}, spectra={progressScope.TotalSpectrumCount}, parallel={plan.ParallelCount}");
+            // 261030Claude: 生成に使った DTSA-II の版を残し、pool の出所を後から追えるようにする。
             foreach (string dtsaFolder in plan.Batches.SelectMany(static batch => batch.Jobs).Select(static job => job.DtsaFolder).Distinct(StringComparer.OrdinalIgnoreCase))
                 runLog.WriteLine($"dtsa: {DtsaInstallation.Describe(dtsaFolder)}");
+            // 261105Claude: GUI のログ欄はファイルに残らないので、スクリプトへ渡す検出器の値も run ログへ残す。
+            foreach (string detector in plan.Batches.SelectMany(static batch => batch.Jobs).Select(static job => job.Property.DetectorProfile.Describe()).Distinct(StringComparer.Ordinal))
+                runLog.WriteLine($"detector: {detector}");
 
-            for (int batchIndex = 0; batchIndex < plan.Batches.Count; batchIndex++)
+            // 261103Codex: バッチ末尾の待機をなくす。起動・再試行・監視は従来のExecuteJobAsync内に残す。
+            IReadOnlyList<SimulationExecutionResult> results;
+            try
             {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                var batch = plan.Batches[batchIndex];
-                int batchNumber = batchIndex + 1;
-                ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchStarted, "開始");
-
                 // 260717Claude: GUI は UI スレッドから RunAsync を await するため、job 本体 (500ms のファイルポーリングや
                 //   失敗時の stdout 全文ログ書き込み) の継続が UI コンテキストへ戻らないよう Task.Run で切り離す。
                 //   UI 更新は Progress<T> が生成元 (UI) スレッドへ post するので従来どおり安全。
-                var batchResults = await Task.WhenAll(batch.Jobs.Select(job =>
-                    Task.Run(() => ExecuteJobAsync(job, batch.SolutionName, batchNumber, progressScope, runLog, launchGate, cancellationToken))));
-                results.AddRange(batchResults);
-
-                // 260901Codex: Complete the durable checkpoint before reporting BatchCompleted or starting another mineral.
-                if (batchCompleted is not null)
-                {
-                    try
-                    {
-                        // 260901Codex: Manifest validation/checkpoint I/O must not run on the WinForms synchronization context.
-                        await Task.Run(() => batchCompleted(batch, batchResults));
-                    }
-                    catch (Exception ex)
-                    {
-                        runLog.WriteLine(
-                            $"batch checkpoint failed: solution={batch.SolutionName} detail={SimulationRunLog.Flatten(ex.Message)}");
-                        throw;
-                    }
-                }
-
-                ReportBatchProgress(progressScope, batch, batchNumber, SimulationExecutionProgressKind.BatchCompleted, "完了");
+                // 261103Codex: schedulerの全workerと保存consumerをUIから切り離す。
+                // 261104Codex: run末尾のログと資源計測の破棄もUIスレッドへ戻さない。
+                results = await Task.Run(() => SimulationExecutionScheduler.RunAsync(
+                    plan, progressScope,
+                    (job, solution, batchNumber, token) => ExecuteJobAsync(job, solution, batchNumber, progressScope, run, token),
+                    // 261104Codex: 保存と例外ログの境界に名前を付け、投入処理の入れ子を減らす。
+                    SaveBatchAsync, cancellationToken)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                // 261103Codex: 保存失敗でも全worker回収後の状態とrunの経過を残す。
+                runLog.WriteLine($"run aborted: completedJobs={progressScope.CompletedJobCount}/{progressScope.TotalJobCount}, " +
+                    $"savedSpectra={progressScope.CompletedSpectrumCount}/{progressScope.TotalSpectrumCount}, elapsed={SimulationRunLog.FormatSeconds(runStopwatch.Elapsed)} detail={SimulationRunLog.Flatten(ex.Message)}");
+                throw;
             }
 
             // 260717Claude: run 全体の要約。中断時も途中までの結果件数が残る。
@@ -94,24 +92,21 @@ namespace MineraScope
                 $"savedSpectra={progressScope.CompletedSpectrumCount}/{progressScope.TotalSpectrumCount}, elapsed={SimulationRunLog.FormatSeconds(runStopwatch.Elapsed)}");
 
             return results;
-        }
 
-        // 260528Codex: batch 単位の表示をまとめ、RunAsync の本筋を batch 進行だけにします。
-        private static void ReportBatchProgress(
-            SimulationProgressScope progressScope,
-            SimulationExecutionBatch batch,
-            int batchNumber,
-            SimulationExecutionProgressKind kind,
-            string statusText)
-        {
-            int spectrumCount = batch.Jobs.Sum(job => job.Reservations.Count);
-            progressScope.Report(
-                kind,
-                batch.SolutionName,
-                batchNumber,
-                progressScope.NextJobIndexPreview,
-                spectrumCount,
-                $"{batch.SolutionName}: batch {batchNumber}/{progressScope.BatchCount} {statusText}, spectra {spectrumCount}");
+            // 261104Codex: 保存の成功・失敗ログと例外の伝播を同じ非同期境界に保つ。
+            async Task SaveBatchAsync(SimulationExecutionBatch batch, IReadOnlyList<SimulationExecutionResult> batchResults)
+            {
+                try
+                {
+                    await batchCompleted(batch, batchResults).ConfigureAwait(false);
+                    runLog.WriteLine($"batch checkpoint: solution={batch.SolutionName} jobs={batchResults.Count}");
+                }
+                catch (Exception ex)
+                {
+                    runLog.WriteLine($"batch checkpoint failed: solution={batch.SolutionName} detail={SimulationRunLog.Flatten(ex.Message)}");
+                    throw;
+                }
+            }
         }
 
         // 260528Codex: スクリプト生成、古い出力削除、DTSA-II 起動、結果収集を job context に閉じ込めます。
@@ -121,8 +116,7 @@ namespace MineraScope
             string solutionName,
             int batchIndex,
             SimulationProgressScope progressScope,
-            SimulationRunLog runLog,
-            SimulationLaunchGate launchGate,
+            SimulationRunContext run,
             CancellationToken cancellationToken)
         {
             var progress = new SimulationJobProgress(progressScope, job, solutionName, batchIndex);
@@ -136,25 +130,21 @@ namespace MineraScope
                 Directory.CreateDirectory(job.Property.OutputFolder);
                 DeleteReservedOutputFiles(job.Reservations);
 
-                var attempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 1, progress, runLog, launchGate, cancellationToken);
-                LogAttemptResult(runLog, solutionName, job, attempt);
-                attempt = await RetryStartupTimeoutOnceAsync(job, solutionName, attempt, progress, runLog, launchGate, cancellationToken);
-                var result = ConvertToExecutionResult(job, attempt, runLog);
+                // 261103Codex: 初回・再試行とも同じrunへCPU時間を集計する。
+                var attempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 1, progress, run, cancellationToken);
+                LogAttemptResult(run.Log, solutionName, job, attempt);
+                attempt = await RetryStartupTimeoutOnceAsync(job, solutionName, attempt, progress, run, cancellationToken);
+                var result = ConvertToExecutionResult(job, attempt, run.Log);
                 progress.CompleteUnreportedSuccessfulSpectra(result);
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                runLog.WriteLine($"job canceled before start: solution={solutionName} script={Path.GetFileName(job.ScriptPath)}");
-                // 260717Codex: This is the only pre-attempt cancellation result, so construct it at the decision point.
-                var result = new SimulationExecutionResult(
-                    job.Reservations,
-                    ExitCode: -1,
-                    StandardOutput: string.Empty,
-                    StandardError: string.Empty,
-                    ExceptionMessage: null,
-                    IsCanceled: true);
+                run.Log.WriteLine($"job canceled before start: solution={solutionName} script={Path.GetFileName(job.ScriptPath)}");
+                // 260717Codex: 試行前の中止結果はここだけなので、判定箇所で構築する。
+                // 261105Claude: 未投入 job の中止と同じ形にするため、共通の Canceled で作る。
+                var result = SimulationExecutionResult.Canceled(job.Reservations);
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
             }
@@ -162,13 +152,13 @@ namespace MineraScope
             {
                 // 260717Claude: attempt 前のジョブ準備 (出力フォルダ作成・予約ファイル削除) の失敗もログへ残す。
                 //   FailureReason から run ログへ辿れるよう、この経路にも種別 prefix を付ける (レビュー指摘)。
-                runLog.WriteLine($"job setup failed: solution={solutionName} script={Path.GetFileName(job.ScriptPath)} detail={SimulationRunLog.Flatten(ex.Message)}");
+                run.Log.WriteLine($"job setup failed: solution={solutionName} script={Path.GetFileName(job.ScriptPath)} detail={SimulationRunLog.Flatten(ex.Message)}");
                 var result = new SimulationExecutionResult(
                     job.Reservations,
                     ExitCode: -1,
                     StandardOutput: string.Empty,
                     StandardError: string.Empty,
-                    ExceptionMessage: $"[JobSetupFailed] log={runLog.FileName}; {ex.Message}");
+                    ExceptionMessage: $"[JobSetupFailed] log={run.Log.FileName}; {ex.Message}");
                 progress.ReportJobFinished(result, stopwatch.Elapsed);
                 return result;
             }
@@ -212,11 +202,10 @@ namespace MineraScope
             string solutionName,
             SimulationProcessAttemptResult attempt,
             SimulationJobProgress progress,
-            SimulationRunLog runLog,
-            SimulationLaunchGate launchGate,
+            SimulationRunContext run,
             CancellationToken cancellationToken)
         {
-            // 260717Codex: Return immediately unless every one-retry condition is satisfied.
+            // 260717Codex: 1回再試行の全条件が満たされなければ、すぐに返す。
             if (attempt.Outcome != SimulationAttemptOutcome.StartupTimeout ||
                 attempt.AttemptNumber != 1 ||
                 attempt.SavedSpectrumFiles.Count > 0 ||
@@ -233,7 +222,7 @@ namespace MineraScope
                 .ToArray();
             if (lateSavedFiles.Length > 0)
             {
-                runLog.WriteLine($"retry aborted: script={script} reason=late output files detected ({lateSavedFiles.Length})");
+                run.Log.WriteLine($"retry aborted: script={script} reason=late output files detected ({lateSavedFiles.Length})");
                 var merged = new HashSet<string>(attempt.SavedSpectrumFiles, StringComparer.OrdinalIgnoreCase);
                 foreach (string fileName in lateSavedFiles)
                 {
@@ -244,9 +233,10 @@ namespace MineraScope
                 return attempt with { SavedSpectrumFiles = merged };
             }
 
-            runLog.WriteLine($"retry: solution={solutionName} script={script} reason=StartupTimeout attempt=2");
-            var secondAttempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 2, progress, runLog, launchGate, cancellationToken);
-            LogAttemptResult(runLog, solutionName, job, secondAttempt);
+            run.Log.WriteLine($"retry: solution={solutionName} script={script} reason=StartupTimeout attempt=2");
+            // 261103Codex: watchdogと再試行条件はそのままに計測だけを共有する。
+            var secondAttempt = await _processRunner.RunAttemptAsync(job, attemptNumber: 2, progress, run, cancellationToken);
+            LogAttemptResult(run.Log, solutionName, job, secondAttempt);
             return secondAttempt;
         }
 
@@ -258,7 +248,7 @@ namespace MineraScope
             SimulationProcessAttemptResult attempt,
             SimulationRunLog runLog)
         {
-            // 260717Codex: Build the shared result shape once; only cancellation and failure metadata vary by outcome.
+            // 260717Codex: 共通の結果形式を一度だけ構築し、結果ごとに中止と失敗のメタデータだけを変える。
             bool isCanceled = attempt.Outcome == SimulationAttemptOutcome.Canceled;
             string? exceptionMessage = attempt.Outcome is SimulationAttemptOutcome.Canceled or SimulationAttemptOutcome.Succeeded
                 ? null
@@ -310,6 +300,8 @@ namespace MineraScope
     internal sealed class SimulationProgressScope
     {
         private readonly IProgress<SimulationExecutionProgress>? _progress;
+        // 261103Codex: 複数バッチの通知がUIへpostされる順序とカウンタの増加順を一致させる。
+        private readonly object _reportGate = new();
         private int _completedJobCount;
         private int _completedSpectrumCount;
         private int _nextJobIndex;
@@ -332,10 +324,11 @@ namespace MineraScope
         public int NextJobIndexPreview => Volatile.Read(ref _nextJobIndex);
 
         public int ReserveJobIndex() => Interlocked.Increment(ref _nextJobIndex);
-        // 260717Codex: These increments are notifications; no caller consumes their numeric return values.
+        // 260717Codex: これらの増分は通知であり、数値の戻り値を使う呼び出し側はない。
         public void MarkJobCompleted() => Interlocked.Increment(ref _completedJobCount);
         public void MarkSpectrumCompleted() => Interlocked.Increment(ref _completedSpectrumCount);
 
+        // 261103Codex: 件数のsnapshot取得と通知を一緒に直列化し、GUIの表示値が逆戻りしないようにする。
         public void Report(
             SimulationExecutionProgressKind kind,
             string solutionName,
@@ -344,21 +337,24 @@ namespace MineraScope
             int spectrumCount,
             string message,
             int? exitCode = null,
-            TimeSpan? elapsed = null) =>
-            _progress?.Report(new SimulationExecutionProgress(
-                kind,
-                solutionName,
-                batchIndex,
-                BatchCount,
-                jobIndex,
-                TotalJobCount,
-                CompletedJobCount,
-                TotalSpectrumCount,
-                CompletedSpectrumCount,
-                spectrumCount,
-                message,
-                exitCode,
-                elapsed));
+            TimeSpan? elapsed = null)
+        {
+            lock (_reportGate)
+                _progress?.Report(new SimulationExecutionProgress(
+                    kind,
+                    solutionName,
+                    batchIndex,
+                    BatchCount,
+                    jobIndex,
+                    TotalJobCount,
+                    CompletedJobCount,
+                    TotalSpectrumCount,
+                    CompletedSpectrumCount,
+                    spectrumCount,
+                    message,
+                    exitCode,
+                    elapsed));
+        }
     }
 
     // 260717Claude: SimulationProgressScope と同じ理由でトップレベル internal へ昇格 (実装は変更なし)。

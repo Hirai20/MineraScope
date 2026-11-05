@@ -1,3 +1,4 @@
+// 261106Codex: 検証済みのバッチ横断実行・計測を公開版へ移す。
 using System.Text.Json;
 
 namespace MineraScope.Tests
@@ -33,10 +34,10 @@ namespace MineraScope.Tests
                 var parallelProgress = new List<SpectrumPoolPreparationProgress>();
                 // 260908Codex: 共有PCで不確かな速度判定を課さず、規模を限定した合成データの所要時間を表示する。
                 var timer = System.Diagnostics.Stopwatch.StartNew();
-                var serial = fixture.Workflow.PrepareTrainingPools(request, new InlineProgress(serialProgress.Add));
+                var serial = fixture.Workflow.PrepareTrainingPools(request, new InlineProgress<SpectrumPoolPreparationProgress>(serialProgress.Add));
                 double serialSeconds = timer.Elapsed.TotalSeconds;
                 timer.Restart();
-                var parallel = fixture.Workflow.PrepareTrainingPools(request, new InlineProgress(parallelProgress.Add), validationParallelism: 4);
+                var parallel = fixture.Workflow.PrepareTrainingPools(request, new InlineProgress<SpectrumPoolPreparationProgress>(parallelProgress.Add), validationParallelism: 4);
                 Console.WriteLine($"Preparation {(planned ? "planned" : "legacy")} 260 synthetic spectra: serial {serialSeconds:F3}s, four readers {timer.Elapsed.TotalSeconds:F3}s.");
                 TestAssert.Equal(JsonSerializer.Serialize(serial), JsonSerializer.Serialize(parallel), "Parallel validation must preserve sample order, labels, provenance, recovery, and shortages.");
                 TestAssert.SequenceEqual(serialProgress, parallelProgress, "Parallel readers must not reorder progress callbacks or alter counts.");
@@ -45,7 +46,7 @@ namespace MineraScope.Tests
 
                 using var canceled = new CancellationTokenSource();
                 TestAssert.Throws<OperationCanceledException>(() => fixture.Workflow.PrepareTrainingPools(request,
-                    new InlineProgress(value =>
+                    new InlineProgress<SpectrumPoolPreparationProgress>(value =>
                     {
                         if (value.FilesChecked == 128 && value.Phase is "採用EMSA確認" or "学習pool確認")
                             canceled.Cancel();
@@ -291,7 +292,7 @@ namespace MineraScope.Tests
             using var fixture = new TestFixture(null, TestFixture.CreateSolution("SyntheticFirst"), TestFixture.CreateSolution("SyntheticSecond"));
             fixture.Complete(TestFixture.Reservations(fixture.Workflow.CreateMissingSimulationPlan(fixture.Request, out _)));
             var reports = new List<SpectrumPoolPreparationProgress>();
-            fixture.Workflow.PrepareTrainingPools(fixture.Request, new InlineProgress(reports.Add));
+            fixture.Workflow.PrepareTrainingPools(fixture.Request, new InlineProgress<SpectrumPoolPreparationProgress>(reports.Add));
             TestAssert.True(reports.Any(item => item.FilesToCheck > 0 && item.FilesChecked > 0 && !item.PoolCompleted), "Preparation must report spectrum work before the final completed-pool event.");
             TestAssert.True(reports.All(item => item.FilesChecked >= 0 && item.FilesToCheck >= 0), "Preparation progress counters must remain nonnegative.");
 
@@ -321,7 +322,7 @@ namespace MineraScope.Tests
 
             using var during = new CancellationTokenSource();
             TestAssert.Throws<OperationCanceledException>(() => fixture.Workflow.PrepareTrainingPools(fixture.Request,
-                new InlineProgress(item =>
+                new InlineProgress<SpectrumPoolPreparationProgress>(item =>
                 {
                     if (item.FilesToCheck > 0 && item.FilesChecked > 0)
                         during.Cancel();
@@ -354,12 +355,6 @@ namespace MineraScope.Tests
                     if (count >= 128)
                         plannerCanceled.Cancel();
                 }), "Planner candidate probing must pass cancellation through constraint rejections.");
-        }
-
-        // 260907Codex: テストのコールバックは同期実行し、中止とファイルスナップショットの順序を確定する。
-        private sealed class InlineProgress(Action<SpectrumPoolPreparationProgress> report) : IProgress<SpectrumPoolPreparationProgress>
-        {
-            public void Report(SpectrumPoolPreparationProgress value) => report(value);
         }
     }
 }

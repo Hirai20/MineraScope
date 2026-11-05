@@ -1,4 +1,4 @@
-// 261106Codex: 公式DTSA-IIの配置検証・直接起動へ切り替える。
+// 261106Codex: 検証済みのバッチ横断実行・計測を公開版へ移す。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -35,9 +35,13 @@ namespace MineraScope
         TimeSpan Elapsed,
         IReadOnlySet<string> SavedSpectrumFiles);
 
+    // 261105Claude: run 全体で共有する記録・起動間隔・資源計測。job と attempt の層を素通りするので 1 つで渡す。
+    internal sealed record SimulationRunContext(SimulationRunLog Log, SimulationLaunchGate LaunchGate, SimulationRunMetrics Metrics);
+
     // 260717Claude: run 内の Process.Start を一定間隔に間引く起動ゲート。20 JVM のほぼ同時ブートによる
     //   DTSA-II 内部共有リソース (Derby 等) の起動競合スタックを避けるのが目的で、起動後の実行は並列のまま。
     //   待機者はセマフォで直列に並び、先頭が間隔分の Delay を消化してから次へ許可を回す (キャンセル可能)。
+    // 261103Codex: 現行の公式版直接起動はDerbyを使わない。JVM起動集中の影響は別測定とし、今回は2秒間隔を保持する。
     internal sealed class SimulationLaunchGate
     {
         private static readonly TimeSpan LaunchInterval = TimeSpan.FromSeconds(2);
@@ -70,9 +74,9 @@ namespace MineraScope
     {
         // 260528Codex: DTSA-II script からの保存完了通知を識別し、生成ファイル数ベースの進捗へ変換します。
         private const string SavedSpectrumMarker = "MINERASCOPE_SPECTRUM_SAVED|";
-        // 260611Codex: Poll generated spectrum files because DTSA-II stdout can be delayed until process exit.
+        // 260611Codex: DTSA-IIの標準出力は終了まで遅れる場合があるため、生成スペクトルファイルを定期的に確認する。
         private static readonly TimeSpan OutputFilePollInterval = TimeSpan.FromMilliseconds(500);
-        // 260629Codex: Treat DTSA-II as stuck only when stdout, files, and CPU are all idle for a while.
+        // 260629Codex: 標準出力・ファイル・CPUがすべて一定時間動かない場合だけ、DTSA-IIが停止していると見なす。
         private static readonly TimeSpan DtsaIdleTimeout = TimeSpan.FromMinutes(10);
         // 260717Claude: 保存 0 本の起動フェーズは短く見切る。正常起動中の JVM は JIT/クラスロードで CPU を使い
         //   idle 扱いにならないため、3 分間の完全無活動は起動競合スタックとみなして kill →リトライで復旧させる。
@@ -93,8 +97,7 @@ namespace MineraScope
             SimulationExecutionJob job,
             int attemptNumber,
             SimulationJobProgress progress,
-            SimulationRunLog runLog,
-            SimulationLaunchGate launchGate,
+            SimulationRunContext run,
             CancellationToken cancellationToken)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -111,7 +114,8 @@ namespace MineraScope
                     SimulationExecutionProgressKind.ScriptWritten,
                     $"script 作成: {Path.GetFileName(job.ScriptPath)}");
 
-                return await RunProcessAsync(job, attemptNumber, progress, runLog, launchGate, stopwatch, cancellationToken);
+                // 261103Codex: 起動待ちとは別に実プロセスのCPUを記録する。
+                return await RunProcessAsync(job, attemptNumber, progress, run, stopwatch, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -145,17 +149,17 @@ namespace MineraScope
             SimulationExecutionJob job,
             int attemptNumber,
             SimulationJobProgress progress,
-            SimulationRunLog runLog,
-            SimulationLaunchGate launchGate,
+            SimulationRunContext run,
             Stopwatch stopwatch,
             CancellationToken cancellationToken)
         {
             // 260717Claude: 起動ゲートで Process.Start だけを間引く (実行は並列のまま)。待ち時間はログで検証できるよう残す。
             var staggerStopwatch = Stopwatch.StartNew();
-            await launchGate.WaitForLaunchSlotAsync(cancellationToken);
+            await run.LaunchGate.WaitForLaunchSlotAsync(cancellationToken);
             long staggerWaitMs = staggerStopwatch.ElapsedMilliseconds;
 
-            // 260626Codex: Launch the dtsa2.msi app image directly in no-GUI mode while keeping stdout markers redirected.
+            // 260626Codex: dtsa2.msiのアプリイメージをGUIなしで直接起動し、標準出力のマーカーをリダイレクトする。
+            // 261030Claude: 公式版の同梱 Java で Jython を直接起動する (起動方法は DtsaInstallation に集約)。
             ProcessStartInfo startInfo = DtsaInstallation.CreateStartInfo(job.DtsaFolder, job.ScriptPath);
 
             using Process process = new()
@@ -163,14 +167,18 @@ namespace MineraScope
                 StartInfo = startInfo
             };
 
-            // 260901Codex: Persist an unresolved marker before launch and retain it unless this Java process is confirmed stopped.
+            // 260901Codex: 起動前に未解決マーカーを保存し、このJavaプロセスの停止を確認するまで保持する。
             using var processRunMarker = DtsaProcessRunMarker.CreatePending(Path.GetFileName(job.ScriptPath));
+            // 261104Codex: ゲート通過後の準備中に中止された場合も、新しいJavaを起動しない。
+            cancellationToken.ThrowIfCancellationRequested();
             processRunMarker.StartAndRegister(process);
+            // 261103Codex: Process破棄より前に最終CPU時間を取得する。
+            using var processMetrics = run.Metrics.Track(process);
             int? processId = TryGetProcessId(process);
-            // 260717Codex: Reuse stable process context in the start and kill log entries.
+            // 260717Codex: 開始と強制終了のログで、同じ安定したプロセス情報を再利用する。
             string scriptName = Path.GetFileName(job.ScriptPath);
             string processIdText = processId?.ToString(CultureInfo.InvariantCulture) ?? "-";
-            runLog.WriteLine(
+            run.Log.WriteLine(
                 $"process start: script={scriptName} attempt={attemptNumber} " +
                 $"pid={processIdText} staggerWaitMs={staggerWaitMs}");
             progress.ReportJobProgress(SimulationExecutionProgressKind.ProcessStarted, "DTSA-II process 起動");
@@ -179,17 +187,18 @@ namespace MineraScope
             //   (従来は裸の HashSet を並行更新しており race だった)。
             var savedFiles = new SavedSpectrumFileTracker();
             var activity = new SimulationJobActivityTracker();
-            // 260611Codex: File polling drives live progress even when the process buffers stdout.
+            // 260611Codex: 標準出力をプロセスがバッファリングしても、ファイルの定期確認で進捗を更新する。
+            // 261030Claude: Jython を直接起動すると保存の目印は逐次届く。定期確認は目印が読めなかったときの予備として残す。
             using var outputMonitorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             using var watchdogCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var outputMonitorTask = MonitorOutputFilesAsync(job, progress, savedFiles, activity, outputMonitorCts.Token);
             var standardOutputTask = ReadStandardOutputAsync(process, progress, savedFiles, activity);
             var standardErrorTask = process.StandardError.ReadToEndAsync();
-            var watchdogTask = WatchDtsaProcessAsync(process, job, savedFiles, activity, runLog, watchdogCts.Token);
+            var watchdogTask = WatchDtsaProcessAsync(process, job, savedFiles, activity, run.Log, watchdogCts.Token);
             // 260717Claude: kill 前後のログで script/pid を対応づける (並行ジョブが混ざっても追える)。
             string killContext = $"script={scriptName} pid={processIdText}";
 
-            // 260717Codex: Share monitor shutdown, final file detection, and redirected-output collection across every exit path.
+            // 260717Codex: 監視停止・最終ファイル検出・リダイレクト出力の収集を、すべての終了経路で共用する。
             // 260717Claude: cleanupToken を共有し、kill 待ちと stdout/stderr 収集を合わせて 1 つの上限 (最大 30 秒) に収める。
             //   kill 失敗でストリームが閉じないケースでも、経路全体が有限時間で戻る (レビュー指摘の直列 90 秒化を回避)。
             async Task<(string StandardOutput, string StandardError)> StopMonitoringAndCollectOutputAsync(CancellationToken cleanupToken)
@@ -202,16 +211,16 @@ namespace MineraScope
                     await ReadProcessOutputAsync(standardErrorTask, cleanupToken));
             }
 
-            // 260717Codex: Keep paired kill logs identical for watchdog and cancellation paths.
+            // 260717Codex: 監視による強制終了と中止の経路で、対になる終了ログを同一にする。
             // 260717Claude: kill 待ちと出力収集で 1 つの cleanup 期限を共有する。上限内に終了しなかったら残存の疑いをログへ残す
             //   (ジョブ自体は結果生成へ進む)。ユーザーキャンセル中でも後片付けは完了させたいので、期限は独立させる。
             async Task<(string StandardOutput, string StandardError)> KillAndCollectOutputAsync(string reason)
             {
                 using var cleanupCts = new CancellationTokenSource(KillCleanupTimeout);
-                runLog.WriteLine($"kill start: {killContext} reason={reason}");
+                run.Log.WriteLine($"kill start: {killContext} reason={reason}");
                 KillProcessTree(process);
                 bool exited = await WaitForProcessExitAfterKillAsync(process, cleanupCts.Token);
-                runLog.WriteLine(exited
+                run.Log.WriteLine(exited
                     ? $"kill done: {killContext}"
                     : $"kill wait timeout: {killContext} (process may still be alive)");
                 return await StopMonitoringAndCollectOutputAsync(cleanupCts.Token);
@@ -276,7 +285,9 @@ namespace MineraScope
                 exitCode,
                 standardOutput,
                 standardError,
-                // 261106Codex: Java警告の後ろに埋もれるスクリプトの失敗理由を記録する。
+                // 261103Claude: 生成スクリプトが書いた失敗理由 (組成式の誤り・既製の窓が無いなど) を stderr 全体より先に使う。
+                //   stderr の先頭は Java の警告で埋まり、上限で切ると理由が落ちるため。
+                // 261105Claude: run ログの attempt 行にも理由が出るよう、失敗の詳細としてここで取り出す。
                 FailureDetail: exitCode == 0 ? null : SimulationScriptGenerator.FindScriptError(standardError),
                 processId,
                 stopwatch.Elapsed,
@@ -325,7 +336,7 @@ namespace MineraScope
             return builder.ToString();
         }
 
-        // 260611Codex: Count files that appear on disk so the progress bar advances while DTSA-II is still running.
+        // 260611Codex: ディスクに現れたファイルを数え、DTSA-IIの実行中もプログレスバーを進める。
         private static async Task MonitorOutputFilesAsync(
             SimulationExecutionJob job,
             SimulationJobProgress progress,
@@ -350,7 +361,7 @@ namespace MineraScope
             }
         }
 
-        // 260611Codex: Keep the polling task shutdown quiet; final file detection happens in its finally block.
+        // 260611Codex: 定期確認タスクの終了を静かに処理し、最終ファイルの検出はfinallyで行う。
         private static async Task StopOutputMonitorAsync(CancellationTokenSource monitorCancellation, Task monitorTask)
         {
             monitorCancellation.Cancel();
@@ -364,7 +375,7 @@ namespace MineraScope
             }
         }
 
-        // 260611Codex: Report each reserved output file at most once through SimulationJobProgress.
+        // 260611Codex: 各予約出力ファイルをSimulationJobProgress経由で最大1回通知する。
         private static void ReportExistingOutputFiles(
             SimulationExecutionJob job,
             SimulationJobProgress progress,
@@ -386,7 +397,7 @@ namespace MineraScope
         private sealed record WatchdogTimeoutResult(SimulationAttemptOutcome Outcome, string Message);
 
         // 260513Codex: キャンセル要求後に残った子プロセスも含めて DTSA-II を止めます。
-        // 260629Codex: Kill DTSA-II jobs that stop producing stdout, files, and CPU so the batch can return.
+        // 260629Codex: 標準出力・ファイル・CPUの更新が止まったDTSA-IIジョブを終了させ、バッチが戻れるようにする。
         // 260717Claude: 2 段 watchdog。保存 0 本の起動フェーズは 3 分、1 本以上保存後の実行フェーズは従来の 10 分で見切る。
         private static async Task<WatchdogTimeoutResult?> WatchDtsaProcessAsync(
             Process process,
@@ -408,14 +419,14 @@ namespace MineraScope
                     TimeSpan currentCpuTime = ReadProcessCpuTime(process);
                     TimeSpan cpuDelta = currentCpuTime - lastCpuTime;
                     lastCpuTime = currentCpuTime;
-                    // 260629Codex: Ignore tiny Derby wait/housekeeping CPU ticks; they are not simulation progress.
+                    // 260629Codex: Derbyの待機・管理処理による微小なCPU消費を、シミュレーション進捗として扱わない。
                     if (cpuDelta >= DtsaCpuActivityThreshold)
                     {
                         activity.MarkActivity();
                         continue;
                     }
 
-                    // 260717Codex: Use one saved-file snapshot for phase selection and the matching timeout log.
+                    // 260717Codex: 保存ファイルの同じスナップショットで、工程選択と対応するタイムアウトログを作る。
                     int savedFileCount = savedFiles.Count;
                     bool isStartupPhase = savedFileCount == 0;
                     TimeSpan idleTimeout = isStartupPhase ? DtsaStartupIdleTimeout : DtsaIdleTimeout;

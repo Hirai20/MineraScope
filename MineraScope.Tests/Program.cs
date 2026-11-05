@@ -6,6 +6,12 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261106Codex: 実DTSA-IIを使う比較生成は明示オプションだけで実行する。
+            if (args.Length is 2 or 3 && args[0] == "--simulation-benchmark")
+            {
+                SimulationExecutionBenchmark.Run(args[1], args.Length == 3 ? args[2] : null);
+                return 0;
+            }
             // 261021Codex: 利用者のモデルを使わず、定量省略と既存出力の保持を実学習で確認する。
             if (args.Length == 1 && args[0] == "--training-sample-smoke")
             {
@@ -103,6 +109,8 @@ namespace MineraScope.Tests
                 // 260930Codex: Check four feldspar compositions without loading TensorFlow.
                 ("Feldspar overlap label policy", MineralLabelPolicyTests.Run),
                 ("Composition and time allocation", PlannerTests.Run),
+                // 261106Codex: バッチ横断投入・同時実行数・保存順・中止を制御可能な実行器で確認する。
+                ("Simulation scheduling and batch checkpoints", SimulationExecutionTests.Run),
                 // 261106Codex: 膜厚0と本数の範囲を実生成なしで確認する。
                 ("Headless simulation overrides", SimulationHeadlessRunnerTests.Run),
                 ("Pool preview, reuse, cancellation, and recovery", PoolTests.Run),

@@ -117,4 +117,10 @@ namespace MineraScope.Tests
                 Directory.Delete(resolved, recursive: true);
         }
     }
+
+    // 261106Codex: 実行制御と学習準備のテストで、進捗を同期して受け取る共通境界を使う。
+    internal sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
+    }
 }
