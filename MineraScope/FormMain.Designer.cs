@@ -254,6 +254,8 @@
             // 
             textBoxPathDTSA.Location = new Point(115, 5);
             textBoxPathDTSA.Name = "textBoxPathDTSA";
+            // 261106Codex: 保存値の自動検出とは分けて、公式版の配置を案内する。
+            textBoxPathDTSA.PlaceholderText = "NIST 公式版 DTSA-II のインストール先（%LOCALAPPDATA%\\NIST\\NIST DTSA-II …）";
             textBoxPathDTSA.Size = new Size(155, 23);
             textBoxPathDTSA.TabIndex = 0;
             // 
@@ -264,7 +266,8 @@
             labelPathDTSA.Name = "labelPathDTSA";
             labelPathDTSA.Size = new Size(105, 15);
             labelPathDTSA.TabIndex = 15;
-            labelPathDTSA.Text = "DTSA-Ⅱファイルパス";
+            // 261106Codex: DTSA-IIの静的な案内はDesignerで管理する。
+            labelPathDTSA.Text = "DTSA-IIパス";
             // 
             // textBoxAnalysisResult
             // 

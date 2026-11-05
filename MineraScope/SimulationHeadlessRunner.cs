@@ -1,3 +1,4 @@
+// 261106Codex: 公式DTSA-IIの配置検証・直接起動へ切り替える。
 using System;
 using System.Globalization;
 using System.IO;
@@ -72,7 +73,7 @@ namespace MineraScope
                 new ModelCreationPaths(
                     outputFolder.Trim(),
                     scriptOutput,
-                    DtsaMsiInstallation.UseDefaultIfBlank(formMain.DtsaPath),
+                    DtsaInstallation.ResolveFolder(formMain.DtsaPath),
                     (formMain.ModelPath ?? string.Empty).Trim()),
                 generator.ModelName.Trim(),
                 new SemEdxCondition(
@@ -113,7 +114,7 @@ namespace MineraScope
             // 260626Codex: Match the GUI-side dtsa2.msi validation before reserving/running spectra.
             string? dtsaValidationError = dryRun
                 ? null
-                : DtsaMsiInstallation.GetValidationError(request.Paths.DtsaFolder);
+                : DtsaInstallation.GetValidationError(request.Paths.DtsaFolder);
             if (dtsaValidationError is not null)
             {
                 Log($"ERROR: {dtsaValidationError} Abort.");

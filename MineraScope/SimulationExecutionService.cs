@@ -47,6 +47,9 @@ namespace MineraScope
             var launchGate = new SimulationLaunchGate();
             var runStopwatch = Stopwatch.StartNew();
             runLog.WriteLine($"run start: batches={progressScope.BatchCount}, jobs={progressScope.TotalJobCount}, spectra={progressScope.TotalSpectrumCount}");
+            // 261106Codex: 生成に使った公式DTSA-IIの配置とEPQ版をrunログへ残す。
+            foreach (string dtsaFolder in plan.Batches.SelectMany(static batch => batch.Jobs).Select(static job => job.DtsaFolder).Distinct(StringComparer.OrdinalIgnoreCase))
+                runLog.WriteLine($"dtsa: {DtsaInstallation.Describe(dtsaFolder)}");
 
             for (int batchIndex = 0; batchIndex < plan.Batches.Count; batchIndex++)
             {

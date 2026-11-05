@@ -21,6 +21,18 @@ Run:
 dotnet run --project MineraScope\MineraScope.csproj
 ```
 
+<!-- 261106Codex: 公開版も改変しないNIST公式版の直接起動へ移す。 -->
+<!-- 261030Claude: DTSA-IIは同梱せず、NIST公式版を改変せずに使う。 -->
+## DTSA-II
+
+スペクトルの生成にはNISTのDTSA-IIを使います。DTSA-IIはこのリポジトリに含まれていないので、[NISTの配布ページ](https://www.cstl.nist.gov/div837/837.02/epq/dtsa2/dtsa2home.html)から公式版を入手してインストールしてください。MineraScopeはDTSA-IIのファイルを変更しません。
+
+- 推奨版はNIST DTSA-II Polaris 2026-09-10（EPQ 15.1.57）です。Oberon 2024-06-11でも生成できることを確認しています。
+- 起動時に`%LOCALAPPDATA%\NIST\NIST DTSA-II *`を探し、フォルダー名の日付が最も新しい版を「DTSA-IIパス」に表示します。保存済みのパスが使える場合はそちらを優先します。別の場所に入れた場合や別の版を使う場合は、この欄を変更してください。
+- 生成時はDTSA-IIのGUIを開かず、同梱のJava（`java-runtime\bin\java.exe`）でJythonを直接起動して、DTSA-IIのjarを読み込みます。DTSA-IIのデータベースは使いません。
+- Jythonのキャッシュは`%LOCALAPPDATA%\MineraScope\JythonCache`に作ります。
+- 生成に使ったDTSA-IIのフォルダーとEPQの版は、生成ごとのログ（`Documents\MineraScope\Logs\simulate-*.log`）に記録します。
+
 ## GitHub Setup
 
 After creating a GitHub repository, initialize Git locally, commit the current files, and push to `main`.

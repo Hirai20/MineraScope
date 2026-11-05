@@ -1,3 +1,4 @@
+// 261106Codex: 公式DTSA-IIの配置検証・直接起動へ切り替える。
 // 260727Claude: 手書きの Form 本体なので、誤って付いていた「生成コード」マーカーのコメントを外す
 //   (付いたままだとアナライザーがこのファイルを生成コード扱いで素通しし、未使用 using や死んだメンバーを
 //    検出できず、nullable 注釈コンテキストも無効になって CS8669 が出る)。
@@ -398,7 +399,7 @@ namespace MineraScope
 
             // 260626Codex: 選択フォルダーがdtsa2.msiのインストール先でなければ早期に失敗させる。
             string dtsaValidationError = requireDtsaPath
-                ? DtsaMsiInstallation.GetValidationError(request.Paths.DtsaFolder)
+                ? DtsaInstallation.GetValidationError(request.Paths.DtsaFolder)
                 : null;
             if (dtsaValidationError is not null)
                 return dtsaValidationError;

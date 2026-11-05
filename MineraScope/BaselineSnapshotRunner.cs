@@ -1,3 +1,4 @@
+// 261106Codex: 公式DTSA-IIの配置検証・直接起動へ切り替える。
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -402,7 +403,7 @@ namespace MineraScope
                 new ModelCreationPaths(
                     outputFolder.Trim(),
                     DefaultStoragePaths.PythonScriptsFolder,
-                    DtsaMsiInstallation.UseDefaultIfBlank(formMain.DtsaPath),
+                    DtsaInstallation.ResolveFolder(formMain.DtsaPath),
                     (formMain.ModelPath ?? string.Empty).Trim()),
                 generator.ModelName.Trim(),
                 new SemEdxCondition(

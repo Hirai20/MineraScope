@@ -1,3 +1,4 @@
+// 261106Codex: 公式DTSA-IIの配置検証・直接起動へ切り替える。
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -155,7 +156,7 @@ namespace MineraScope
             long staggerWaitMs = staggerStopwatch.ElapsedMilliseconds;
 
             // 260626Codex: Launch the dtsa2.msi app image directly in no-GUI mode while keeping stdout markers redirected.
-            ProcessStartInfo startInfo = DtsaMsiInstallation.CreateStartInfo(job.DtsaFolder, job.ScriptPath);
+            ProcessStartInfo startInfo = DtsaInstallation.CreateStartInfo(job.DtsaFolder, job.ScriptPath);
 
             using Process process = new()
             {

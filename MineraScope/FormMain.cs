@@ -212,13 +212,8 @@ namespace MineraScope
             if (string.IsNullOrWhiteSpace(EdxOutputPath))
                 EdxOutputPath = DefaultStoragePaths.TrainingDataFolder;
 
-            // 260626Codex: Show dtsa2.msi's per-user install root only when no saved/user path exists.
-            if (string.IsNullOrWhiteSpace(DtsaPath))
-                DtsaPath = DtsaMsiInstallation.DefaultFolder;
-
-            // 260716Codex: msi の既定インストール先を示す補足は、変更後のパスにも残るため表示しない。
-            labelPathDTSA.Text = "DTSA-IIパス";
-            textBoxPathDTSA.PlaceholderText = "dtsa2.msi の既定インストール先。別の場所なら変更可";
+            // 261106Codex: 保存値が使えるなら維持し、空か旧MSI配置なら公式版の自動検出へ進む。
+            DtsaPath = DtsaInstallation.ResolveFolder(DtsaPath);
         }
 
         private void textBoxlPathSaveModel_TextChanged(object sender, EventArgs e)
