@@ -1328,8 +1328,9 @@
 		</Members>
 		<Constraints />
 	</SolidSolution>
+	<!-- 261106Codex: Unify the former Omphacite and Aegirine classes as AlkaliPyroxenes; retain only the Di + Hd <= 0.8 constraint. -->
 	<SolidSolution>
-		<Name>Omphacite</Name>
+		<Name>AlkaliPyroxenes</Name>
 		<Formula>(Na,Ca)(Mg,Fe,Al)Si2O6</Formula>
 		<Members>
 			<Mineral>
@@ -1401,7 +1402,7 @@
 					</ValueTupleOfStringDouble>
 				</Elements>
 			</Mineral>
-			<!-- 260917Claude: Jd-Di-Hd-Ae 4端成分系へ拡張。Q = Di + Hd <= 0.8 かつ Jadeite 側 (Jd >= Ae) を Omphacite とし、旧 Jadeite 領域を含める。Q > 0.8 (Pyroxene と重なる Di-Hd 辺) は除外。 -->
+			<!-- 260917Claude: Historical split (superseded by 261106Codex above): Jd-Di-Hd-Ae 4端成分系へ拡張。Q = Di + Hd <= 0.8 かつ Jadeite 側 (Jd >= Ae) を Omphacite とし、旧 Jadeite 領域を含める。Q > 0.8 (Pyroxene と重なる Di-Hd 辺) は除外。 -->
 			<Mineral>
 				<Name>Aegirine</Name>
 				<FormulaText>NaFeSi2O6</FormulaText>
@@ -1428,7 +1429,6 @@
 		</Members>
 		<Constraints>
 			<string>Diopside + Hedenbergite &lt;= 0.8</string>
-			<string>Jadeite &gt;= Aegirine</string>
 		</Constraints>
 	</SolidSolution>
 	<SolidSolution>
@@ -2314,107 +2314,5 @@
 		</Members>
 		<Constraints />
 	</SolidSolution>
-	<!-- 260917Claude: 輝石三角図の右下半分 (Q = Di + Hd <= 0.8 かつ Aegirine 側 Ae > Jd) を独立 class Aegirine とし、旧 Aegirine-augite 領域を含める。Jd = Ae の境界は Omphacite 側。 -->
-	<SolidSolution>
-		<Name>Aegirine</Name>
-		<Formula>(Na,Ca)(Mg,Fe,Al)Si2O6</Formula>
-		<Members>
-			<Mineral>
-				<Name>Jadeite</Name>
-				<FormulaText>NaAlSi2O6</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Na</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Al</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Si</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>6</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-			<Mineral>
-				<Name>Diopside</Name>
-				<FormulaText>CaMgSi2O6</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Ca</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Mg</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Si</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>6</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-			<Mineral>
-				<Name>Hedenbergite</Name>
-				<FormulaText>CaFeSi2O6</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Ca</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Fe</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Si</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>6</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-			<Mineral>
-				<Name>Aegirine</Name>
-				<FormulaText>NaFeSi2O6</FormulaText>
-				<density>0</density>
-				<Elements>
-					<ValueTupleOfStringDouble>
-						<Item1>Na</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Fe</Item1>
-						<Item2>1</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>Si</Item1>
-						<Item2>2</Item2>
-					</ValueTupleOfStringDouble>
-					<ValueTupleOfStringDouble>
-						<Item1>O</Item1>
-						<Item2>6</Item2>
-					</ValueTupleOfStringDouble>
-				</Elements>
-			</Mineral>
-		</Members>
-		<Constraints>
-			<string>Diopside + Hedenbergite &lt;= 0.8</string>
-			<string>Aegirine &gt; Jadeite</string>
-		</Constraints>
-	</SolidSolution>
+	<!-- 260917Claude: Historical split (superseded by 261106Codex above): 輝石三角図の右下半分 (Q = Di + Hd <= 0.8 かつ Aegirine 側 Ae > Jd) を独立 class Aegirine とし、旧 Aegirine-augite 領域を含める。Jd = Ae の境界は Omphacite 側。 -->
 </ArrayOfSolidSolution>
