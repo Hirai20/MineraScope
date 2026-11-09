@@ -55,17 +55,16 @@ namespace MineraScope
             if (labelMap.Distinct().Count() != classNames.Length)
                 throw new InvalidDataException("固定データと分類モデルの鉱物集合が一致しません。");
 
-            var features = new float[info.SampleCount][];
-            var labels = new int[info.SampleCount];
-            var distances = new double[classNames.Length];
-            int rowIndex = 0;
-            foreach (float[] spectrum in ClassificationTrainingDataset.ReadRows(datasetFolder, info, cancellationToken))
+            // 261106Codex: 各行の演算順は変えず、読み取りバッファーと距離の作業領域を共有しない単位で並列化する。
+            float[][] features = SoftmaxOcnHeadFeatures.TransformRows(
+                ClassificationTrainingDataset.ReadRows(datasetFolder, info, cancellationToken), info.SampleCount, spectrum =>
             {
+                var distances = new double[classNames.Length];
                 detector.Distances(extractor.Transform(spectrum), distances);
-                features[rowIndex] = SoftmaxOcnHeadFeatures.TransformAll(distances, detector.Thresholds, normalized: false);
-                labels[rowIndex] = labelMap[info.Samples[rowIndex].Label];
-                rowIndex++;
-            }
+                // 261109Codex: 規格化方針を撤去し、従来のRaw距離特徴量だけを使う。
+                return SoftmaxOcnHeadFeatures.TransformAll(distances, detector.Thresholds);
+            }, cancellationToken);
+            int[] labels = info.Samples.Select(sample => labelMap[sample.Label]).ToArray();
             int[][] training = Group(info.TrainingIndices, labels, classNames.Length);
             int[][] validation = Group(info.ValidationIndices, labels, classNames.Length);
             if (training.Any(group => group.Length < KnownQueryPerClass)
@@ -78,6 +77,8 @@ namespace MineraScope
             int inputCount = Math.Min(3, classNames.Length - hiddenCount);
             var head = new SoftmaxOcnHead(random, inputCount);
             int[][] validationGroups = FixedHiddenGroups(classNames.Length, hiddenCount);
+            // 261106Codex: 検証のクラスマスクと入力は全エポック共通なので、同じ並びで一度だけ距離入力を作る。
+            ValidationInput[] validationInputs = PrepareValidation(features, validation, validationGroups, inputCount, cancellationToken);
             float[] best = head.Snapshot();
             double bestScore = double.NegativeInfinity;
             int bestEpoch = 0;
@@ -91,7 +92,7 @@ namespace MineraScope
                     var (inputs, targets) = SampleEpisode(random, features, training, classNames.Length, hiddenCount, inputCount);
                     loss += head.TrainStep(inputs, targets);
                 }
-                var (known, unknown) = Validate(head, features, validation, validationGroups, cancellationToken);
+                var (known, unknown) = Validate(head, validationInputs, cancellationToken);
                 double score = (known + unknown) / 2;
                 if (score > bestScore)
                 {
@@ -173,29 +174,46 @@ namespace MineraScope
             return (inputs, targets);
         }
 
-        private static (double Known, double Unknown) Validate(SoftmaxOcnHead head, float[][] features,
-            int[][] groups, int[][] hiddenGroups, CancellationToken token)
+        // 261106Codex: 学習で更新されない検証入力と正解側だけを保持し、headの出力は毎エポック計算する。
+        internal readonly record struct ValidationInput(float[] Values, bool IsUnknown);
+
+        // 261106Codex: 元のマスク・クラス・行の順を保持し、疑似Unknownと学習済み側の集計比率を変えない。
+        internal static ValidationInput[] PrepareValidation(float[][] features, int[][] rowsByClass,
+            int[][] hiddenLabelGroups, int inputCount, CancellationToken token)
         {
-            long knownCorrect = 0, knownTotal = 0, unknownCorrect = 0, unknownTotal = 0;
-            foreach (int[] hiddenLabels in hiddenGroups)
+            var inputs = new List<ValidationInput>(checked(hiddenLabelGroups.Length * rowsByClass.Sum(rows => rows.Length)));
+            foreach (int[] hiddenLabels in hiddenLabelGroups)
             {
                 token.ThrowIfCancellationRequested();
-                var hidden = CreateHiddenMask(groups.Length, hiddenLabels);
-                for (int label = 0; label < groups.Length; label++)
-                    foreach (int index in groups[label])
+                var hidden = CreateHiddenMask(rowsByClass.Length, hiddenLabels);
+                for (int label = 0; label < rowsByClass.Length; label++)
+                    foreach (int index in rowsByClass[label])
                     {
-                        bool predictedUnknown = head.Predict(SoftmaxOcnHeadFeatures.Nearest(features[index], hidden, head.InputCount)) > .5;
-                        if (hidden[label])
-                        {
-                            unknownTotal++;
-                            if (predictedUnknown) unknownCorrect++;
-                        }
-                        else
-                        {
-                            knownTotal++;
-                            if (!predictedUnknown) knownCorrect++;
-                        }
+                        token.ThrowIfCancellationRequested();
+                        inputs.Add(new(SoftmaxOcnHeadFeatures.Nearest(features[index], hidden, inputCount), hidden[label]));
                     }
+            }
+            return inputs.ToArray();
+        }
+
+        // 261106Codex: キャッシュした入力に現在のheadを適用し、従来と同じ整数カウントからスコアを求める。
+        internal static (double Known, double Unknown) Validate(SoftmaxOcnHead head, ValidationInput[] inputs, CancellationToken token)
+        {
+            long knownCorrect = 0, knownTotal = 0, unknownCorrect = 0, unknownTotal = 0;
+            foreach (ValidationInput input in inputs)
+            {
+                token.ThrowIfCancellationRequested();
+                bool predictedUnknown = head.Predict(input.Values) > .5;
+                if (input.IsUnknown)
+                {
+                    unknownTotal++;
+                    if (predictedUnknown) unknownCorrect++;
+                }
+                else
+                {
+                    knownTotal++;
+                    if (!predictedUnknown) knownCorrect++;
+                }
             }
             return ((double)knownCorrect / knownTotal, (double)unknownCorrect / unknownTotal);
         }

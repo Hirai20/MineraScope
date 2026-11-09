@@ -36,6 +36,10 @@ namespace MineraScope.Tests
                 File.WriteAllText(artifactPath, JsonSerializer.Serialize(artifact with { InputCount = 0 }, jsonOptions));
                 TestAssert.Throws<InvalidDataException>(() => SoftmaxOcnHeadArtifact.Load(model), "Malformed widths are rejected.");
                 File.WriteAllText(artifactPath, JsonSerializer.Serialize(artifact, jsonOptions));
+                // 261109Codex: 撤去した規格化headをRawとして誤読せず拒否し、Raw保存物の互換性を維持する。
+                File.WriteAllText(artifactPath, JsonSerializer.Serialize(artifact with { Input = "Normalized" }, jsonOptions));
+                TestAssert.Throws<InvalidDataException>(() => SoftmaxOcnHeadArtifact.Load(model), "Unsupported head input is rejected.");
+                File.WriteAllText(artifactPath, JsonSerializer.Serialize(artifact, jsonOptions));
                 if (width == 3)
                 {
                     string file = Path.Combine(classification, SoftmaxOcnHeadArtifact.FileName);

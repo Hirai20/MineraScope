@@ -6,6 +6,12 @@ namespace MineraScope.Tests
         // 260907Codex: Optionally compare equal-weight plans against an explicitly supplied pre-change assembly, without invoking its application entry point.
         public static int Main(string[] args)
         {
+            // 261106Codex: 実験を上書きせず、固定した分類器とデータでOCNだけの時間・出力を測定する。
+            if (args.Length == 5 && args[0] == "--softmax-ocn-performance")
+            {
+                SoftmaxOcnPerformanceBenchmark.Run(args[1], args[2], args[3], args[4]);
+                return 0;
+            }
             // 261106Codex: 実DTSA-IIを使う比較生成は明示オプションだけで実行する。
             if (args.Length is 2 or 3 && args[0] == "--simulation-benchmark")
             {
@@ -87,6 +93,8 @@ namespace MineraScope.Tests
             [
                 // 261021Codex: 研究用実験を含めず、保存済みheadの整合性と通常OCNの契約を検証する。
                 ("Saved OCN artifact integrity", SavedOcnArtifactTests.Run),
+                // 261109Codex: 公開版でも、OCNの行所有権と検証入力の同等性を確認する。
+                ("OCN feature ownership and validation equivalence", SoftmaxOcnTrainingPerformanceTests.Run),
                 ("Product OCN contracts", ProductOcnTests.Run),
                 // 261021Codex: 別プロセス間の生成・読み取り共有とJSON公開を検証する。
                 ("Cross-process spectrum pool concurrency", ConcurrencyTests.Run),

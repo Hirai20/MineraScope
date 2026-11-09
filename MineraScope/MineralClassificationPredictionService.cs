@@ -254,7 +254,8 @@ namespace MineraScope
             var distances = new double[_unknownDetector!.LabelCount];
             _unknownDetector.Distances(embedding, distances);
             float[] input = SoftmaxOcnHeadFeatures.Nearest(
-                SoftmaxOcnHeadFeatures.TransformAll(distances, _unknownDetector.Thresholds, normalized: false), null, head.InputCount);
+                // 261109Codex: 学習と同じRaw専用の距離変換で判定する。
+                SoftmaxOcnHeadFeatures.TransformAll(distances, _unknownDetector.Thresholds), null, head.InputCount);
             double score = head.Predict(input);
             return new MineralUnknownDetectionResult(score > .5, score, .5, Array.IndexOf(distances, distances.Min()));
         }
