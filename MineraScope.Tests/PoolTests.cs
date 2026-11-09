@@ -7,11 +7,34 @@ namespace MineraScope.Tests
     {
         public static void Run()
         {
+            // 261109Codex: 公開版でも、中止済みの終了集計がpoolへ触れないことを確認する。
+            CanceledSummariesDoNotTouchPools();
             PreviewIsReadOnlyAndLegacyRowsResume();
             InvalidCompletedFilesRemainShortages();
             PendingRecoveryKeepsReservations();
             DeletedPlanRestoresOnlyFromCompleteConsistentRows();
             CompletedRowsCanBelongToMultiplePlans();
+        }
+
+        // 261107Codex: Bと単一時間の両経路で、終了集計の中止がファイルアクセスより先に伝わることを確認する。
+        private static void CanceledSummariesDoNotTouchPools()
+        {
+            using var fixture = new TestFixture();
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+            var before = fixture.Snapshot();
+            foreach (bool planned in new[] { true, false })
+            {
+                var request = planned ? fixture.Request : fixture.Request with { SpectrumTimeSchedule = null };
+                TestAssert.Throws<OperationCanceledException>(() => fixture.Workflow.GetStatusCounts(request,
+                    validateCompletedSpectra: false, cancellationToken: cancellation.Token),
+                    "Canceled status counts must not begin reading pools or rebuilding plans.");
+                TestAssert.Throws<OperationCanceledException>(() => fixture.Workflow.GetShortages(request,
+                    validateCompletedSpectra: false, cancellationToken: cancellation.Token),
+                    "Canceled shortage counts must not begin reading pools or rebuilding plans.");
+            }
+            TestAssert.Equal(0, fixture.Repository.ManifestReadCount, "Canceled summaries must not read any manifest.");
+            TestAssert.SequenceEqual(before, fixture.Snapshot(), "Canceled summaries must not create or modify plans or pool files.");
         }
 
         // 260907Codex: Adopt exact legacy rows once, then cancel and retry without allocating new identities or replacing Completed spectra.

@@ -80,12 +80,22 @@ namespace MineraScope
         }
 
         // 260901Codex: 従来の単一時間経路を保持しつつ、有効な各時間割当を別々に集計する。
+        // 261107Codex: 生成後の集計中も中止を伝え、次のpoolや計画の再計算へ進まない。
         public IReadOnlyList<SpectrumPoolShortage> GetShortages(
             ModelCreationRequest request,
-            bool validateCompletedSpectra = true)
+            bool validateCompletedSpectra = true,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            // 261107Codex: 単一呼出しの転送メソッドを省き、計画の保存条件と不足行の抽出を入口で明示する。
             if (request.UsesCompositionTimePlan)
-                return GetCompositionTimePlanShortages(request, validateCompletedSpectra);
+                // 260907Codex: 計画予約後の不足を満たすのは計画タグ付きCompleted行だけとし、旧行は予約時に取り込み、学習時に暗黙に採用しない。
+                // 261107Codex: 生成終了時の不足集計へ中止tokenを引き継ぐ。
+                return CollectCompositionTimePlanShortages(request, validateCompletedSpectra,
+                    persistPlan: true, includeLegacyCompleted: false, cancellationToken: cancellationToken)
+                    // 260907Codex: 従来の契約に合わせ、完了計画は不足0の5行ではなく、不足行なしとする。
+                    .Where(item => item.MissingCount > 0)
+                    .ToArray();
 
             var shortages = new List<SpectrumPoolShortage>();
 
@@ -94,7 +104,7 @@ namespace MineraScope
                 var allocationRequest = request.ForSpectrumTimeAllocation(allocation);
                 foreach (var solution in request.SelectedMineralSolutions)
                 {
-                    var state = LoadState(allocationRequest, solution, validateCompletedSpectra);
+                    var state = LoadState(allocationRequest, solution, validateCompletedSpectra, cancellationToken: cancellationToken);
                     int completedCount = state.CompletedEntries.Count;
                     if (completedCount < allocation.TargetSpectrumCount)
                         shortages.Add(new SpectrumPoolShortage(
@@ -162,12 +172,15 @@ namespace MineraScope
         }
 
         // 260901Codex: 有効な全測定時間のpoolで、状態件数を集計する。
+        // 261107Codex: 集計開始前と各pool・予定行の処理中に中止を受け付ける。
         public SpectrumPoolStatusCounts GetStatusCounts(
             ModelCreationRequest request,
-            bool validateCompletedSpectra = true)
+            bool validateCompletedSpectra = true,
+            CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (request.UsesCompositionTimePlan)
-                return GetCompositionTimePlanStatusCounts(request, validateCompletedSpectra);
+                return GetCompositionTimePlanStatusCounts(request, validateCompletedSpectra, cancellationToken);
 
             int completed = 0;
             int failed = 0;
@@ -179,9 +192,10 @@ namespace MineraScope
                 var allocationRequest = request.ForSpectrumTimeAllocation(allocation);
                 foreach (var solution in request.SelectedMineralSolutions)
                 {
-                    var state = LoadState(allocationRequest, solution, validateCompletedSpectra);
+                    var state = LoadState(allocationRequest, solution, validateCompletedSpectra, cancellationToken: cancellationToken);
                     foreach (var entry in state.Manifest.Spectra)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         switch (entry.Status)
                         {
                             case SpectrumManifestStatus.Completed:
@@ -205,9 +219,11 @@ namespace MineraScope
         }
 
         // 260907Codex: Bの状態は予定行だけで報告し、保存した旧スペクトルのために完了計画が失敗・未完了に見えないようにする。
+        // 261107Codex: 中止を組成計画の再計算にも伝える。
         private SpectrumPoolStatusCounts GetCompositionTimePlanStatusCounts(
             ModelCreationRequest request,
-            bool validateCompletedSpectra)
+            bool validateCompletedSpectra,
+            CancellationToken cancellationToken)
         {
             int completed = 0;
             int failed = 0;
@@ -215,12 +231,14 @@ namespace MineraScope
             int pending = 0;
             foreach (var solution in request.SelectedMineralSolutions)
             {
-                var state = BuildCompositionTimePlanState(request, solution, validateCompletedSpectra, persistPlan: true);
+                var state = BuildCompositionTimePlanState(request, solution, validateCompletedSpectra, persistPlan: true,
+                    cancellationToken: cancellationToken);
                 foreach (var entry in BuildPlanBindings(solution, state, includeLegacyCompleted: false, createMissingEntries: false)
                     .Select(item => item.Entry)
-                    .Where(entry => entry is not null)
-                    .Cast<SpectrumManifestEntry>())
+                    // 261107Codex: null除外と型への変換をまとめ、採用行と順序を保つ。
+                    .OfType<SpectrumManifestEntry>())
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     switch (entry.Status)
                     {
                         case SpectrumManifestStatus.Completed:
@@ -735,30 +753,20 @@ namespace MineraScope
                 persistPlan: false,
                 includeLegacyCompleted: true);
 
-        // 260907Codex: 計画予約後の不足を満たすのは計画タグ付きCompleted行だけとし、旧行は予約時に取り込み、学習時に暗黙に採用しない。
-        private IReadOnlyList<SpectrumPoolShortage> GetCompositionTimePlanShortages(
-            ModelCreationRequest request,
-            bool validateCompletedSpectra)
-            => CollectCompositionTimePlanShortages(
-                request,
-                validateCompletedSpectra,
-                persistPlan: true,
-                includeLegacyCompleted: false)
-                // 260907Codex: 従来の契約に合わせ、完了計画は不足0の5行ではなく、不足行なしとする。
-                .Where(item => item.MissingCount > 0)
-                .ToArray();
-
         // 260907Codex: プレビューでは予約前に一致する旧行を数えられるが、以後の状態・学習検証では保存計画へ結び付いた行を必須にする。
+        // 261107Codex: 既存のプレビュー呼出しは保ち、生成後集計では中止を計画構築へ伝える。
         private IReadOnlyList<SpectrumPoolShortage> CollectCompositionTimePlanShortages(
             ModelCreationRequest request,
             bool validateCompletedSpectra,
             bool persistPlan,
-            bool includeLegacyCompleted)
+            bool includeLegacyCompleted,
+            CancellationToken cancellationToken = default)
         {
             var shortages = new List<SpectrumPoolShortage>();
             foreach (var solution in request.SelectedMineralSolutions)
             {
-                var state = BuildCompositionTimePlanState(request, solution, validateCompletedSpectra, persistPlan);
+                var state = BuildCompositionTimePlanState(request, solution, validateCompletedSpectra, persistPlan,
+                    cancellationToken: cancellationToken);
                 var bindings = BuildPlanBindings(solution, state, includeLegacyCompleted, createMissingEntries: false);
                 foreach (var pool in state.Pools)
                 {
@@ -1172,6 +1180,8 @@ namespace MineraScope
             // 260908Codex: 任意の同時読込数は、学習準備だけから渡す。
             int validationParallelism = 1)
         {
+            // 261107Codex: 中止後に次のpoolの管理ファイルを読み書きしない。
+            cancellationToken.ThrowIfCancellationRequested();
             var handle = _repository.ResolvePool(
                 request.Paths.SpectrumOutputFolder,
                 solution,

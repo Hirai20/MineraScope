@@ -192,8 +192,9 @@ namespace MineraScope
             using var outputMonitorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             using var watchdogCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var outputMonitorTask = MonitorOutputFilesAsync(job, progress, savedFiles, activity, outputMonitorCts.Token);
-            var standardOutputTask = ReadStandardOutputAsync(process, progress, savedFiles, activity);
-            var standardErrorTask = process.StandardError.ReadToEndAsync();
+            // 261107Codex: 同期パイプの読み待ちでThreadPoolを占有せず、中止・監視の継続処理を動かせるようにする。
+            var standardOutputTask = ReadRedirectedOutputAsync(() => ReadStandardOutput(process, progress, savedFiles, activity));
+            var standardErrorTask = ReadRedirectedOutputAsync(process.StandardError.ReadToEnd);
             var watchdogTask = WatchDtsaProcessAsync(process, job, savedFiles, activity, run.Log, watchdogCts.Token);
             // 260717Claude: kill 前後のログで script/pid を対応づける (並行ジョブが混ざっても追える)。
             string killContext = $"script={scriptName} pid={processIdText}";
@@ -307,9 +308,14 @@ namespace MineraScope
             }
         }
 
+        // 261107Codex: 出力待ちのスレッドを分離し、無出力のJavaが多数あってもキャンセルを処理できるようにする。
+        internal static Task<string> ReadRedirectedOutputAsync(Func<string> readOutput) =>
+            Task.Factory.StartNew(readOutput, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
         // 260528Codex: DTSA-II スクリプトの保存完了マーカーを逐次読み、生成ファイル数ベースで進捗を進めます。
         // 260606Claude: 併せてマーカーのファイル名を savedFiles へ記録し、ジョブ途中失敗でも保存済み spectrum を Completed と判定できるようにします。
-        private static async Task<string> ReadStandardOutputAsync(
+        // 261107Codex: 専用スレッドで同期読み取りし、保存通知・出力内容・終了後の回収は従来どおり保つ。
+        private static string ReadStandardOutput(
             Process process,
             SimulationJobProgress progress,
             SavedSpectrumFileTracker savedFiles,
@@ -317,7 +323,7 @@ namespace MineraScope
         {
             var builder = new StringBuilder();
             string? line;
-            while ((line = await process.StandardOutput.ReadLineAsync()) is not null)
+            while ((line = process.StandardOutput.ReadLine()) is not null)
             {
                 builder.AppendLine(line);
                 if (!line.StartsWith(SavedSpectrumMarker, StringComparison.Ordinal))

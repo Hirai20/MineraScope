@@ -12,6 +12,8 @@ namespace MineraScope.Tests
         // 261104Codex: 通常テストとして実Javaを使わない検証だけを実行する。
         public static void Run()
         {
+            // 261107Codex: 無出力の20並列ジョブでも中止処理用のThreadPoolを塞がないことを検証する。
+            SimulationProcessOutputTests.Run();
             ExistingPartitionsAndConditionsArePreserved();
             BenchmarkReplaysTheSameReservations();
             CrossBatchExecutionAndSerializedCheckpointsAsync().GetAwaiter().GetResult();

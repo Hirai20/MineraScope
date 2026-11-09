@@ -436,6 +436,8 @@ namespace MineraScope
             }
 
             using var cancellationTokenSource = new CancellationTokenSource();
+            // 261107Codex: 生成から終了集計まで同じ中止tokenを使うことを一度だけ明示する。
+            CancellationToken cancellationToken = cancellationTokenSource.Token;
             _simulationCancellationTokenSource = cancellationTokenSource;
             buttonRunSpectrumGeneration.Enabled = false;
             // 260527Codex: 生成と学習が同時に同じ pool を触らないよう、生成中はモデル作成を止めます。
@@ -462,15 +464,15 @@ namespace MineraScope
                     var recovery = _spectrumPoolWorkflow.RecoverPendingSpectra(
                         request,
                         preparationProgress,
-                        cancellationTokenSource.Token);
+                        cancellationToken);
                     var plan = _spectrumPoolWorkflow.CreateMissingSimulationPlan(
                         request,
                         out var shortages,
                         preparationProgress,
-                        cancellationTokenSource.Token,
+                        cancellationToken,
                         validateCompletedSpectra: false);
                     return (Recovery: recovery, Plan: plan, Shortages: shortages);
-                }, cancellationTokenSource.Token);
+                }, cancellationToken);
 
                 TrainLog(
                     $"Pending回収: 確認 {preparation.Recovery.ExaminedCount} 件 / 復旧 {preparation.Recovery.RecoveredCount} 件 / " +
@@ -501,16 +503,30 @@ namespace MineraScope
                     reservedSpectrumCount);
 
                 // 260901Codex: 各鉱物 batch の結果を後続 batch 開始前に原子的保存し、中断済み成果を保持します。
-                var progress = new Progress<SimulationExecutionProgress>(ReportSimulationProgress);
-                var results = await _simulationExecutionService.RunAsync(
+                // 261107Codex: 中止中・終了後に届いた通知で停止表示や次回実行の進捗を上書きしない。
+                var progress = new Progress<SimulationExecutionProgress>(item =>
+                {
+                    if (ReferenceEquals(_simulationCancellationTokenSource, cancellationTokenSource)
+                        && !cancellationTokenSource.IsCancellationRequested)
+                        ReportSimulationProgress(item);
+                });
+                // 261107Codex: run開始時のログ・検出器情報などの準備I/Oも画面外で実行する。
+                var results = await Task.Run(() => _simulationExecutionService.RunAsync(
                     preparation.Plan,
                     progress,
-                    cancellationTokenSource.Token,
+                    cancellationToken,
                     (_, batchResults) =>
                     {
                         _spectrumPoolWorkflow.ApplySimulationResults(batchResults);
                         return Task.CompletedTask;
-                    });
+                    }));
+                // 261107Codex: serviceで停止・途中保存の回収を終えた中止は、全体再集計とジョブ別ログを省いて戻す。
+                if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
+                {
+                    TrainLog("spectrum 生成をキャンセルしました。保存済みデータの回収が完了しました。");
+                    SetStatusWithElapsed("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
+                    return;
+                }
                 foreach (var result in results)
                     LogSimulationExecutionResult(result);
                 // 261103Claude: DTSA-II の失敗理由 (C# で拾えない組成式の誤りなど) を不足のメッセージに添え、ログを開かなくても原因が分かるようにする。
@@ -518,18 +534,15 @@ namespace MineraScope
 
                 // 260901Codex: 全時間poolの検証は大量のEMSAを読むため、終了後の集計もUIスレッド外で行います。
                 var finalState = await Task.Run(() =>
-                    (Counts: _spectrumPoolWorkflow.GetStatusCounts(request, validateCompletedSpectra: false),
-                     Shortages: _spectrumPoolWorkflow.GetShortages(request, validateCompletedSpectra: false)));
+                    (Counts: _spectrumPoolWorkflow.GetStatusCounts(request, validateCompletedSpectra: false, cancellationToken: cancellationToken),
+                     Shortages: _spectrumPoolWorkflow.GetShortages(request, validateCompletedSpectra: false, cancellationToken: cancellationToken)),
+                    cancellationToken);
+                // 261107Codex: 終了集計中に中止された場合も、通常完了の表示へ進めない。
+                cancellationToken.ThrowIfCancellationRequested();
                 TrainLog(
                     $"manifest status: Completed {finalState.Counts.Completed} 件 / Failed {finalState.Counts.Failed} 件 / " +
                     $"Missing {finalState.Counts.Missing} 件 / Pending {finalState.Counts.Pending} 件");
-                // 261018Codex: 中止後も集計ログは残し、通常の完了・不足表示でキャンセル状態を上書きしない。
-                if (cancellationTokenSource.IsCancellationRequested || results.Any(result => result.IsCanceled))
-                {
-                    TrainLog("spectrum 生成をキャンセルしました。");
-                    SetStatusWithElapsed("spectrum 生成: キャンセル", toolStripProgressBar1.Value, toolStripProgressBar1.Maximum);
-                    return;
-                }
+                // 261018Codex: 通常の完了・不足表示でキャンセル状態を上書きしない。
 
                 SetStatusWithElapsed(
                     $"manifest status: Completed {finalState.Counts.Completed} / Failed {finalState.Counts.Failed} / Missing {finalState.Counts.Missing} / Pending {finalState.Counts.Pending}",
@@ -1384,14 +1397,16 @@ namespace MineraScope
             UpdateSelectedSolution();
         }
 
-        private void buttonCancel_Click(object sender, EventArgs e)
+        // 261107Codex: 中止callbackを非同期に実行し、プロセス停止・回収を待つ間も画面を応答可能に保つ。
+        private async void buttonCancel_Click(object sender, EventArgs e)
         {
             // 260514Codex: 既存の中止ボタンから、現在動いている spectrum 生成またはモデル作成へキャンセル要求を送ります。
             if (_simulationCancellationTokenSource is { IsCancellationRequested: false } simulationCancellationTokenSource)
             {
                 TrainLog("spectrum 生成のキャンセルを要求しました。");
-                simulationCancellationTokenSource.Cancel();
                 buttonCancel.Enabled = false;
+                SetStatusMarqueeWithElapsed("spectrum 生成: 停止・保存済みデータ回収中");
+                await simulationCancellationTokenSource.CancelAsync();
                 return;
             }
 
