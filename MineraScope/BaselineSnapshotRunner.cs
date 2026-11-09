@@ -429,12 +429,10 @@ namespace MineraScope
                     generator.UnknownDistanceScale),
                 solutions)
             {
-                SpectrumTimeAllocations = useMeasurementTimePresetB
-                    ? SpectrumTimeSchedule.MeasurementTimeB.CreateAllocations()
-                    : [],
                 // 260907Codex: Baseline coverage must exercise the same B planner as interactive and headless generation.
+                // 261109Codex: 公開版の基準採取も、GUIで指定した総本数を使う。
                 SpectrumTimeSchedule = useMeasurementTimePresetB
-                    ? SpectrumTimeSchedule.MeasurementTimeB
+                    ? SpectrumTimeSchedule.MeasurementTimeB with { TotalSpectrumCount = (int)generator.TargetSpectrumCount }
                     : null
             };
         }

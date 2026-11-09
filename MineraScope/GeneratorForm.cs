@@ -274,19 +274,17 @@ namespace MineraScope
             SetAdvancedSettingsVisible(checkBoxAdvanced.Checked);
         }
 
-        // 260901Codex: B は測定時間と本数を固定するため、使用しない単一条件の入力欄を隠します。
+        // 260901Codex: B 選択時は使用しない単一測定時間の入力欄を隠します。
+        // 261107Codex: Bでも鉱物あたりの総本数を指定できるよう、本数欄は常に表示する。
         // 261021Codex: OCN説明欄を削除したため、測定条件変更時の更新対象からも除く。
         private void checkBoxMeasurementTimePresetB_CheckedChanged(object sender, EventArgs e)
         {
             ApplyMeasurementTimePresetUiState();
         }
 
-        private void ApplyMeasurementTimePresetUiState()
-        {
-            bool usePresetB = checkBoxMeasurementTimePresetB.Checked;
-            numericBoxLiveTime.Visible = !usePresetB;
-            numericBoxSpectraPerMineral.Visible = !usePresetB;
-        }
+        // 261107Codex: 起動時とチェック変更時で共用する表示更新を直接記述する。
+        private void ApplyMeasurementTimePresetUiState() =>
+            numericBoxLiveTime.Visible = !checkBoxMeasurementTimePresetB.Checked;
 
         // 261021Codex: 表示だけを切り替え、行の高さはDesignerのAutoSizeに任せる。
         private void SetAdvancedSettingsVisible(bool visible)
@@ -329,7 +327,9 @@ namespace MineraScope
         // 260901Codex: B 選択時は生成と学習が同じ共通測定時間配分を使う request にします。
         private ModelCreationRequest CreateModelCreationRequest(DetectorProfile detectorProfile)
         {
-            var request = new ModelCreationRequest(
+            // 261107Codex: 総本数を共用し、予定表を初期化した要求をコピーせずに返す。
+            int targetSpectrumCount = (int)numericBoxSpectraPerMineral.Value;
+            return new ModelCreationRequest(
                 // 260424Codex: Python スクリプトの保存先は固定パスへ集約した値を使います。
                 new ModelCreationPaths(
                     EdxOutputPath.Trim(),
@@ -346,7 +346,7 @@ namespace MineraScope
                     numericBoxProbeCurrent.Value),
                 // 261021Codex: 生成設定から膜厚ランダム化を削除し、SEM-EDX条件の指定膜厚だけを使う。
                 new SimulationExecutionSettings(
-                    (int)numericBoxSpectraPerMineral.Value,
+                    targetSpectrumCount,
                     (double)numericBoxResolution.Value / 100,
                     (int)numericBoxParallel.Value),
                 new ModelTrainingSettings(
@@ -358,16 +358,12 @@ namespace MineraScope
                     // 261001Codex: 新モデルの倍率を固定し、保存済みモデルは記録したしきい値を保持する。
                     1d),
                 // 260511Codex: 1 回だけの CheckedListBox helper を避け、選択対象はその場で配列化します。
-                checkedListBoxMinerals.CheckedItems.Cast<SolidSolution>().ToArray());
-
-            return request with
+                checkedListBoxMinerals.CheckedItems.Cast<SolidSolution>().ToArray())
             {
-                SpectrumTimeAllocations = checkBoxMeasurementTimePresetB.Checked
-                    ? SpectrumTimeSchedule.MeasurementTimeB.CreateAllocations()
-                    : [],
                 // 260907Codex: 固定のBチェックのUIを保ち、全ライブタイムをまとめた組成計画をワークフローへ要求する。
+                // 261107Codex: 5つの測定時間へ画面指定の総本数を配分し、検証は共通の要求検証で行う。
                 SpectrumTimeSchedule = checkBoxMeasurementTimePresetB.Checked
-                    ? SpectrumTimeSchedule.MeasurementTimeB
+                    ? SpectrumTimeSchedule.MeasurementTimeB with { TotalSpectrumCount = targetSpectrumCount }
                     : null
             };
         }

@@ -18,7 +18,9 @@ namespace MineraScope.Tests
                 (10, 10, 5),
                 (8, 3, 5),
                 (11, 4, 3),
-                (1000, 101, 5)
+                (1000, 101, 5),
+                // 261107Codex: 2000本でも各測定時間の本数と組成の反復数を正確に保つ。
+                (2000, 101, 5)
             })
             {
                 var allocations = new SpectrumTimeSchedule(

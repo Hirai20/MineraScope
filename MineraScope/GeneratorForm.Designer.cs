@@ -135,7 +135,7 @@ namespace MineraScope
             // 
             buttonRunSpectrumGeneration.AutoSize = true;
             buttonRunSpectrumGeneration.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonRunSpectrumGeneration.Location = new Point(582, 2);
+            buttonRunSpectrumGeneration.Location = new Point(556, 2);
             buttonRunSpectrumGeneration.Margin = new Padding(3, 2, 3, 2);
             buttonRunSpectrumGeneration.Name = "buttonRunSpectrumGeneration";
             buttonRunSpectrumGeneration.Size = new Size(41, 25);
@@ -673,7 +673,7 @@ namespace MineraScope
             // 
             buttonModelTrain.AutoSize = true;
             buttonModelTrain.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonModelTrain.Location = new Point(629, 3);
+            buttonModelTrain.Location = new Point(603, 3);
             buttonModelTrain.Name = "buttonModelTrain";
             buttonModelTrain.Size = new Size(78, 25);
             buttonModelTrain.TabIndex = 5;
@@ -903,9 +903,9 @@ namespace MineraScope
             checkBoxMeasurementTimePresetB.CheckState = CheckState.Checked;
             checkBoxMeasurementTimePresetB.Location = new Point(116, 3);
             checkBoxMeasurementTimePresetB.Name = "checkBoxMeasurementTimePresetB";
-            checkBoxMeasurementTimePresetB.Size = new Size(278, 19);
+            checkBoxMeasurementTimePresetB.Size = new Size(252, 19);
             checkBoxMeasurementTimePresetB.TabIndex = 1;
-            checkBoxMeasurementTimePresetB.Text = "B（1/5/10/20/50秒 × 各200本、計1000本/鉱物）";
+            checkBoxMeasurementTimePresetB.Text = "B（1/5/10/20/50秒へ指定本数を均等配分）";
             checkBoxMeasurementTimePresetB.UseVisualStyleBackColor = true;
             checkBoxMeasurementTimePresetB.CheckedChanged += checkBoxMeasurementTimePresetB_CheckedChanged;
             // 
@@ -915,7 +915,7 @@ namespace MineraScope
             panelModelName.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             panelModelName.Controls.Add(labelModelName);
             panelModelName.Controls.Add(textBoxModelName);
-            panelModelName.Location = new Point(400, 3);
+            panelModelName.Location = new Point(374, 3);
             panelModelName.Name = "panelModelName";
             panelModelName.Size = new Size(176, 27);
             panelModelName.TabIndex = 3;
@@ -940,7 +940,7 @@ namespace MineraScope
             // 
             buttonCancel.AutoSize = true;
             buttonCancel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-            buttonCancel.Location = new Point(713, 3);
+            buttonCancel.Location = new Point(687, 3);
             buttonCancel.Name = "buttonCancel";
             buttonCancel.Size = new Size(41, 25);
             buttonCancel.TabIndex = 6;

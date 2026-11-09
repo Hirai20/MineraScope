@@ -21,7 +21,8 @@ namespace MineraScope
     //     MINERASCOPE_SIM_MINERAL       = <substring>         -> 鉱物名の部分一致で対象を絞る (省略時は DB 全鉱物)
     //   261103Claude: 保存設定を書き換えずに少数の確認生成をするための上書き。検出器は GUI と同じ規則で一覧 (DetectorProfiles.json) から引く。
     //     MINERASCOPE_SIM_DETECTOR      = <name>              -> 検出器名 (省略時は保存設定の検出器名)
-    //     MINERASCOPE_SIM_TARGET        = <count>             -> 1 鉱物あたりの本数 (省略時は保存設定)。測定時間 B は本数が固定なので併用できない
+    //   261107Codex: 測定時間Bも指定総数を5時間へ配分する。
+    //     MINERASCOPE_SIM_TARGET        = <count>             -> 1 鉱物あたりの総本数 (省略時は保存設定)。測定時間 B と併用可能
     //     MINERASCOPE_SIM_CARBON        = <µm>                -> 炭素蒸着膜の厚さ (省略時は保存設定)
     internal static class SimulationHeadlessRunner
     {
@@ -75,11 +76,6 @@ namespace MineraScope
                 Log($"ERROR: MINERASCOPE_SIM_CARBON={carbonText} は 0 以上の有限値ではありません。Abort.");
                 return;
             }
-            if (useMeasurementTimePresetB && targetOverride is not null)
-            {
-                Log("ERROR: 測定時間 B は本数が固定なので、MINERASCOPE_SIM_TARGET と併用できません。Abort.");
-                return;
-            }
 
             // 261104Codex: 検査した整数をそのまま使い、上書きした小数の本数を切り捨てない。
             int targetSpectrumCount = targetOverride ?? (int)generator.TargetSpectrumCount;
@@ -131,12 +127,10 @@ namespace MineraScope
                     generator.UnknownDistanceScale),
                 selectedSolutions)
             {
-                SpectrumTimeAllocations = useMeasurementTimePresetB
-                    ? SpectrumTimeSchedule.MeasurementTimeB.CreateAllocations()
-                    : [],
                 // 260907Codex: 非対話のBでも、読み取り専用プレビューを含めGUIと同じ時間横断の組成計画を使う。
+                // 261107Codex: 保存設定または環境変数で指定された総本数をGUIと同じ比率で配分する。
                 SpectrumTimeSchedule = useMeasurementTimePresetB
-                    ? SpectrumTimeSchedule.MeasurementTimeB
+                    ? SpectrumTimeSchedule.MeasurementTimeB with { TotalSpectrumCount = targetSpectrumCount }
                     : null
             };
 
