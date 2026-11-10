@@ -93,6 +93,8 @@ namespace MineraScope.Tests
             [
                 // 261021Codex: 研究用実験を含めず、保存済みheadの整合性と通常OCNの契約を検証する。
                 ("Saved OCN artifact integrity", SavedOcnArtifactTests.Run),
+                // 261110Codex: 公開版でも全入力の検知統計量と旧保存物の互換性を検証する。
+                ("All-data unknown detector statistics", MineralUnknownDetectorTests.Run),
                 // 261109Codex: 公開版でも、OCNの行所有権と検証入力の同等性を確認する。
                 ("OCN feature ownership and validation equivalence", SoftmaxOcnTrainingPerformanceTests.Run),
                 ("Product OCN contracts", ProductOcnTests.Run),

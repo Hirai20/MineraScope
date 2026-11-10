@@ -39,6 +39,10 @@ namespace MineraScope
         private const double DefaultThresholdRadiusExpansion = 1.15d;
         private const double BaseRidgeScale = 1e-3d;
 
+        // 261110Codex: 閾値の較正元とは別に、中心・共有共分散の算出元を保存する。
+        internal const string AllDataStatisticsSource = "classification_train_and_validation_splits";
+        private const string TrainingStatisticsSource = "classification_training_split";
+
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
         private readonly double[][] _means;
@@ -78,6 +82,10 @@ namespace MineraScope
 
         public int LabelCount => _means.Length;
 
+        // 261110Codex: 記録のない旧保存物は訓練分割由来として扱い、使用本数は推測しない。
+        public string StatisticsSource { get; private set; } = TrainingStatisticsSource;
+        public int? StatisticsSampleCount { get; private set; }
+
         // 260622Claude: radiusExpansion は UI の「既知と認める距離の倍率」から渡る。不正値 (1 未満や NaN) は既定値へフォールバックする。
         public static MineralUnknownDetector Build(
             Model model,
@@ -88,27 +96,56 @@ namespace MineraScope
             double radiusExpansion,
             CancellationToken cancellationToken)
         {
-            double resolvedRadiusExpansion = radiusExpansion >= 1d ? radiusExpansion : DefaultThresholdRadiusExpansion;
             var extractor = DenseClassificationFeatureExtractor.FromWeights(model.get_weights());
             float[,] trainEmbeddings = extractor.TransformFlat(xTrain.ToArray<float>(), (int)xTrain.shape[0]);
             int[] trainLabels = yTrain.ToArray<int>();
-            var detector = BuildFromEmbeddings(
-                trainEmbeddings,
-                trainLabels,
-                DefaultThresholdQuantile,
-                resolvedRadiusExpansion,
-                cancellationToken);
 
-            float[,] calibrationEmbeddings = xValidation.shape[0] > 0
-                ? extractor.TransformFlat(xValidation.ToArray<float>(), (int)xValidation.shape[0])
-                : trainEmbeddings;
-            int[] calibrationLabels = xValidation.shape[0] > 0 ? yValidation.ToArray<int>() : trainLabels;
+            // 261110Codex: 採用済みMLPの重みを固定し、検証分も中心・共有共分散の推定へ含める。
+            var validationRows = xValidation.shape[0];
+            float[,] validationEmbeddings = validationRows > 0
+                ? extractor.TransformFlat(xValidation.ToArray<float>(), (int)validationRows)
+                : new float[0, extractor.EmbeddingDim];
+            int[] validationLabels = validationRows > 0 ? yValidation.ToArray<int>() : [];
+            return Build(trainEmbeddings, trainLabels, validationEmbeddings, validationLabels,
+                radiusExpansion, cancellationToken);
+        }
+
+        // 261110Codex: 訓練・検証を一度だけ連結し、同じ全入力から中心・共分散・閾値を決める。
+        internal static MineralUnknownDetector Build(
+            float[,] trainEmbeddings, int[] trainLabels,
+            float[,] validationEmbeddings, int[] validationLabels,
+            double radiusExpansion, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int trainRows = trainEmbeddings.GetLength(0);
+            int validationRows = validationEmbeddings.GetLength(0);
+            int dim = trainEmbeddings.GetLength(1);
+            if (trainRows == 0 || trainLabels.Length != trainRows || validationLabels.Length != validationRows
+                || dim == 0 || validationEmbeddings.GetLength(1) != dim)
+                throw new InvalidDataException("Unknown detector requires matching training and validation embeddings and labels.");
+
+            var embeddings = trainEmbeddings;
+            var labels = trainLabels;
+            if (validationRows > 0)
+            {
+                embeddings = new float[checked(trainRows + validationRows), dim];
+                // 261110Codex: コピー長と検証分の開始位置に、同じ訓練バイト数を使う。
+                int trainingByteCount = Buffer.ByteLength(trainEmbeddings);
+                Buffer.BlockCopy(trainEmbeddings, 0, embeddings, 0, trainingByteCount);
+                Buffer.BlockCopy(validationEmbeddings, 0, embeddings, trainingByteCount, Buffer.ByteLength(validationEmbeddings));
+                labels = [.. trainLabels, .. validationLabels];
+            }
+
+            double resolvedRadiusExpansion = radiusExpansion >= 1d ? radiusExpansion : DefaultThresholdRadiusExpansion;
+            var detector = BuildFromEmbeddings(embeddings, labels, DefaultThresholdQuantile, resolvedRadiusExpansion, cancellationToken);
+            detector.StatisticsSource = AllDataStatisticsSource;
+            detector.StatisticsSampleCount = embeddings.GetLength(0);
             detector.SetThresholds(CalculateThresholds(
                 detector,
-                trainEmbeddings,
-                trainLabels,
-                calibrationEmbeddings,
-                calibrationLabels,
+                embeddings,
+                labels,
+                embeddings,
+                labels,
                 DefaultThresholdQuantile,
                 resolvedRadiusExpansion,
                 cancellationToken));
@@ -163,7 +200,12 @@ namespace MineraScope
                     artifact.Ridge,
                     artifact.Means,
                     artifact.Precision,
-                    thresholds);
+                    thresholds)
+                {
+                    // 261110Codex: 旧モデルの統計量を再計算せず、追加情報だけ後方互換で復元する。
+                    StatisticsSource = artifact.StatisticsSource ?? TrainingStatisticsSource,
+                    StatisticsSampleCount = artifact.StatisticsSampleCount
+                };
                 message = "loaded";
                 return true;
             }
@@ -194,7 +236,10 @@ namespace MineraScope
                 // 260810Claude: 保存形式は従来の 2 次元配列のまま (内部の平坦表現を書き出し時だけ戻す)。
                 Precision = ExpandPrecision(),
                 LabelCount = LabelCount,
-                CalibrationSource = "classification_train_and_test_split"
+                CalibrationSource = "classification_train_and_test_split",
+                // 261110Codex: 同じ較正元でも中心・共分散の推定範囲が違うことを明示する。
+                StatisticsSource = StatisticsSource,
+                StatisticsSampleCount = StatisticsSampleCount
             };
             File.WriteAllText(Path.Combine(classificationPath, FileName), JsonSerializer.Serialize(artifact, JsonOptions));
         }
@@ -601,6 +646,10 @@ namespace MineraScope
             public int LabelCount { get; set; }
 
             public string CalibrationSource { get; set; } = string.Empty;
+
+            // 261110Codex: 追加前のversion 1/2も読み込み、旧統計量の来歴は読み込み側で補う。
+            public string? StatisticsSource { get; set; }
+            public int? StatisticsSampleCount { get; set; }
         }
     }
 
