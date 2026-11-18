@@ -128,9 +128,16 @@ namespace MineraScope
                 var b3 = tf.Variable(tf.constant(initWeights[5]), name: "b3");
                 var weightVars = new[] { W1, b1, W2, b2, W3, b3 };
 
-                Tensor Forward(Tensor x)
+                // 261119Codex: 初期重みとは別の乱数で学習用マスクを作り、検証と推論では全ユニットを使う。
+                var maskRandom = new Random(ClassificationDropoutPolicy.MaskSeed);
+                var dropoutMask = new float[batchSize, (int)initWeights[0].shape[1]];
+                var maskPh = tf.placeholder(tf.float32, new Shape(batchSize, dropoutMask.GetLength(1)), "mlp_dropout_mask");
+                logAction($"  分類MLP Dropout: rate={FormatMetric(ClassificationDropoutPolicy.Rate)}, 第1隠れ層ReLU後、学習時のみ、maskSeed={ClassificationDropoutPolicy.MaskSeed}");
+                Tensor Forward(Tensor x, bool training = false)
                 {
                     var h1 = tf.nn.relu(tf.matmul(x, W1.AsTensor()) + b1.AsTensor());
+                    // 261112Codex: 学習側だけマスクを接続し、検証側は全ユニットで最良重みを選択する。
+                    if (training) h1 = h1 * maskPh;
                     var h2 = tf.nn.relu(tf.matmul(h1, W2.AsTensor()) + b2.AsTensor());
                     return tf.matmul(h2, W3.AsTensor()) + b3.AsTensor();
                 }
@@ -138,7 +145,8 @@ namespace MineraScope
                 var startPh = tf.placeholder(tf.int32, new Shape(Array.Empty<int>()), "start");
                 var idx = tf.range(startPh, tf.add(startPh, tf.constant(batchSize)));
                 // 260917Codex: 共通の部分ラベル目的関数でも、単一ラベルの各行は通常のCEを維持する。
-                var trainLoss = tf.reduce_mean(PartialLabelLoss.PerSample(Forward(tf.gather(dataX, idx)), tf.gather(dataY, idx), tf.gather(dataAlternative, idx), classCount));
+                // 261112Codex: 分類の学習ForwardだけでDropoutを有効にする。
+                var trainLoss = tf.reduce_mean(PartialLabelLoss.PerSample(Forward(tf.gather(dataX, idx), training: true), tf.gather(dataY, idx), tf.gather(dataAlternative, idx), classCount));
                 // 260621Claude: Keras Adam と同一の hyperparams(epsilon=1e-7)で minimize し、研究比較の同等性を保つ。
                 // 260909Codex: 選択した学習率だけを変え、Adamの他のパラメーターは既存値を保持する。
                 var optimizer = new Tensorflow.Train.AdamOptimizer(learningRate, 0.9f, 0.999f, 1e-7f, false, TF_DataType.TF_FLOAT, "Adam");
@@ -172,7 +180,10 @@ namespace MineraScope
                     for (int start = 0; start + batchSize <= sampleCount; start += batchSize)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        sess.run(trainOp, new FeedItem(startPh, start));
+                        // 261112Codex: managedバッファーを再利用し、同期実行が終わったマスクのnative配列は各batchで解放する。
+                        ClassificationDropoutPolicy.FillMask(maskRandom, dropoutMask);
+                        using var maskArray = np.array(dropoutMask);
+                        sess.run(trainOp, new FeedItem(startPh, start), new FeedItem(maskPh, maskArray));
                     }
                     double batchLoopMs = Stopwatch.GetElapsedTime(batchLoopStart).TotalMilliseconds;
 

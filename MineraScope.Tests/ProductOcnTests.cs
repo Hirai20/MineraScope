@@ -93,6 +93,9 @@ namespace MineraScope.Tests
                     var result = workflow.RunAsync(plan).GetAwaiter().GetResult();
                     TestAssert.True(result.Status == ModelTrainingStatus.Promoted && result.CompletionMessage is null,
                         "Classifier and head are saved successfully.");
+                    // 261119Codex: 分類＋OCNで昇格したモデルに分類MLPの学習条件が残ることを検証する。
+                    using (var trainingRecord = JsonDocument.Parse(File.ReadAllText(Path.Combine(plan.ModelOutputFolder, ModelArtifactPaths.TrainingResultsFileName))))
+                        ClassificationDropoutTests.AssertRecorded(trainingRecord.RootElement.GetProperty("settings"));
                     var artifact = SoftmaxOcnHeadArtifact.Load(plan.ModelOutputFolder);
                     TestAssert.Equal(Math.Min(3, count - SoftmaxOcnHeadTraining.GetHiddenClassCount(count)), artifact.InputCount,
                         "Saved width matches the training policy.");

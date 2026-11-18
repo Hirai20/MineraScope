@@ -420,7 +420,9 @@ namespace MineraScope
                         // 261021Codex: 公開版の既存引数順と保存形式を変えず、学習率を名前で渡す。
                         ClassificationLearningRate: plan.Settings.LearningRate,
                         SplitSeed: DeepLearningDataSplitter.DefaultRandomState,
-                        EarlyStoppingMonitor: DeepLearning.EarlyStoppingMonitor),
+                        EarlyStoppingMonitor: DeepLearning.EarlyStoppingMonitor,
+                        // 261119Codex: 作成した分類モデルの実効Dropout条件を昇格前に保存する。
+                        ClassificationDropout: ClassificationDropoutPolicy.Settings),
                     trainingResult.ModelMetrics);
                 WriteDetectorMetadata(plan.DetectorProfile, temporaryOutputFolder);
 

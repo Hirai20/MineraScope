@@ -38,7 +38,9 @@ namespace MineraScope
         int SplitSeed,
         string EarlyStoppingMonitor,
         // 260930Codex: Existing callers can adopt the ordinary default; explicit rates are recorded by the workflow.
-        float ClassificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate);
+        float ClassificationLearningRate = ModelTrainingSettings.DefaultClassificationLearningRate,
+        // 261119Codex: 公開版の既存引数順を維持し、実効Dropout条件を任意項目として渡す。
+        ClassificationDropoutSettings? ClassificationDropout = null);
 
     // 260906Codex: Persist one human-readable, versioned record beside the completed model without changing prediction artifacts.
     internal static class TrainingResultsWriter
@@ -79,7 +81,9 @@ namespace MineraScope
                     EarlyStoppingPatience: specification.EarlyStoppingPatience,
                     ValidationSplit: specification.ValidationSplit,
                     SplitSeed: specification.SplitSeed,
-                    ClassificationLearningRate: specification.ClassificationLearningRate),
+                    ClassificationLearningRate: specification.ClassificationLearningRate,
+                    // 261119Codex: 通常学習で実際に使ったDropout条件を記録する。
+                    ClassificationDropout: specification.ClassificationDropout),
                 Models: modelMetrics.Select(ToDocument).ToArray());
 
             Directory.CreateDirectory(modelRootFolder);
@@ -133,7 +137,10 @@ namespace MineraScope
             float ValidationSplit,
             int SplitSeed,
             // 260930Codex: Make the effective classification rate visible in saved training results.
-            float ClassificationLearningRate);
+            float ClassificationLearningRate,
+            // 261119Codex: 条件がない場合は旧形式と同じく項目を省略する。
+            [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+            ClassificationDropoutSettings? ClassificationDropout);
 
         private sealed record TrainingModelDocument(
             string Target,

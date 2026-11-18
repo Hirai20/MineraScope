@@ -106,6 +106,8 @@ namespace MineraScope.Tests
                 ("Model catalog staging folders", ModelCatalogTests.Run),
                 // 260930Codex: Ordinary defaults and legacy settings are checked without native TensorFlow.
                 ("Classification learning-rate settings", ClassificationLearningRateTests.Run),
+                // 261119Codex: 分類MLPのマスクと学習条件の保存をネイティブ実行なしで検証する。
+                ("Classification dropout policy and persistence", ClassificationDropoutTests.Run),
                 // 261016Codex: 前処理記録の互換性と破損拒否を通常テストへ追加する。
                 ("Model preprocessing metadata integrity", SpectrumPreprocessingTests.Run),
                 // 261016Codex: 分類の開始条件はネイティブ学習なしでも検証する。
